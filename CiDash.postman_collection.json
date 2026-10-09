@@ -2,15 +2,32 @@
   "info": {
     "_postman_id": "b3e9471f-0e12-4d87-9bc5-2a2b378129e0",
     "name": "CiDash Backend API",
-    "description": "Koleksi request endpoint backend CiDash (Social Gamified Fitness Tracker)",
+    "description": "Koleksi request endpoint backend CiDash (Social Gamified Fitness Tracker) dengan auto-save token JWT.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "Auth",
+      "name": "1. Auth",
       "item": [
         {
-          "name": "Login Captain",
+          "name": "Login Captain (Nicholas)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.accessToken) {",
+                  "        pm.collectionVariables.set('token', data.accessToken);",
+                  "        pm.collectionVariables.set('captainUserId', data.user.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -24,7 +41,24 @@
           }
         },
         {
-          "name": "Login Budi",
+          "name": "Login Runner (Budi)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.accessToken) {",
+                  "        pm.collectionVariables.set('token', data.accessToken);",
+                  "        pm.collectionVariables.set('budiUserId', data.user.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -50,10 +84,27 @@
       ]
     },
     {
-      "name": "Squads (Circles)",
+      "name": "2. Squads (Circles)",
       "item": [
         {
           "name": "Get My Circles",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.squads && data.squads.length > 0) {",
+                  "        pm.collectionVariables.set('squadId', data.squads[0].id);",
+                  "        pm.collectionVariables.set('inviteCode', data.squads[0].inviteCode);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -63,7 +114,7 @@
           }
         },
         {
-          "name": "Create Circle",
+          "name": "Create Circle Baru",
           "request": {
             "method": "POST",
             "header": [
@@ -72,13 +123,13 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Sudirman Night Runners\",\n  \"isPremium\": false\n}"
+              "raw": "{\n  \"name\": \"Senayan Sunset Runners\",\n  \"isPremium\": false\n}"
             },
             "url": { "raw": "{{baseUrl}}/squads", "host": ["{{baseUrl}}"], "path": ["squads"] }
           }
         },
         {
-          "name": "Join Circle by 8-Char Code",
+          "name": "Join Circle dengan Kode 8 Karakter",
           "request": {
             "method": "POST",
             "header": [
@@ -99,16 +150,42 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
-            "url": { "raw": "{{baseUrl}}/squads/:id/leaderboard", "host": ["{{baseUrl}}"], "path": ["squads", ":id", "leaderboard"] }
+            "url": { "raw": "{{baseUrl}}/squads/{{squadId}}/leaderboard", "host": ["{{baseUrl}}"], "path": ["squads", "{{squadId}}", "leaderboard"] }
+          }
+        },
+        {
+          "name": "Get Circle Detail",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/squads/{{squadId}}", "host": ["{{baseUrl}}"], "path": ["squads", "{{squadId}}"] }
           }
         }
       ]
     },
     {
-      "name": "Quests (Bomb Missions)",
+      "name": "3. Quests (Bomb Missions)",
       "item": [
         {
           "name": "Get Active Quests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.quests && data.quests.length > 0) {",
+                  "        pm.collectionVariables.set('activeQuestId', data.quests[0].id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -118,7 +195,23 @@
           }
         },
         {
-          "name": "Send Bomb Mission",
+          "name": "Send Bomb Mission P2P",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var data = pm.response.json();",
+                  "    if (data.quest) {",
+                  "        pm.collectionVariables.set('createdQuestId', data.quest.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -127,7 +220,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"squadId\": \"{{squadId}}\",\n  \"targetUserId\": \"{{targetUserId}}\",\n  \"activityType\": \"RUNNING\",\n  \"targetDistance\": 5000,\n  \"targetMaxPace\": 6.0,\n  \"stakesPoints\": 50,\n  \"rewardTitle\": \"Weekend 5K Challenge\",\n  \"deadline\": \"2026-10-15T00:00:00.000Z\"\n}"
+              "raw": "{\n  \"squadId\": \"{{squadId}}\",\n  \"targetUserId\": \"{{budiUserId}}\",\n  \"activityType\": \"RUNNING\",\n  \"targetDistance\": 5000,\n  \"targetMaxPace\": 6.0,\n  \"stakesPoints\": 50,\n  \"rewardTitle\": \"Sprint 5K GBK Malam\",\n  \"deadline\": \"2026-10-15T00:00:00.000Z\"\n}"
             },
             "url": { "raw": "{{baseUrl}}/quests", "host": ["{{baseUrl}}"], "path": ["quests"] }
           }
@@ -139,16 +232,26 @@
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
-            "url": { "raw": "{{baseUrl}}/quests/:id/shield", "host": ["{{baseUrl}}"], "path": ["quests", ":id", "shield"] }
+            "url": { "raw": "{{baseUrl}}/quests/{{activeQuestId}}/shield", "host": ["{{baseUrl}}"], "path": ["quests", "{{activeQuestId}}", "shield"] }
+          }
+        },
+        {
+          "name": "Accept Quest Challenge",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/quests/{{activeQuestId}}/accept", "host": ["{{baseUrl}}"], "path": ["quests", "{{activeQuestId}}", "accept"] }
           }
         }
       ]
     },
     {
-      "name": "Activities (GPS Tracker)",
+      "name": "4. Activities (GPS Tracker)",
       "item": [
         {
-          "name": "Submit Activity",
+          "name": "Submit Workout GPS (Lolos Anti-Cheat)",
           "request": {
             "method": "POST",
             "header": [
@@ -163,13 +266,28 @@
           }
         },
         {
+          "name": "Submit Workout (Negative Test - Kecepatan Motor)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"RUNNING\",\n  \"distanceMeters\": 5000,\n  \"durationSeconds\": 300,\n  \"averagePace\": 1.0,\n  \"startedAt\": \"2026-10-09T05:00:00.000Z\",\n  \"endedAt\": \"2026-10-09T05:05:00.000Z\",\n  \"routeGeoJson\": []\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/activities", "host": ["{{baseUrl}}"], "path": ["activities"] }
+          }
+        },
+        {
           "name": "Get Workout History",
           "request": {
             "method": "GET",
             "header": [
               { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
-            "url": { "raw": "{{baseUrl}}/activities/history?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["activities", "history"] }
+            "url": { "raw": "{{baseUrl}}/activities/history?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["activities", "history"], "query": [{ "key": "page", "value": "1" }, { "key": "limit", "value": "10" }] }
           }
         }
       ]
@@ -179,6 +297,10 @@
     { "key": "baseUrl", "value": "http://localhost:3000" },
     { "key": "token", "value": "" },
     { "key": "squadId", "value": "" },
-    { "key": "targetUserId", "value": "" }
+    { "key": "inviteCode", "value": "RUN8MORN" },
+    { "key": "captainUserId", "value": "" },
+    { "key": "budiUserId", "value": "" },
+    { "key": "activeQuestId", "value": "" },
+    { "key": "createdQuestId", "value": "" }
   ]
 }
