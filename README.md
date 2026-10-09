@@ -1,6 +1,5 @@
 # CIDASH (Circle Dashboard) 🏃‍♂️💨
 > **Social Gamified Fitness Tracker berbasis Pertemanan Privat (Invite-Only)**  
-> *Versi 1.0 (Oktober 2026) — Dirancang untuk Kompetisi Business Plan & Eksekusi Teknis*
 
 [![NestJS](https://img.shields.io/badge/Backend-NestJS%2012-ea2845?logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![Prisma](https://img.shields.io/badge/ORM-Prisma%205-2D3748?logo=prisma&logoColor=white)](https://prisma.io/)
