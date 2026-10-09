@@ -47,9 +47,13 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 * `POST /squads/:id/leave` — Keluar dari circle (jika Captain keluar, kepemimpinan otomatis dialihkan ke anggota tertua).
 * `DELETE /squads/:id/members/:userId` — Mengeluarkan anggota dari circle (khusus peran `CAPTAIN`).
 
-### 3. Quest & Bomb Mission (`/quests`) *(Dalam Pengembangan)*
-* `POST /quests` — Mengirimkan *Bomb Mission* ke teman satu grup.
-* `GET /quests/active` — Daftar misi aktif yang belum kedaluwarsa.
+### 3. Quest & Bomb Mission (`/quests`)
+* `POST /quests` — Mengirimkan *Bomb Mission* P2P ke teman satu Circle (verifikasi dan pemotongan 20 koin pembuat).
+* `GET /quests/active` — Daftar misi aktif dari Circle yang diikuti pengguna beserta sisa waktu hitung mundur.
+* `POST /quests/:id/shield` — Menggunakan 1 *Shield Ticket* untuk membatalkan penalti misi (status menjadi `SHIELDED`).
+* `POST /quests/:id/accept` — Menerima tantangan misi (status menjadi `ACCEPTED`).
+* `GET /quests/:id` — Mengambil informasi detail dari suatu misi.
+* `POST /quests/cron/expire-check` — Pemicu manual pengecekan misi kedaluwarsa (otomatis berjalan tiap jam via `@Cron`).
 
 ### 4. Aktivitas GPS (`/activities`) *(Dalam Pengembangan)*
 * `POST /activities` — Mengirimkan hasil perekaman GPS untuk verifikasi anti-cheat dan penyelesaian misi.

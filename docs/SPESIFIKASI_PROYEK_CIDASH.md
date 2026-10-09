@@ -453,12 +453,12 @@ Tabel dan daftar periksa ini merefleksikan status implementasi aktual dari fitur
 | Domain / Pilar | Total Komponen | Selesai `[x]` | Belum `[ ]` | Progres |
 | :--- | :---: | :---: | :---: | :---: |
 | **A. Database & Prisma ORM** | 10 | 10 | 0 | 100% |
-| **B. Backend API (NestJS)** | 16 | 13 | 3 | 81.3% |
+| **B. Backend API (NestJS)** | 23 | 18 | 5 | 78.3% |
 | **C. Frontend Mobile (Flutter)** | 12 | 0 | 12 | 0% |
 | **D. Algoritma GPS & Anti-Cheat** | 4 | 0 | 4 | 0% |
 | **E. Pembayaran & Ekonomi Koin** | 5 | 0 | 5 | 0% |
 | **F. Dokumentasi & Pitch Deck** | 5 | 5 | 0 | 100% |
-| **TOTAL KESELURUHAN** | **52** | **28** | **24** | **53.8%** |
+| **TOTAL KESELURUHAN** | **59** | **33** | **26** | **55.9%** |
 
 ---
 
@@ -494,12 +494,12 @@ Tabel dan daftar periksa ini merefleksikan status implementasi aktual dari fitur
 - [x] Endpoint Leaderboard harian & musiman per Circle (`GET /squads/:id/leaderboard`).
 - [x] Endpoint manajemen anggota grup (Kick, Leave, transfer kepemimpinan Captain).
 
-#### 3. Modul Quest & Bomb Mission (`/quests`) — [BELUM]
-- [ ] Endpoint pengiriman *Bomb Mission* P2P ke teman satu grup (`POST /quests`).
-- [ ] Validasi ketersediaan saldo koin pembuat tantangan saat misi dibuat.
-- [ ] Endpoint daftar Active Missions di Circle pengguna (`GET /quests/active`).
-- [ ] Endpoint penggunaan *Shield Ticket* untuk menolak penalti misi (`POST /quests/:id/shield`).
-- [ ] Background Job / Cron untuk penandaan misi `FAILED` jika melewati *deadline*.
+#### 3. Modul Quest & Bomb Mission (`/quests`) — [SELESAI 100%]
+- [x] Endpoint pengiriman *Bomb Mission* P2P ke teman satu grup (`POST /quests`).
+- [x] Validasi dan pemotongan koin pembuat tantangan (biaya 20 koin & pencatatan CoinTransaction).
+- [x] Endpoint daftar Active Missions di Circle pengguna (`GET /quests/active`).
+- [x] Endpoint penggunaan *Shield Ticket* untuk menolak penalti misi (`POST /quests/:id/shield`).
+- [x] Background Job / Cron untuk penandaan misi `FAILED` jika melewati *deadline* (`@Cron(CronExpression.EVERY_HOUR)`).
 
 #### 4. Modul Perekaman Aktivitas GPS (`/activities`) — [BELUM]
 - [ ] Endpoint submit log GPS (`POST /activities`) menerima jarak, durasi, pace, dan titik rute GeoJSON.

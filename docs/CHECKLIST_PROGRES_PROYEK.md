@@ -14,13 +14,13 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 | **1. Database & ORM (PostgreSQL / Prisma)** | 10 | 10 | 0 | **100%** |
 | **2. Backend Core & Auth (NestJS)** | 7 | 7 | 0 | **100%** |
 | **3. Backend Circle / Squad Module** | 6 | 6 | 0 | **100%** |
-| **4. Backend Quest / Bomb Mission Module** | 5 | 0 | 5 | **0%** |
+| **4. Backend Quest / Bomb Mission Module** | 5 | 5 | 0 | **100%** |
 | **5. Backend Activity & GPS Tracker** | 5 | 0 | 5 | **0%** |
 | **6. Algoritma Verifikasi & Anti-Cheat** | 4 | 0 | 4 | **0%** |
 | **7. Payment Gateway & Ekonomi Koin** | 5 | 0 | 5 | **0%** |
 | **8. Frontend Mobile (Flutter 5 Screens)** | 12 | 0 | 12 | **0%** |
 | **9. Dokumentasi & Pitch Readiness** | 5 | 5 | 0 | **100%** |
-| **TOTAL KESELURUHAN** | **59** | **28** | **31** | **47.5%** |
+| **TOTAL KESELURUHAN** | **59** | **33** | **26** | **55.9%** |
 
 ---
 
@@ -68,11 +68,11 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 ## 4. Backend Modul Gamifikasi Quest & Bomb Mission (`/quests`)
 *Penanggung Jawab: Lead Backend & Gamification Specialist*
 
-- [ ] **Kirim Bomb Mission P2P:** Endpoint `POST /quests` dengan input `targetUserId`, `activityType`, `targetDistance`, `targetMaxPace`, `stakesPoints`, dan `deadline`.
-- [ ] **Validasi Koin:** Validasi dan pemotongan saldo koin pembuat tantangan saat misi dibuat.
-- [ ] **Daftar Active Missions:** Endpoint `GET /quests/active` untuk menampilkan semua misi aktif dari circle yang diikuti pengguna.
-- [ ] **Respons Misi & Shield Ticket:** Endpoint `POST /quests/:id/shield` untuk menggunakan item perlindungan pembatal pinalti poin.
-- [ ] **Cron Auto-Expire:** Scheduler otomatis tiap jam untuk mengecek misi yang melampaui deadline dan menandainya sebagai `FAILED` sekaligus memotong pinalti poin target user.
+- [x] **Kirim Bomb Mission P2P:** Endpoint `POST /quests` dengan input `targetUserId`, `activityType`, `targetDistance`, `targetMaxPace`, `stakesPoints`, dan `deadline`.
+- [x] **Validasi Koin:** Validasi dan pemotongan saldo koin pembuat tantangan saat misi dibuat (biaya 20 koin & pencatatan CoinTransaction).
+- [x] **Daftar Active Missions:** Endpoint `GET /quests/active` untuk menampilkan semua misi aktif dari circle yang diikuti pengguna beserta hitung mundur waktu.
+- [x] **Respons Misi & Shield Ticket:** Endpoint `POST /quests/:id/shield` untuk menggunakan item perlindungan pembatal pinalti poin (mengubah status menjadi SHIELDED).
+- [x] **Cron Auto-Expire:** Scheduler otomatis tiap jam (`@Cron(CronExpression.EVERY_HOUR)`) untuk mengecek misi yang melampaui deadline dan menandainya sebagai `FAILED` sekaligus memotong pinalti poin target user dan memberi reward creator.
 
 ---
 
