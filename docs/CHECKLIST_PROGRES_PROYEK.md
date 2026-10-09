@@ -13,14 +13,14 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 | :--- | :---: | :---: | :---: | :---: |
 | **1. Database & ORM (PostgreSQL / Prisma)** | 10 | 10 | 0 | **100%** |
 | **2. Backend Core & Auth (NestJS)** | 7 | 7 | 0 | **100%** |
-| **3. Backend Circle / Squad Module** | 6 | 0 | 6 | **0%** |
+| **3. Backend Circle / Squad Module** | 6 | 6 | 0 | **100%** |
 | **4. Backend Quest / Bomb Mission Module** | 5 | 0 | 5 | **0%** |
 | **5. Backend Activity & GPS Tracker** | 5 | 0 | 5 | **0%** |
 | **6. Algoritma Verifikasi & Anti-Cheat** | 4 | 0 | 4 | **0%** |
 | **7. Payment Gateway & Ekonomi Koin** | 5 | 0 | 5 | **0%** |
 | **8. Frontend Mobile (Flutter 5 Screens)** | 12 | 0 | 12 | **0%** |
 | **9. Dokumentasi & Pitch Readiness** | 5 | 5 | 0 | **100%** |
-| **TOTAL KESELURUHAN** | **59** | **22** | **37** | **37.3%** |
+| **TOTAL KESELURUHAN** | **59** | **28** | **31** | **47.5%** |
 
 ---
 
@@ -56,12 +56,12 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 ## 3. Backend Modul Circle / Squad (`/squads`)
 *Penanggung Jawab: Fullstack Developer*
 
-- [ ] **Invite Code Generator:** Generator kode 8 karakter acak alfanumerik yang terjamin unik (misal: "RUN78XYZ").
-- [ ] **Create Circle:** Endpoint `POST /squads` untuk membuat Circle baru dan otomatis menetapkan pembuat sebagai `CAPTAIN`.
-- [ ] **Join Circle:** Endpoint `POST /squads/join` dengan input kode 8 karakter unik.
-- [ ] **My Circles:** Endpoint `GET /squads/my` untuk mengambil daftar Circle yang diikuti pengguna aktif.
-- [ ] **Circle Leaderboard:** Endpoint `GET /squads/:id/leaderboard` untuk mengambil urutan ranking anggota berdasarkan `rankPoints` pada musim aktif.
-- [ ] **Manajemen Anggota:** Endpoint untuk keluar dari circle (`POST /squads/:id/leave`) atau mengeluarkan anggota bagi Captain (`DELETE /squads/:id/members/:userId`).
+- [x] **Invite Code Generator:** Generator kode 8 karakter acak alfanumerik yang terjamin unik (misal: "RUN78XYZ").
+- [x] **Create Circle:** Endpoint `POST /squads` untuk membuat Circle baru dan otomatis menetapkan pembuat sebagai `CAPTAIN`.
+- [x] **Join Circle:** Endpoint `POST /squads/join` dengan input kode 8 karakter unik.
+- [x] **My Circles:** Endpoint `GET /squads/my` untuk mengambil daftar Circle yang diikuti pengguna aktif.
+- [x] **Circle Leaderboard:** Endpoint `GET /squads/:id/leaderboard` untuk mengambil urutan ranking anggota berdasarkan `rankPoints` pada musim aktif.
+- [x] **Manajemen Anggota:** Endpoint untuk keluar dari circle (`POST /squads/:id/leave`) atau mengeluarkan anggota bagi Captain (`DELETE /squads/:id/members/:userId`).
 
 ---
 

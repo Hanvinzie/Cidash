@@ -21,12 +21,13 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 
 | Model Prisma | Tabel Spesifikasi | Deskripsi |
 | :--- | :--- | :--- |
-| `User` | `users` | Akun pengguna, password hash, rank point, dan tiket perisai (*shield tickets*). |
-| `Squad` | `groups` | Circle privat pengguna dengan `inviteCode` unik (8 karakter). |
+| `User` | `users` | Akun pengguna, password hash, coin balance, rank points, dan shield tickets. |
+| `Squad` | `groups` | Circle privat pengguna dengan `inviteCode` unik (8 karakter) dan relasi pembuat. |
 | `SquadMember` | `group_members` | Relasi keanggotaan *many-to-many* antara User dan Squad beserta perannya (`MEMBER`, `CAPTAIN`). |
 | `Quest` | `missions` | Misi olahraga dan *Bomb Mission* P2P dengan taruhan poin (*stakesPoints*). |
 | `Activity` | `activity_logs` | Log perekaman GPS: jarak meter, durasi detik, pace rata-rata, dan `routeGeoJson`. |
-| `PointLedger` | `coin_transactions` | Catatan transaksi poin / koin (`QUEST_WIN`, `QUEST_PENALTY`, `PURCHASE_SHIELD`). |
+| `PointLedger` | `point_ledgers` | Buku besar perolehan dan penalti poin reputasi leaderboard. |
+| `CoinTransaction` | `coin_transactions` | Catatan transaksi top up koin dan biaya misi P2P. |
 
 ---
 
@@ -37,10 +38,14 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 * `POST /auth/login` — Autentikasi dan penerbitan Bearer Token JWT.
 * `GET /auth/me` — Membaca profil pengguna terotentikasi saat ini (*Protected by JWT Guard*).
 
-### 2. Lingkaran Pertemanan / Circle (`/squads`) *(Dalam Pengembangan)*
-* `POST /squads` — Membuat circle baru dan meng-generate kode 8 karakter.
-* `POST /squads/join` — Bergabung ke circle menggunakan kode undangan.
-* `GET /squads/my` — Mengambil daftar grup yang diikuti.
+### 2. Lingkaran Pertemanan / Circle (`/squads`)
+* `POST /squads` — Membuat circle baru, generate kode 8 karakter unik, dan menetapkan pembuat sebagai `CAPTAIN`.
+* `POST /squads/join` — Bergabung ke circle menggunakan kode undangan 8 karakter.
+* `GET /squads/my` — Mengambil daftar circle yang diikuti beserta status peran dan jumlah misi.
+* `GET /squads/:id/leaderboard` — Mengambil urutan peringkat anggota circle berdasarkan `rankPoints`.
+* `GET /squads/:id` — Mengambil detail circle dan daftar anggota.
+* `POST /squads/:id/leave` — Keluar dari circle (jika Captain keluar, kepemimpinan otomatis dialihkan ke anggota tertua).
+* `DELETE /squads/:id/members/:userId` — Mengeluarkan anggota dari circle (khusus peran `CAPTAIN`).
 
 ### 3. Quest & Bomb Mission (`/quests`) *(Dalam Pengembangan)*
 * `POST /quests` — Mengirimkan *Bomb Mission* ke teman satu grup.

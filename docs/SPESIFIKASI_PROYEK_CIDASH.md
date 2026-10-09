@@ -453,12 +453,12 @@ Tabel dan daftar periksa ini merefleksikan status implementasi aktual dari fitur
 | Domain / Pilar | Total Komponen | Selesai `[x]` | Belum `[ ]` | Progres |
 | :--- | :---: | :---: | :---: | :---: |
 | **A. Database & Prisma ORM** | 10 | 10 | 0 | 100% |
-| **B. Backend API (NestJS)** | 16 | 7 | 9 | 44% |
+| **B. Backend API (NestJS)** | 16 | 13 | 3 | 81.3% |
 | **C. Frontend Mobile (Flutter)** | 12 | 0 | 12 | 0% |
 | **D. Algoritma GPS & Anti-Cheat** | 4 | 0 | 4 | 0% |
 | **E. Pembayaran & Ekonomi Koin** | 5 | 0 | 5 | 0% |
 | **F. Dokumentasi & Pitch Deck** | 5 | 5 | 0 | 100% |
-| **TOTAL KESELURUHAN** | **52** | **22** | **30** | **42.3%** |
+| **TOTAL KESELURUHAN** | **52** | **28** | **24** | **53.8%** |
 
 ---
 
@@ -486,13 +486,13 @@ Tabel dan daftar periksa ini merefleksikan status implementasi aktual dari fitur
 - [x] Validasi payload DTO global (`ValidationPipe`).
 - [x] Konfigurasi environment terpusat (`@nestjs/config`).
 
-#### 2. Modul Lingkaran Pertemanan / Circle (`/squads`) — [BELUM]
-- [ ] Generator otomatis kode acak 8 karakter unik (misal: "RUN78XYZ").
-- [ ] Endpoint pembuatan Circle baru (`POST /squads`).
-- [ ] Endpoint bergabung ke Circle dengan kode 8 karakter (`POST /squads/join`).
-- [ ] Endpoint daftar Circle yang diikuti pengguna (`GET /squads/my`).
-- [ ] Endpoint Leaderboard harian & musiman per Circle (`GET /squads/:id/leaderboard`).
-- [ ] Endpoint manajemen anggota grup (Kick, Leave, transfer kepemimpinan Captain).
+#### 2. Modul Lingkaran Pertemanan / Circle (`/squads`) — [SELESAI 100%]
+- [x] Generator otomatis kode acak 8 karakter unik (misal: "RUN78XYZ").
+- [x] Endpoint pembuatan Circle baru (`POST /squads`).
+- [x] Endpoint bergabung ke Circle dengan kode 8 karakter (`POST /squads/join`).
+- [x] Endpoint daftar Circle yang diikuti pengguna (`GET /squads/my`).
+- [x] Endpoint Leaderboard harian & musiman per Circle (`GET /squads/:id/leaderboard`).
+- [x] Endpoint manajemen anggota grup (Kick, Leave, transfer kepemimpinan Captain).
 
 #### 3. Modul Quest & Bomb Mission (`/quests`) — [BELUM]
 - [ ] Endpoint pengiriman *Bomb Mission* P2P ke teman satu grup (`POST /quests`).
