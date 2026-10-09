@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { DatabaseModule } from './database/database.module';
 import { SquadsModule } from './squads/squads.module';
 import { QuestsModule } from './quests/quests.module';
+import { ActivitiesModule } from './activities/activities.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { QuestsModule } from './quests/quests.module';
     AuthModule,
     SquadsModule,
     QuestsModule,
+    ActivitiesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

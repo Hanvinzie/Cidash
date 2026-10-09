@@ -55,8 +55,10 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 * `GET /quests/:id` — Mengambil informasi detail dari suatu misi.
 * `POST /quests/cron/expire-check` — Pemicu manual pengecekan misi kedaluwarsa (otomatis berjalan tiap jam via `@Cron`).
 
-### 4. Aktivitas GPS (`/activities`) *(Dalam Pengembangan)*
-* `POST /activities` — Mengirimkan hasil perekaman GPS untuk verifikasi anti-cheat dan penyelesaian misi.
+### 4. Aktivitas GPS & Anti-Cheat (`/activities`)
+* `POST /activities` — Mengirimkan log hasil perekaman GPS (validasi anti-cheat kecepatan wajar & rumus Haversine, auto-match penyelesaian quest, dan alokasi rankPoints).
+* `GET /activities/history` — Riwayat rekaman olahraga pengguna dengan paginasi, metrik jarak total, dan durasi.
+* `GET /activities/:id` — Detail lengkap satu aktivitas beserta array koordinat GeoJSON rute peta.
 
 ---
 

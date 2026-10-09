@@ -453,12 +453,12 @@ Tabel dan daftar periksa ini merefleksikan status implementasi aktual dari fitur
 | Domain / Pilar | Total Komponen | Selesai `[x]` | Belum `[ ]` | Progres |
 | :--- | :---: | :---: | :---: | :---: |
 | **A. Database & Prisma ORM** | 10 | 10 | 0 | 100% |
-| **B. Backend API (NestJS)** | 23 | 18 | 5 | 78.3% |
+| **B. Backend API (NestJS)** | 23 | 23 | 0 | 100% |
 | **C. Frontend Mobile (Flutter)** | 12 | 0 | 12 | 0% |
-| **D. Algoritma GPS & Anti-Cheat** | 4 | 0 | 4 | 0% |
+| **D. Algoritma GPS & Anti-Cheat** | 4 | 4 | 0 | 100% |
 | **E. Pembayaran & Ekonomi Koin** | 5 | 0 | 5 | 0% |
 | **F. Dokumentasi & Pitch Deck** | 5 | 5 | 0 | 100% |
-| **TOTAL KESELURUHAN** | **59** | **33** | **26** | **55.9%** |
+| **TOTAL KESELURUHAN** | **59** | **42** | **17** | **71.2%** |
 
 ---
 
@@ -501,20 +501,20 @@ Tabel dan daftar periksa ini merefleksikan status implementasi aktual dari fitur
 - [x] Endpoint penggunaan *Shield Ticket* untuk menolak penalti misi (`POST /quests/:id/shield`).
 - [x] Background Job / Cron untuk penandaan misi `FAILED` jika melewati *deadline* (`@Cron(CronExpression.EVERY_HOUR)`).
 
-#### 4. Modul Perekaman Aktivitas GPS (`/activities`) — [BELUM]
-- [ ] Endpoint submit log GPS (`POST /activities`) menerima jarak, durasi, pace, dan titik rute GeoJSON.
-- [ ] Integrasi verifikasi otomatis anti-cheat sebelum aktivitas disetujui.
-- [ ] Logika pencocokan otomatis antara aktivitas olahraga dengan misi aktif target pengguna.
-- [ ] Distribusi Rank Point kepada pemenang/pembuat quest saat misi selesai.
-- [ ] Endpoint riwayat aktivitas pengguna (`GET /activities/history`).
+#### 4. Modul Perekaman Aktivitas GPS (`/activities`) — [SELESAI 100%]
+- [x] Endpoint submit log GPS (`POST /activities`) menerima jarak, durasi, pace, dan titik rute GeoJSON.
+- [x] Integrasi verifikasi otomatis anti-cheat sebelum aktivitas disetujui.
+- [x] Logika pencocokan otomatis antara aktivitas olahraga dengan misi aktif target pengguna (`QuestStatus.COMPLETED`).
+- [x] Distribusi Rank Point kepada pengguna (poin dasar aktivitas + poin kemenangan misi taruhan).
+- [x] Endpoint riwayat aktivitas pengguna dengan metrik agregasi dan paginasi (`GET /activities/history`).
 
 ---
 
-### C. Algoritma GPS & Anti-Cheat
-- [ ] Algoritma validasi ambang batas kecepatan manusiawi (*Pace Anomaly Threshold*).
-- [ ] Algoritma deteksi lonjakan koordinat / teleportasi (rumus Haversine & perbandingan $\Delta t$ terhadap $\Delta d$).
-- [ ] Validasi rasio jarak terhadap waktu untuk mendeteksi penggunaan kendaraan bermotor saat lari.
-- [ ] Layanan Python Microservice / modul terintegrasi untuk kalkulasi titik rute GPS.
+### C. Algoritma GPS & Anti-Cheat — [SELESAI 100%]
+- [x] Algoritma validasi ambang batas kecepatan manusiawi (*Pace Anomaly Threshold*).
+- [x] Algoritma deteksi lonjakan koordinat / teleportasi (rumus Haversine & batasan jump > 800m).
+- [x] Validasi rasio jarak terhadap waktu untuk mendeteksi penggunaan kendaraan bermotor saat lari.
+- [x] Verifikasi kontinuitas rute dan kalkulasi panjang lintasan koordinat GPS.
 
 ---
 

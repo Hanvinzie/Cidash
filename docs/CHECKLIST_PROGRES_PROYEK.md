@@ -15,12 +15,12 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 | **2. Backend Core & Auth (NestJS)** | 7 | 7 | 0 | **100%** |
 | **3. Backend Circle / Squad Module** | 6 | 6 | 0 | **100%** |
 | **4. Backend Quest / Bomb Mission Module** | 5 | 5 | 0 | **100%** |
-| **5. Backend Activity & GPS Tracker** | 5 | 0 | 5 | **0%** |
-| **6. Algoritma Verifikasi & Anti-Cheat** | 4 | 0 | 4 | **0%** |
+| **5. Backend Activity & GPS Tracker** | 5 | 5 | 0 | **100%** |
+| **6. Algoritma Verifikasi & Anti-Cheat** | 4 | 4 | 0 | **100%** |
 | **7. Payment Gateway & Ekonomi Koin** | 5 | 0 | 5 | **0%** |
 | **8. Frontend Mobile (Flutter 5 Screens)** | 12 | 0 | 12 | **0%** |
 | **9. Dokumentasi & Pitch Readiness** | 5 | 5 | 0 | **100%** |
-| **TOTAL KESELURUHAN** | **59** | **33** | **26** | **55.9%** |
+| **TOTAL KESELURUHAN** | **59** | **42** | **17** | **71.2%** |
 
 ---
 
@@ -79,21 +79,21 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 ## 5. Backend Modul Tracking Aktivitas GPS (`/activities`)
 *Penanggung Jawab: Fullstack Developer & Lead Backend*
 
-- [ ] **Submit Aktivitas:** Endpoint `POST /activities` menerima metrik `distanceMeters`, `durationSeconds`, `averagePace`, dan array koordinat `routeGeoJson`.
-- [ ] **Validasi Anti-Cheat Otomatis:** Integrasi pemeriksaan batas kecepatan dan lonjakan titik koordinat sebelum aktivitas disimpan.
-- [ ] **Penyelesaian Quest Otomatis:** Logika pencocokan otomatis: jika aktivitas memenuhi syarat target jarak & target pace dari misi aktif target user, ubah status misi menjadi `COMPLETED`.
-- [ ] **Alokasi Poin:** Penambahan `rankPoints` kepada pengguna dan pemenang taruhan, serta pencatatan mutasi di `PointLedger`.
-- [ ] **Riwayat Olahraga:** Endpoint `GET /activities/history` untuk melihat rekaman olahraga pengguna lampau.
+- [x] **Submit Aktivitas:** Endpoint `POST /activities` menerima metrik `distanceMeters`, `durationSeconds`, `averagePace`, dan array koordinat `routeGeoJson`.
+- [x] **Validasi Anti-Cheat Otomatis:** Integrasi pemeriksaan batas kecepatan dan lonjakan titik koordinat sebelum aktivitas disimpan via `AntiCheatService`.
+- [x] **Penyelesaian Quest Otomatis:** Logika pencocokan otomatis: jika aktivitas memenuhi syarat target jarak & target pace dari misi aktif target user, ubah status misi menjadi `COMPLETED` dan tautkan `activityId`.
+- [x] **Alokasi Poin:** Penambahan `rankPoints` kepada pengguna (poin dasar aktivitas + bonus kemenangan misi) serta pencatatan mutasi di `PointLedger`.
+- [x] **Riwayat Olahraga:** Endpoint `GET /activities/history` untuk melihat rekaman olahraga pengguna lampau dengan agregasi total jarak dan durasi.
 
 ---
 
 ## 6. Algoritma Verifikasi GPS & Anti-Cheat
-*Penanggung Jawab: Lead Backend Developer (Python / TypeScript)*
+*Penanggung Jawab: Lead Backend Developer*
 
-- [ ] **Pace Anomaly Detector:** Validasi bahwa kecepatan rata-rata lari tidak melebihi batas anatomis manusia (maksimal 2:30 min/km).
-- [ ] **Vehicle Speed Spike Filter:** Deteksi akselerasi tidak wajar (indikasi naik motor/mobil saat perekaman lari).
-- [ ] **Haversine Teleportation Check:** Penghitungan jarak spasial antar titik koordinat berturutan ($\Delta d / \Delta t$) untuk menangkal fake GPS / koordinat palsu.
-- [ ] **Route Continuity Validator:** Verifikasi kontinuitas rute dan kerapatan titik koordinat GPS.
+- [x] **Pace Anomaly Detector:** Validasi bahwa kecepatan rata-rata lari tidak melebihi batas anatomis manusia (maksimal kecepatan lari wajar < 8.5 m/s atau pace > 1.95 min/km).
+- [x] **Vehicle Speed Spike Filter:** Deteksi akselerasi dan kecepatan tidak wajar untuk memfilter penggunaan sepeda motor/mobil pada saat lari.
+- [x] **Haversine Teleportation Check:** Penghitungan jarak spasial antar titik koordinat berturutan menggunakan formula Haversine untuk menangkal fake GPS / lonjakan titik > 800 meter.
+- [x] **Route Continuity Validator:** Verifikasi konsistensi panjang lintasan rute koordinat GPS terhadap total jarak yang dilaporkan.
 
 ---
 

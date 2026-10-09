@@ -32,6 +32,7 @@ enum PointTxType {
   QUEST_WIN
   QUEST_PENALTY
   PURCHASE_SHIELD
+  ACTIVITY_REWARD
 }
 
 enum CoinTxType {
