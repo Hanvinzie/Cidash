@@ -11,7 +11,7 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 
 | Kategori | Total Item | Selesai `[x]` | Belum `[ ]` | Status Progres |
 | :--- | :---: | :---: | :---: | :---: |
-| **1. Database & ORM (PostgreSQL / Prisma)** | 10 | 8 | 2 | **80%** |
+| **1. Database & ORM (PostgreSQL / Prisma)** | 10 | 10 | 0 | **100%** |
 | **2. Backend Core & Auth (NestJS)** | 7 | 7 | 0 | **100%** |
 | **3. Backend Circle / Squad Module** | 6 | 0 | 6 | **0%** |
 | **4. Backend Quest / Bomb Mission Module** | 5 | 0 | 5 | **0%** |
@@ -20,7 +20,7 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 | **7. Payment Gateway & Ekonomi Koin** | 5 | 0 | 5 | **0%** |
 | **8. Frontend Mobile (Flutter 5 Screens)** | 12 | 0 | 12 | **0%** |
 | **9. Dokumentasi & Pitch Readiness** | 5 | 5 | 0 | **100%** |
-| **TOTAL KESELURUHAN** | **59** | **20** | **39** | **33.9%** |
+| **TOTAL KESELURUHAN** | **59** | **22** | **37** | **37.3%** |
 
 ---
 
@@ -28,15 +28,15 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 *Penanggung Jawab: Lead Backend & Database Architect*
 
 - [x] **Setup Prisma ORM:** Konfigurasi koneksi database PostgreSQL di `prisma/schema.prisma`.
-- [x] **Model `User`:** Kolom `id`, `email`, `passwordHash`, `name`, `rankPoints`, `shieldTickets`, `createdAt`.
-- [x] **Model `Squad` (Groups):** Kolom `id`, `name`, `inviteCode` (unik 8 karakter), `isPremium`, `createdAt`.
+- [x] **Model `User`:** Kolom `id`, `email`, `passwordHash`, `name`, `coinBalance`, `rankPoints`, `shieldTickets`, `createdAt`.
+- [x] **Model `Squad` (Groups):** Kolom `id`, `name`, `inviteCode` (unik 8 karakter), `isPremium`, relasi `createdBy`, `createdAt`.
 - [x] **Model `SquadMember` (Group Members):** Relasi many-to-many, composite unique `(squadId, userId)`, dan role (`MEMBER`, `CAPTAIN`).
 - [x] **Model `Activity` (Activity Logs):** Kolom `id`, `userId`, `type`, `distanceMeters`, `durationSeconds`, `averagePace`, `routeGeoJson`, waktu mulai & selesai.
 - [x] **Model `Quest` (Missions):** Kolom `id`, `squadId`, `creatorId`, `targetUserId`, `activityType`, `targetDistance`, `targetMaxPace`, `stakesPoints`, `deadline`, `status`.
-- [x] **Model `PointLedger` (Coin Transactions):** Catatan transaksi poin/koin dengan enum `QUEST_WIN`, `QUEST_PENALTY`, `PURCHASE_SHIELD`.
+- [x] **Model `PointLedger` & `CoinTransaction`:** Catatan transaksi poin reputasi dan mutasi koin virtual (`TOP_UP`, `BOMB_MISSION_FEE`).
 - [x] **Generasi Client:** `npx prisma generate` berhasil dijalankan dan diintegrasikan ke kode backend.
-- [ ] **Sinkronisasi Saldo Koin:** Tambahkan kolom eksplisit `coinBalance` pada model `User` agar membedakan koin virtual dengan rank points sesuai dokumen spesifikasi.
-- [ ] **Database Seeder (`prisma/seed.ts`):** Pembuatan data uji dummy (akun pelari, circle demo, quest aktif) untuk kemudahan presentasi demo pitch.
+- [x] **Sinkronisasi Saldo Koin & Transaksi Koin:** Penambahan kolom `coinBalance` pada model `User` dan model `CoinTransaction` untuk tracking top up koin dan fee misi.
+- [x] **Database Seeder (`prisma/seed.ts`):** Pembuatan data uji dummy (4 pelari demo, 1 circle 'GBK Sunset Runners' kode 'RUN8MORN', GPS activity log dengan rute GeoJSON GBK Senayan, Bomb Mission P2P, serta mutasi koin/poin).
 
 ---
 

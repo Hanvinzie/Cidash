@@ -452,27 +452,27 @@ Tabel dan daftar periksa ini merefleksikan status implementasi aktual dari fitur
 
 | Domain / Pilar | Total Komponen | Selesai `[x]` | Belum `[ ]` | Progres |
 | :--- | :---: | :---: | :---: | :---: |
-| **A. Database & Prisma ORM** | 10 | 8 | 2 | 80% |
+| **A. Database & Prisma ORM** | 10 | 10 | 0 | 100% |
 | **B. Backend API (NestJS)** | 16 | 7 | 9 | 44% |
 | **C. Frontend Mobile (Flutter)** | 12 | 0 | 12 | 0% |
 | **D. Algoritma GPS & Anti-Cheat** | 4 | 0 | 4 | 0% |
 | **E. Pembayaran & Ekonomi Koin** | 5 | 0 | 5 | 0% |
 | **F. Dokumentasi & Pitch Deck** | 5 | 5 | 0 | 100% |
-| **TOTAL KESELURUHAN** | **52** | **20** | **32** | **38.5%** |
+| **TOTAL KESELURUHAN** | **52** | **22** | **30** | **42.3%** |
 
 ---
 
-### A. Database & Skema (PostgreSQL / Supabase & Prisma ORM)
+### A. Database & Skema (PostgreSQL / Supabase & Prisma ORM) — [SELESAI 100%]
 - [x] Inisialisasi Prisma ORM dengan PostgreSQL provider (`prisma/schema.prisma`).
-- [x] Model `User`: Manajemen identitas, kredensial hash, rank points, dan shield tickets.
-- [x] Model `Squad`: Grup privat (*Circle*) dengan `inviteCode` unik 8 karakter.
+- [x] Model `User`: Manajemen identitas, kredensial hash, `coinBalance`, rank points, dan shield tickets.
+- [x] Model `Squad`: Grup privat (*Circle*) dengan `inviteCode` unik 8 karakter dan relasi `createdBy`.
 - [x] Model `SquadMember`: Relasi keanggotaan grup (*many-to-many*) dengan peran `MEMBER` dan `CAPTAIN`.
 - [x] Model `Activity`: Log GPS (jarak meter, durasi detik, pace rata-rata, koordinat `routeGeoJson`).
 - [x] Model `Quest`: Misi tantangan dan *Bomb Mission* P2P dengan `stakesPoints`, `deadline`, dan status.
-- [x] Model `PointLedger`: Catatan transaksi perolehan dan penalti poin (`QUEST_WIN`, `QUEST_PENALTY`, `PURCHASE_SHIELD`).
+- [x] Model `PointLedger` & `CoinTransaction`: Catatan transaksi perolehan/penalti poin serta mutasi koin virtual (Top Up & Biaya Misi).
 - [x] Generasi Prisma Client TypeScript (`npx prisma generate`).
-- [ ] Penambahan field eksplisit `coinBalance` pada User (pemisahan saldo koin dan rank points sesuai PDF).
-- [ ] Berkas Seeding Data Awal (`prisma/seed.ts`) untuk demo akun, circle, dan misi contoh.
+- [x] Penambahan field eksplisit `coinBalance` pada User (pemisahan saldo koin dan rank points sesuai PDF).
+- [x] Berkas Seeding Data Awal (`prisma/seed.ts`) untuk demo akun, circle, dan misi contoh (berhasil di-seed ke Supabase).
 
 ---
 

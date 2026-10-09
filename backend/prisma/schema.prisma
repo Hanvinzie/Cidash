@@ -1,8 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -36,29 +34,41 @@ enum PointTxType {
   PURCHASE_SHIELD
 }
 
-model User {
-  id             String         @id @default(uuid())
-  email          String         @unique
-  passwordHash   String
-  name           String
-  rankPoints     Int            @default(100)
-  shieldTickets  Int            @default(0)
-  createdAt      DateTime       @default(now())
+enum CoinTxType {
+  TOP_UP
+  BOMB_MISSION_FEE
+  PURCHASE_SHIELD
+  REFUND
+}
 
-  memberships    SquadMember[]
-  activities     Activity[]
-  questsCreated  Quest[]        @relation("CreatedQuests")
-  questsReceived Quest[]        @relation("ReceivedQuests")
-  pointLedgers   PointLedger[]
+model User {
+  id               String            @id @default(uuid())
+  email            String            @unique
+  passwordHash     String
+  name             String
+  coinBalance      Int               @default(0) // Saldo koin virtual untuk kirim Bomb Mission & top up
+  rankPoints       Int               @default(100) // Poin peringkat kompetisi (Season reset 3 bulan)
+  shieldTickets    Int               @default(0) // Tiket perisai pembatal penalti
+  createdAt        DateTime          @default(now())
+
+  squadsCreated    Squad[]           @relation("SquadCreator")
+  memberships      SquadMember[]
+  activities       Activity[]
+  questsCreated    Quest[]           @relation("CreatedQuests")
+  questsReceived   Quest[]           @relation("ReceivedQuests")
+  pointLedgers     PointLedger[]
+  coinTransactions CoinTransaction[]
 }
 
 model Squad {
-  id          String         @id @default(uuid())
+  id          String        @id @default(uuid())
   name        String
-  inviteCode  String         @unique
-  isPremium   Boolean        @default(false)
-  createdAt   DateTime       @default(now())
+  inviteCode  String        @unique // Kode unik 8 karakter (invite-only)
+  isPremium   Boolean       @default(false)
+  createdById String?
+  createdAt   DateTime      @default(now())
 
+  createdBy   User?         @relation("SquadCreator", fields: [createdById], references: [id])
   members     SquadMember[]
   quests      Quest[]
 }
@@ -117,6 +127,17 @@ model PointLedger {
   amount    Int
   type      PointTxType
   reference String?
+  createdAt DateTime    @default(now())
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CoinTransaction {
+  id        String      @id @default(uuid())
+  userId    String
+  amount    Int         // Positif untuk Top Up, Negatif untuk pengeluaran biaya misi
+  type      CoinTxType
+  reference String?     // ID transaksi Payment Gateway (Midtrans/Xendit)
   createdAt DateTime    @default(now())
 
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
