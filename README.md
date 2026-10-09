@@ -105,6 +105,84 @@ Server backend akan berjalan di `http://localhost:3000`.
 
 ---
 
+## 🌿 Panduan Branching & Commit (Git Best Practices)
+
+Untuk menjaga repositori tetap bersih, rapi, dan mudah dikelola bersama tim, ikuti konvensi standar industri berikut:
+
+### 1. Aturan Penamaan Branch (*Branch Naming Convention*)
+
+Gunakan format: `<tipe>/<nama-singkat-fitur>` (gunakan huruf kecil dan tanda hubung `-` sebagai pemisah kata):
+
+| Tipe Branch | Tujuan Penggunaan | Contoh Penamaan |
+| :--- | :--- | :--- |
+| `feat/` | Pengembangan fitur baru | `feat/squad-invite-code`, `feat/bomb-mission-p2p` |
+| `fix/` | Perbaikan bug atau error | `fix/gps-haversine-calc`, `fix/auth-token-expiry` |
+| `docs/` | Perubahan atau penambahan dokumentasi | `docs/api-specification`, `docs/setup-guide` |
+| `refactor/` | Perapihan struktur kode tanpa mengubah fungsi | `refactor/prisma-service`, `refactor/dto-validation` |
+| `test/` | Penambahan atau perbaikan unit test / e2e | `test/auth-controller`, `test/quest-service` |
+| `chore/` | Pemeliharaan dependensi, konfigurasi, build tool | `chore/update-deps`, `chore/setup-eslint` |
+
+---
+
+### 2. Standar Pesan Commit (*Conventional Commits*)
+
+Gunakan struktur:  
+`git commit -m "<tipe>(<lingkup>): <deskripsi singkat perubahan>"`
+
+* **Contoh Commit yang Baik & Rapi:**
+  * `feat(squad): implement 8-char invite code generator`
+  * `feat(quest): add bomb mission creation endpoint with coin check`
+  * `fix(gps): resolve speed spike anomaly on running mode`
+  * `docs(readme): add git branching and commit conventions`
+  * `refactor(auth): simplify jwt payload extraction`
+  * `test(auth): add unit test for register and login service`
+
+* 💡 **Tips Commit Rapi:**
+  * **Atomik:** Commit satu tugas/fitur kecil dalam satu waktu, jangan menumpuk banyak perubahan acak di satu commit.
+  * **Jelas:** Hindari pesan ambigu seperti *"update"*, *"fix bug"*, atau *"test"*.
+  * **Imperatif:** Gunakan kata kerja aktif (misal: `add`, `update`, `fix`, `remove`).
+
+---
+
+### 3. Alur Kerja (Workflow) dari Pembuatan Branch hingga Merge
+
+Ikuti tahapan 7 langkah ini setiap kali mengerjakan tugas baru:
+
+```bash
+# 1. Pastikan branch main lokal dalam kondisi terbaru
+git checkout main
+git pull origin main
+
+# 2. Buat branch baru dan langsung berpindah ke dalamnya
+git checkout -b feat/nama-fitur-baru
+# (atau alternatif modern: git switch -c feat/nama-fitur-baru)
+
+# 3. Lakukan pengodean / perubahan file...
+
+# 4. Periksa file yang telah diubah
+git status
+
+# 5. Masukkan file ke staging area
+git add .
+# atau spesifik: git add src/squads/
+
+# 6. Buat commit dengan pesan terstruktur
+git commit -m "feat(squad): create circle and assign captain role"
+
+# 7. Unggah branch ke GitHub
+git push -u origin feat/nama-fitur-baru
+```
+
+Setelah di-push ke GitHub:
+1. Buka repositori di browser GitHub.
+2. Buat **Pull Request (PR)** dari branch Anda (`feat/nama-fitur-baru`) menuju `main`.
+3. Setelah di-review dan lolos test, lakukan **Merge PR** ke branch `main`.
+4. Hapus branch fitur di GitHub jika sudah di-merge.
+
+---
+
 ## 📄 Referensi Dokumen
 * **Spesifikasi Teknis & Business Model Canvas:** [docs/SPESIFIKASI_PROYEK_CIDASH.md](file:///D:/CiDash/docs/SPESIFIKASI_PROYEK_CIDASH.md)
+* **Checklist Progres & Roadmap Pengerjaan:** [docs/CHECKLIST_PROGRES_PROYEK.md](file:///D:/CiDash/docs/CHECKLIST_PROGRES_PROYEK.md)
 * **Dokumen Acuan:** `D:\Cidash_Project_Document.pdf`
+
