@@ -1,0 +1,118 @@
+### Variabel Global
+@baseUrl = http://localhost:3000
+
+### 1. AUTH: Login sebagai Captain (Nicholas)
+# @name loginCaptain
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "captain@cidash.id",
+  "password": "password123"
+}
+
+### Ambil Token Captain
+@captainToken = {{loginCaptain.response.body.accessToken}}
+
+### 2. AUTH: Login sebagai Runner (Budi)
+# @name loginBudi
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+  "email": "budi@cidash.id",
+  "password": "password123"
+}
+
+### Ambil Token Budi
+@budiToken = {{loginBudi.response.body.accessToken}}
+
+### 3. AUTH: Cek Profil Saya (Captain)
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{captainToken}}
+
+### 4. SQUADS: Cek Daftar Circle yang Diikuti (Captain)
+# @name mySquads
+GET {{baseUrl}}/squads/my
+Authorization: Bearer {{captainToken}}
+
+### Ambil ID Squad GBK Sunset Runners dari daftar
+@squadId = {{mySquads.response.body.squads[0].id}}
+
+### 5. SQUADS: Buat Circle Baru
+POST {{baseUrl}}/squads
+Authorization: Bearer {{captainToken}}
+Content-Type: application/json
+
+{
+  "name": "Sudirman Night Runners",
+  "isPremium": false
+}
+
+### 6. SQUADS: Gabung Circle dengan Kode 8 Karakter (Contoh: RUN8MORN)
+POST {{baseUrl}}/squads/join
+Authorization: Bearer {{budiToken}}
+Content-Type: application/json
+
+{
+  "inviteCode": "RUN8MORN"
+}
+
+### 7. SQUADS: Leaderboard Circle
+GET {{baseUrl}}/squads/{{squadId}}/leaderboard
+Authorization: Bearer {{captainToken}}
+
+### 8. QUESTS: Daftar Misi Aktif di Circle
+GET {{baseUrl}}/quests/active
+Authorization: Bearer {{captainToken}}
+
+### 9. QUESTS: Kirim Bomb Mission P2P (Captain menantang Budi)
+# @name sendBombMission
+POST {{baseUrl}}/quests
+Authorization: Bearer {{captainToken}}
+Content-Type: application/json
+
+{
+  "squadId": "{{squadId}}",
+  "targetUserId": "7134376c-3fa7-47b2-8418-5f968e778641",
+  "activityType": "RUNNING",
+  "targetDistance": 5000,
+  "targetMaxPace": 6.0,
+  "stakesPoints": 50,
+  "rewardTitle": "Weekend 5K Pace 6 Challenge",
+  "deadline": "2026-10-15T00:00:00.000Z"
+}
+
+### 10. QUESTS: Gunakan Shield Ticket (Budi membatalkan penalti)
+POST {{baseUrl}}/quests/{{sendBombMission.response.body.quest.id}}/shield
+Authorization: Bearer {{budiToken}}
+
+### 11. ACTIVITIES: Submit Log Olahraga GPS (Memenuhi Syarat Quest & Lolos Anti-Cheat)
+POST {{baseUrl}}/activities
+Authorization: Bearer {{budiToken}}
+Content-Type: application/json
+
+{
+  "type": "RUNNING",
+  "distanceMeters": 5200,
+  "durationSeconds": 1800,
+  "averagePace": 5.76,
+  "startedAt": "2026-10-09T05:00:00.000Z",
+  "endedAt": "2026-10-09T05:30:00.000Z",
+  "routeGeoJson": {
+    "type": "LineString",
+    "coordinates": [
+      [106.8015, -6.2185],
+      [106.8028, -6.2198],
+      [106.8042, -6.2212],
+      [106.8055, -6.2225],
+      [106.8040, -6.2238],
+      [106.8020, -6.2220],
+      [106.8015, -6.2185]
+    ]
+  }
+}
+
+### 12. ACTIVITIES: Riwayat Olahraga Pengguna
+GET {{baseUrl}}/activities/history?page=1&limit=10
+Authorization: Bearer {{budiToken}}

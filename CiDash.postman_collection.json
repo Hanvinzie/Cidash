@@ -1,0 +1,184 @@
+{
+  "info": {
+    "_postman_id": "b3e9471f-0e12-4d87-9bc5-2a2b378129e0",
+    "name": "CiDash Backend API",
+    "description": "Koleksi request endpoint backend CiDash (Social Gamified Fitness Tracker)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login Captain",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"captain@cidash.id\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Login Budi",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"budi@cidash.id\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] }
+          }
+        },
+        {
+          "name": "Get Profile Me",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Squads (Circles)",
+      "item": [
+        {
+          "name": "Get My Circles",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/squads/my", "host": ["{{baseUrl}}"], "path": ["squads", "my"] }
+          }
+        },
+        {
+          "name": "Create Circle",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sudirman Night Runners\",\n  \"isPremium\": false\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/squads", "host": ["{{baseUrl}}"], "path": ["squads"] }
+          }
+        },
+        {
+          "name": "Join Circle by 8-Char Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"inviteCode\": \"RUN8MORN\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/squads/join", "host": ["{{baseUrl}}"], "path": ["squads", "join"] }
+          }
+        },
+        {
+          "name": "Get Circle Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/squads/:id/leaderboard", "host": ["{{baseUrl}}"], "path": ["squads", ":id", "leaderboard"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quests (Bomb Missions)",
+      "item": [
+        {
+          "name": "Get Active Quests",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/quests/active", "host": ["{{baseUrl}}"], "path": ["quests", "active"] }
+          }
+        },
+        {
+          "name": "Send Bomb Mission",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"squadId\": \"{{squadId}}\",\n  \"targetUserId\": \"{{targetUserId}}\",\n  \"activityType\": \"RUNNING\",\n  \"targetDistance\": 5000,\n  \"targetMaxPace\": 6.0,\n  \"stakesPoints\": 50,\n  \"rewardTitle\": \"Weekend 5K Challenge\",\n  \"deadline\": \"2026-10-15T00:00:00.000Z\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/quests", "host": ["{{baseUrl}}"], "path": ["quests"] }
+          }
+        },
+        {
+          "name": "Use Shield Ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/quests/:id/shield", "host": ["{{baseUrl}}"], "path": ["quests", ":id", "shield"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Activities (GPS Tracker)",
+      "item": [
+        {
+          "name": "Submit Activity",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"RUNNING\",\n  \"distanceMeters\": 5200,\n  \"durationSeconds\": 1800,\n  \"averagePace\": 5.76,\n  \"startedAt\": \"2026-10-09T05:00:00.000Z\",\n  \"endedAt\": \"2026-10-09T05:30:00.000Z\",\n  \"routeGeoJson\": {\n    \"type\": \"LineString\",\n    \"coordinates\": [\n      [106.8015, -6.2185],\n      [106.8028, -6.2198],\n      [106.8042, -6.2212],\n      [106.8055, -6.2225],\n      [106.8040, -6.2238],\n      [106.8020, -6.2220],\n      [106.8015, -6.2185]\n    ]\n  }\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/activities", "host": ["{{baseUrl}}"], "path": ["activities"] }
+          }
+        },
+        {
+          "name": "Get Workout History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/activities/history?page=1&limit=10", "host": ["{{baseUrl}}"], "path": ["activities", "history"] }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" },
+    { "key": "squadId", "value": "" },
+    { "key": "targetUserId", "value": "" }
+  ]
+}
