@@ -1,4 +1,4 @@
-# CIDASH (Circle Dashboard) 🏃‍♂️💨
+# CIDASH 🏃‍♂️💨
 > **Social Gamified Fitness Tracker berbasis Pertemanan Privat (Invite-Only)**  
 
 [![NestJS](https://img.shields.io/badge/Backend-NestJS%2012-ea2845?logo=nestjs&logoColor=white)](https://nestjs.com/)
