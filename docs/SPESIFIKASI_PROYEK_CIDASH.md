@@ -2,7 +2,7 @@
 **Kategori:** Social Gamified Fitness Tracker  
 **Versi Dokumen:** 1.0 (Oktober 2026)  
 **Dokumen Sumber:** `D:\Cidash_Project_Document.pdf`  
-**Target:** Business Plan Competition & Technical Execution  
+
 
 ---
 
