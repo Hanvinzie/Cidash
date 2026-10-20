@@ -1,4 +1,4 @@
-# 📋 CHECKLIST PROGRES & ROADMAP PENGERJAAN CIDASH
+# CHECKLIST PROGRES & ROADMAP PENGERJAAN CIDASH
 > **Pelacak Status Pengerjaan Fitur (Development Progress Tracker)**  
 > **Versi:** 1.0 | **Pembaruan Terakhir:** Oktober 2026  
 > **Dokumen Spesifikasi:** [docs/SPESIFIKASI_PROYEK_CIDASH.md](file:///D:/CiDash/docs/SPESIFIKASI_PROYEK_CIDASH.md)
@@ -7,7 +7,7 @@ Dokumen ini melacak status pengerjaan seluruh fitur aplikasi **Cidash (Social Ga
 
 ---
 
-## 📊 Ringkasan Eksekutif Progres
+## Ringkasan Eksekutif Progres
 
 | Kategori | Total Item | Selesai `[x]` | Belum `[ ]` | Status Progres |
 | :--- | :---: | :---: | :---: | :---: |
