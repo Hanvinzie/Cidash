@@ -289,6 +289,92 @@ export class QuestsService {
   }
 
   /**
+   * Menolak tantangan misi (menggunakan Shield Ticket jika ada, atau FAILED dengan penalti).
+   */
+  async rejectQuest(questId: string, userId: string) {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+      include: {
+        targetUser: { select: { id: true, rankPoints: true, shieldTickets: true } },
+      },
+    });
+
+    if (!quest) {
+      throw new NotFoundException('Misi tidak ditemukan');
+    }
+
+    if (quest.targetUserId !== userId) {
+      throw new ForbiddenException(
+        'Hanya target penerima tantangan yang dapat menolak misi ini',
+      );
+    }
+
+    if (
+      quest.status !== QuestStatus.PENDING &&
+      quest.status !== QuestStatus.ACCEPTED
+    ) {
+      throw new BadRequestException(
+        `Misi tidak dapat ditolak karena berstatus ${quest.status}`,
+      );
+    }
+
+    if (quest.targetUser.shieldTickets >= 1) {
+      return this.useShieldTicket(questId, userId);
+    }
+
+    const penaltyAmount = Math.min(
+      quest.targetUser.rankPoints,
+      quest.stakesPoints,
+    );
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const q = await tx.quest.update({
+        where: { id: quest.id },
+        data: { status: QuestStatus.FAILED },
+      });
+
+      if (penaltyAmount > 0) {
+        await tx.user.update({
+          where: { id: quest.targetUserId },
+          data: { rankPoints: { decrement: penaltyAmount } },
+        });
+
+        await tx.pointLedger.create({
+          data: {
+            userId: quest.targetUserId,
+            amount: -penaltyAmount,
+            type: PointTxType.QUEST_PENALTY,
+            reference: `PENALTY-${quest.id.substring(0, 8)}`,
+          },
+        });
+      }
+
+      await tx.user.update({
+        where: { id: quest.creatorId },
+        data: { rankPoints: { increment: quest.stakesPoints } },
+      });
+
+      await tx.pointLedger.create({
+        data: {
+          userId: quest.creatorId,
+          amount: quest.stakesPoints,
+          type: PointTxType.QUEST_WIN,
+          reference: `WIN-${quest.id.substring(0, 8)}`,
+        },
+      });
+
+      return q;
+    });
+
+    return {
+      message: 'Misi ditolak',
+      questId: updated.id,
+      status: updated.status,
+      penaltyPoints: penaltyAmount,
+    };
+  }
+
+  /**
    * Menerima tantangan misi (mengubah status dari PENDING menjadi ACCEPTED).
    */
   async acceptQuest(questId: string, userId: string) {
@@ -366,17 +452,23 @@ export class QuestsService {
 
   /**
    * Cron Job Auto-Expire: Berjalan setiap jam secara otomatis.
-   * Mendeteksi seluruh misi PENDING/ACCEPTED yang melampaui deadline,
-   * mengubah status menjadi FAILED, memotong penalti rankPoints target user,
-   * memberikan reward rankPoints kepada creator, dan mencatat mutasi di PointLedger.
    */
   @Cron(CronExpression.EVERY_HOUR)
   async handleAutoExpireCron() {
-    this.logger.log('Menjalankan pengecekan otomatis misi kedaluwarsa...');
-    const result = await this.expireOverdueQuests();
-    this.logger.log(
-      `Pengecekan selesai. Sebanyak ${result.expiredCount} misi kedaluwarsa diproses.`,
-    );
+    if (!this.prisma.isConnected) {
+      return;
+    }
+    try {
+      this.logger.log('Menjalankan pengecekan otomatis misi kedaluwarsa...');
+      const result = await this.expireOverdueQuests();
+      this.logger.log(
+        `Pengecekan selesai. Sebanyak ${result.expiredCount} misi kedaluwarsa diproses.`,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `Pengecekan cron dilewati karena kendala database: ${error instanceof Error ? error.message : error}`,
+      );
+    }
   }
 
   /**
