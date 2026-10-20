@@ -32,6 +32,7 @@ export default function CustomQuest() {
 
   // Bomb mission form state
   const [targetUserId, setTargetUserId] = useState(members[0]?.id ?? '');
+  const effectiveTargetId = members.some((m) => m.id === targetUserId) ? targetUserId : (members[0]?.id ?? '');
   const [activityType, setActivityType] = useState<ActivityType>('run');
   const [targetKm, setTargetKm] = useState(3);
   const [durationMin, setDurationMin] = useState(25);
@@ -50,8 +51,15 @@ export default function CustomQuest() {
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!canWager || !targetUserId) return;
-    sendBomb({ targetUserId, type: activityType, targetKm, durationMin, deadline, wagerCoins: effectiveWager });
+    if (!canWager || !effectiveTargetId) return;
+    sendBomb({
+      targetUserId: effectiveTargetId,
+      type: activityType,
+      targetKm,
+      durationMin,
+      deadline,
+      wagerCoins: effectiveWager,
+    });
     setShowForm(false);
     setTab('sent');
   }
@@ -90,7 +98,7 @@ export default function CustomQuest() {
               <p className="text-center text-sm text-muted">There are no other members in this circle yet.</p>
             ) : (
               <form onSubmit={handleCreate} className="space-y-4">
-                <Select label="Challenge" value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} required>
+                <Select label="Challenge" value={effectiveTargetId} onChange={(e) => setTargetUserId(e.target.value)} required>
                   {members.map((m) => (
                     <option key={m.id} value={m.id}>
                       @{m.username}
