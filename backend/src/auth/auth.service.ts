@@ -5,6 +5,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { CoinTxType } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../database/prisma.service';
 import { LoginDto, RegisterDto } from './dto';
@@ -32,14 +33,15 @@ export class AuthService {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Simpan ke database dengan default 100 points dan 0 shield tickets
+    // Simpan ke database dengan default 100 points, 60 starter coins, dan 1 shield ticket
     const user = await this.prisma.user.create({
       data: {
         email,
         passwordHash,
         name,
+        coinBalance: 60,
         rankPoints: 100,
-        shieldTickets: 0,
+        shieldTickets: 1,
       },
       select: {
         id: true,
@@ -119,5 +121,42 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  async topUpCoins(userId: string, coins: number) {
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      const u = await tx.user.update({
+        where: { id: userId },
+        data: {
+          coinBalance: { increment: coins },
+        },
+        select: {
+          id: true,
+          email: true,
+          name: true,
+          coinBalance: true,
+          rankPoints: true,
+          shieldTickets: true,
+          createdAt: true,
+        },
+      });
+
+      await tx.coinTransaction.create({
+        data: {
+          userId,
+          amount: coins,
+          type: CoinTxType.TOP_UP,
+          reference: `TOPUP-${Date.now().toString(36).toUpperCase()}`,
+        },
+      });
+
+      return u;
+    });
+
+    return {
+      message: `Berhasil top up ${coins} koin`,
+      coinBalance: updatedUser.coinBalance,
+      user: updatedUser,
+    };
   }
 }
