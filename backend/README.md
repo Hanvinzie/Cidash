@@ -1,11 +1,11 @@
-# CiDash — Backend Service 🚀
+# CiDash — Backend Service
 > REST API, Authentication, and Business Logic Engine for **CiDash (Circle Dashboard)**.
 
 Dibangun dengan **NestJS 12**, **Prisma ORM 5**, dan **PostgreSQL (Supabase)**.
 
 ---
 
-## 🛠️ Tech Stack & Modul
+## Tech Stack & Modul
 
 * **Framework:** [NestJS](https://nestjs.com/) (Node.js + TypeScript)
 * **ORM:** [Prisma ORM](https://prisma.io/)
@@ -15,7 +15,7 @@ Dibangun dengan **NestJS 12**, **Prisma ORM 5**, dan **PostgreSQL (Supabase)**.
 
 ---
 
-## 🗄️ Model Basis Data (Prisma Schema)
+## Model Basis Data (Prisma Schema)
 
 Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema.prisma) dirancang selaras dengan spesifikasi proyek:
 
@@ -31,7 +31,7 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 
 ---
 
-## 🔌 Endpoint API Utama
+## Endpoint API Utama
 
 ### 1. Autentikasi (`/auth`)
 * `POST /auth/register` — Mendaftarkan pengguna baru (`email`, `password`, `name`).
@@ -62,7 +62,7 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 
 ---
 
-## 💻 Panduan Menjalankan Backend
+## Panduan Menjalankan Backend
 
 ### Prasyarat:
 * Node.js v20+ & npm
@@ -111,6 +111,6 @@ npm run test:e2e
 
 ---
 
-## 📖 Dokumentasi Lengkap
+## Dokumentasi Lengkap
 Spesifikasi lengkap, skenario pitch demo, dan Business Model Canvas dapat diakses di:  
-👉 [Dokumentasi Spesifikasi CiDash](../docs/SPESIFIKASI_PROYEK_CIDASH.md)
+[Dokumentasi Spesifikasi CiDash](../docs/SPESIFIKASI_PROYEK_CIDASH.md)

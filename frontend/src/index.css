@@ -1,0 +1,84 @@
+@import '@fontsource-variable/plus-jakarta-sans';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Cidash color tokens (R G B). Panduan lengkap: README.md → "Color Guide".
+ * Light = default, Dark = class "dark" pada <html>.
+ */
+@layer base {
+  :root {
+    color-scheme: light;
+    --c-primary: 234 40 69; /* #EA2845 */
+    --c-primary-hover: 200 30 58; /* #C81E3A */
+    --c-on-primary: 255 255 255;
+
+    --c-canvas: 246 246 248; /* #F6F6F8 */
+    --c-surface: 255 255 255; /* #FFFFFF */
+    --c-inset: 241 242 245; /* #F1F2F5 */
+    --c-line: 228 230 235; /* #E4E6EB */
+
+    --c-ink: 17 24 39; /* #111827 */
+    --c-muted: 75 85 99; /* #4B5563 */
+    --c-subtle: 107 114 128; /* #6B7280 */
+
+    --c-success: 5 150 105; /* #059669 */
+    --c-warning: 217 119 6; /* #D97706 */
+    --c-danger: 220 38 38; /* #DC2626 */
+  }
+
+  .dark {
+    color-scheme: dark;
+    --c-primary: 234 40 69; /* #EA2845 */
+    --c-primary-hover: 242 74 99; /* #F24A63 */
+    --c-on-primary: 255 255 255;
+
+    --c-canvas: 11 15 23; /* #0B0F17 */
+    --c-surface: 21 27 38; /* #151B26 */
+    --c-inset: 30 38 52; /* #1E2634 */
+    --c-line: 42 51 68; /* #2A3344 */
+
+    --c-ink: 248 250 252; /* #F8FAFC */
+    --c-muted: 168 179 196; /* #A8B3C4 */
+    --c-subtle: 122 135 156; /* #7A879C */
+
+    --c-success: 52 211 153; /* #34D399 */
+    --c-warning: 251 191 36; /* #FBBF24 */
+    --c-danger: 248 113 113; /* #F87171 */
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply m-0 bg-canvas font-sans text-ink antialiased;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-cidash-primary ring-offset-2 ring-offset-canvas;
+  }
+}
+
+@layer utilities {
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Peta OSM lebih gelap di dark mode (hanya layer tile; rute merah tidak ikut terinversi). */
+.dark .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+
+.leaflet-container .leaflet-control-attribution {
+  @apply rounded-tl-md bg-surface/80 text-[10px] text-subtle;
+}
+.leaflet-container .leaflet-control-attribution a {
+  @apply text-muted;
+}
