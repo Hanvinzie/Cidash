@@ -4,7 +4,7 @@ import * as bcrypt from 'bcrypt';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting database seeding for CiDash...');
+  console.log('Starting database seeding for CiDash...');
 
   // 1. Bersihkan data lama jika ada (urutan penghapusan sesuai relasi foreign key)
   await prisma.coinTransaction.deleteMany();
@@ -15,7 +15,7 @@ async function main() {
   await prisma.squad.deleteMany();
   await prisma.user.deleteMany();
 
-  console.log('🧹 Existing data cleared.');
+  console.log('Existing data cleared.');
 
   // 2. Hash default password
   const passwordHash = await bcrypt.hash('password123', 10);
@@ -65,7 +65,7 @@ async function main() {
     },
   });
 
-  console.log('👤 Created 4 demo users.');
+  console.log('Created 4 demo users.');
 
   // 4. Buat Circle Privat (Squad) dengan Kode 8 Karakter Unik
   const squad = await prisma.squad.create({
@@ -85,7 +85,7 @@ async function main() {
     },
   });
 
-  console.log(`🏃 Created Squad "${squad.name}" with Invite Code: ${squad.inviteCode}`);
+  console.log(`Created Squad "${squad.name}" with Invite Code: ${squad.inviteCode}`);
 
   // 5. Buat Log Aktivitas GPS Olahraga dengan Titik Rute GeoJSON (Rute Sekitar GBK Jakarta)
   const gbkRouteGeoJson = {
@@ -125,7 +125,7 @@ async function main() {
     },
   });
 
-  console.log('📍 Created GPS Activity Log for Siti.');
+  console.log('Created GPS Activity Log for Siti.');
 
   // 6. Buat Quests & P2P Bomb Mission
   // Misi 1: Bomb Mission P2P Aktif dari Captain ke Budi
@@ -161,7 +161,7 @@ async function main() {
     },
   });
 
-  console.log('🎯 Created Quests (1 P2P Bomb Mission Pending, 1 Completed).');
+  console.log('Created Quests (1 P2P Bomb Mission Pending, 1 Completed).');
 
   // 7. Catat Transaksi Koin Virtual (Coin Transactions)
   await prisma.coinTransaction.createMany({
@@ -199,13 +199,13 @@ async function main() {
     ],
   });
 
-  console.log('💰 Created Coin Transactions & Rank Point Ledgers.');
-  console.log('✅ Database Seeding Completed Successfully!');
+  console.log('Created Coin Transactions & Rank Point Ledgers.');
+  console.log('Database Seeding Completed Successfully!');
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error during seeding:', e);
+    console.error('Error during seeding:', e);
     process.exit(1);
   })
   .finally(async () => {

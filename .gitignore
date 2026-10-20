@@ -1,38 +1,75 @@
+# ==========================================================
 # Environment variables (JANGAN DI-PUSH KE GITHUB)
+# ==========================================================
 .env
 *.env
+.env.*
 backend/.env
 backend/.env.*
+frontend/.env
+frontend/.env.*
 !.env.example
 !backend/.env.example
+!frontend/.env.example
 
+# ==========================================================
 # Dependencies
+# ==========================================================
 node_modules/
 backend/node_modules/
+frontend/node_modules/
 
-# Production & Build outputs
+# ==========================================================
+# Build & Production outputs (semua folder)
+# ==========================================================
 dist/
-backend/dist/
 build/
+.next/
+backend/dist/
+backend/build/
+frontend/dist/
+frontend/dist-ssr/
+frontend/build/
 *.tsbuildinfo
 backend/*.tsbuildinfo
+
+# PWA generated (vite-plugin-pwa)
+frontend/dev-dist/
 
 # Generated Prisma Client
 backend/src/generated/
 
+# ==========================================================
+# Python (service backend tambahan, mis. FastAPI/anti-cheat)
+# ==========================================================
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+
+# ==========================================================
 # Logs
+# ==========================================================
 *.log
 npm-debug.log*
 yarn-debug.log*
+pnpm-debug.log*
 
+# ==========================================================
 # Operating System & IDE
+# ==========================================================
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/*
 !.vscode/settings.json
 
+# ==========================================================
 # AI Assistant configs & caches
+# ==========================================================
 .agents/
 backend/.agents/
 .windsurf/
