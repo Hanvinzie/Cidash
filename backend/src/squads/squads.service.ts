@@ -83,6 +83,7 @@ export class SquadsService {
         isPremium: squad.isPremium,
         createdAt: squad.createdAt,
         role: Role.CAPTAIN,
+        totalMembers: 1,
       },
     };
   }
@@ -238,6 +239,11 @@ export class SquadsService {
             name: true,
             rankPoints: true,
             shieldTickets: true,
+            activities: {
+              select: {
+                distanceMeters: true,
+              },
+            },
           },
         },
       },
@@ -248,16 +254,23 @@ export class SquadsService {
       },
     });
 
-    const leaderboard = members.map((member, index) => ({
-      rank: index + 1,
-      userId: member.user.id,
-      name: member.user.name,
-      rankPoints: member.user.rankPoints,
-      shieldTickets: member.user.shieldTickets,
-      role: member.role,
-      joinedAt: member.joinedAt,
-      isCurrentUser: member.user.id === userId,
-    }));
+    const leaderboard = members.map((member, index) => {
+      const totalMeters = (member.user.activities ?? []).reduce(
+        (sum, act) => sum + (act.distanceMeters ?? 0),
+        0,
+      );
+      return {
+        rank: index + 1,
+        userId: member.user.id,
+        name: member.user.name,
+        rankPoints: member.user.rankPoints,
+        shieldTickets: member.user.shieldTickets,
+        totalDistanceKm: Math.round((totalMeters / 1000) * 10) / 10,
+        role: member.role,
+        joinedAt: member.joinedAt,
+        isCurrentUser: member.user.id === userId,
+      };
+    });
 
     return {
       squad,
