@@ -11,7 +11,7 @@ export default function ThemeToggle() {
       onClick={toggle}
       aria-label={`Switch to ${next} mode`}
       title={`Switch to ${next} mode`}
-      className="flex h-9 w-9 items-center justify-center rounded-full text-muted transition hover:bg-inset hover:text-ink"
+      className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition hover:bg-inset hover:text-ink active:scale-90"
     >
       <Icon name={resolved === 'dark' ? 'sun' : 'moon'} size={18} />
     </button>

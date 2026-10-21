@@ -22,8 +22,8 @@ export const initialUser: User = {
 };
 
 export const initialCircles: Circle[] = [
-  { id: 'cir_001', name: 'Sunset Run Squad', code: '8KZA1B2C', memberCount: 5 },
-  { id: 'cir_002', name: 'Weekend Riders', code: 'QW9R4T7Y', memberCount: 3 },
+  { id: 'cir_001', name: 'Sunset Run Squad', code: '8KZA1B2C', memberCount: 5, captainId: 'usr_002' },
+  { id: 'cir_002', name: 'Weekend Riders', code: 'QW9R4T7Y', memberCount: 3, captainId: 'usr_001' },
 ];
 
 /** Anggota per circle (tidak termasuk user saat ini). */

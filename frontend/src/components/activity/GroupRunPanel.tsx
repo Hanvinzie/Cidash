@@ -14,7 +14,7 @@ interface GroupRunPanelProps {
 
 const STATUS = {
   lobby: { label: 'Lobby', tone: 'warning' },
-  live: { label: 'LIVE', tone: 'danger' },
+  live: { label: 'Live', tone: 'danger' },
   ended: { label: 'Ended', tone: 'neutral' },
 } as const;
 
@@ -34,7 +34,7 @@ export default function GroupRunPanel({ circleId, myId, group, tracking }: Group
             {rooms.map((r) => (
               <li key={r.id} className="flex items-center justify-between gap-2 rounded-xl bg-inset px-3 py-2.5">
                 <span className="min-w-0 text-sm">
-                  <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge>{' '}
+                  <Badge tone={STATUS[r.status].tone} dot pulse={r.status === 'live'}>{STATUS[r.status].label}</Badge>{' '}
                   <b>@{r.hostName}</b>
                   <span className="text-subtle"> · {r.participants.length} runners</span>
                 </span>
@@ -69,7 +69,9 @@ export default function GroupRunPanel({ circleId, myId, group, tracking }: Group
             Host @{room.hostName} · updates every {PROGRESS_INTERVAL_MS / 1000}s
           </p>
         </div>
-        <Badge tone={STATUS[room.status].tone}>{STATUS[room.status].label}</Badge>
+        <Badge tone={STATUS[room.status].tone} dot pulse={room.status === 'live'}>
+          {STATUS[room.status].label}
+        </Badge>
       </div>
 
       {gapMessage && room.status === 'live' && (
