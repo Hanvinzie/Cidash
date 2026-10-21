@@ -30,8 +30,8 @@ export default function Login() {
   const [step, setStep] = useState<Step>(isAuthenticated && params.get('step') === 'circle' ? 'circle' : 'auth');
   const [mode, setMode] = useState<AuthMode>('login');
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('budi@cidash.id');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [circleName, setCircleName] = useState('');
   const [joinCode, setJoinCode] = useState(() =>
     (params.get('code') ?? '')
@@ -46,13 +46,22 @@ export default function Login() {
 
   if (isAuthenticated && step === 'auth') return <Navigate to={redirectTo} replace />;
 
+  function handleModeChange(nextMode: AuthMode) {
+    setMode(nextMode);
+    setError(null);
+  }
+
   async function handleAuth(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      await login({ mode, name: username, email, password });
-      setStep('circle');
+      const { circleCount } = await login({ mode, name: username, email, password });
+      if (circleCount > 0 && !joinCode) {
+        navigate(redirectTo, { replace: true });
+      } else {
+        setStep('circle');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
     } finally {
@@ -136,10 +145,7 @@ export default function Login() {
                 <Segmented
                   ariaLabel="Authentication mode"
                   value={mode}
-                  onChange={(m) => {
-                    setMode(m);
-                    setError(null);
-                  }}
+                  onChange={handleModeChange}
                   options={[
                     { value: 'login', label: 'Sign in' },
                     { value: 'register', label: 'Sign up' },
@@ -152,7 +158,8 @@ export default function Login() {
                   <Input
                     label="Username"
                     required
-                    minLength={3}
+                    minLength={2}
+                    maxLength={60}
                     autoComplete="username"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
@@ -197,8 +204,16 @@ export default function Login() {
                   setError(null);
                   setLoading(true);
                   try {
-                    await login({ mode: 'login', email: 'budi@cidash.id', password: 'password123' });
-                    setStep('circle');
+                    const { circleCount } = await login({
+                      mode: 'login',
+                      email: 'budi@cidash.id',
+                      password: 'password123',
+                    });
+                    if (circleCount > 0 && !joinCode) {
+                      navigate(redirectTo, { replace: true });
+                    } else {
+                      setStep('circle');
+                    }
                   } catch (err) {
                     setError(err instanceof Error ? err.message : 'Demo login failed');
                   } finally {

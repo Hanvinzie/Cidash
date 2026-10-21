@@ -2,7 +2,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import { estimateCalories, formatDuration, formatPace } from '../../lib/geo';
-import type { VerificationResult } from '../../types';
+import type { MissionStatus, VerificationResult } from '../../types';
 
 interface VerificationModalProps {
   result: VerificationResult;
@@ -11,11 +11,12 @@ interface VerificationModalProps {
   onShare: () => void;
 }
 
-const MISSION_TEXT = {
+const MISSION_TEXT: Record<MissionStatus, string> = {
   completed: 'Mission complete',
   failed: 'Mission missed',
   in_progress: 'Mission progress saved',
   pending: '',
+  shielded: 'Mission shielded',
 };
 
 export default function VerificationModal({ result, onRetry, onDone, onShare }: VerificationModalProps) {
