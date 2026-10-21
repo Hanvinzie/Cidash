@@ -7,6 +7,8 @@ export interface ValidationResult {
   averageSpeedMps: number;
 }
 
+const MAX_ROUTE_POINTS = 10_000;
+
 @Injectable()
 export class AntiCheatService {
   /**
@@ -91,28 +93,31 @@ export class AntiCheatService {
     durationSeconds: number,
     averagePace: number,
     routeGeoJson: any,
+    requireRoutePoints = false,
   ): ValidationResult {
-    if (durationSeconds <= 0) {
+    if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
       throw new BadRequestException('Durasi olahraga tidak valid');
     }
 
-    if (distanceMeters <= 0) {
+    if (!Number.isFinite(distanceMeters) || distanceMeters <= 0) {
       throw new BadRequestException('Jarak tempuh olahraga tidak valid');
     }
 
     const speedMps = distanceMeters / durationSeconds; // meter per detik
+    const calculatedPace = durationSeconds / 60 / (distanceMeters / 1000);
+    const effectivePace = Math.min(averagePace, calculatedPace);
 
     // 1. Verifikasi Batas Kecepatan Maksimum Berdasarkan Jenis Aktivitas
     if (type === ActivityType.RUNNING) {
       // Kecepatan lari maksimal wajar manusia: < 8.5 m/s (~30.6 km/h) atau pace < 1.95 min/km
-      if (speedMps > 8.5 || averagePace < 1.95) {
+      if (speedMps > 8.5 || effectivePace < 1.95) {
         throw new BadRequestException(
           'Aktivitas ditolak: Kecepatan lari melebihi batas manusiawi normal (terdeteksi indikasi penggunaan kendaraan bermotor).',
         );
       }
     } else if (type === ActivityType.CYCLING) {
       // Kecepatan sepeda kasual maksimal wajar: < 18.0 m/s (~64.8 km/h) atau pace < 0.9 min/km
-      if (speedMps > 18.0 || averagePace < 0.9) {
+      if (speedMps > 18.0 || effectivePace < 0.9) {
         throw new BadRequestException(
           'Aktivitas ditolak: Kecepatan bersepeda melampaui batas wajar (terdeteksi indikasi penggunaan kendaraan bermotor).',
         );
@@ -121,10 +126,41 @@ export class AntiCheatService {
 
     // 2. Pemeriksaan Kontinuitas Titik Koordinat GPS
     const coordinates = this.extractCoordinates(routeGeoJson);
+
+    if (requireRoutePoints && coordinates.length < 2) {
+      throw new BadRequestException(
+        'Aktivitas ditolak: Data rute GPS (routeGeoJson) harus memiliki minimal 2 titik koordinat yang valid.',
+      );
+    }
+
+    if (coordinates.length > MAX_ROUTE_POINTS) {
+      throw new BadRequestException(
+        `Aktivitas ditolak: Jumlah titik koordinat melebihi batas maksimum (${MAX_ROUTE_POINTS} titik).`,
+      );
+    }
+
     let cumulativeDistance = 0;
 
     if (coordinates.length >= 2) {
       const maxAllowedPointJumpMeters = 800; // Lonjakan maksimal antar titik koordinat berturutan
+
+      for (let i = 0; i < coordinates.length; i++) {
+        const pt = coordinates[i];
+        if (
+          !Array.isArray(pt) ||
+          pt.length < 2 ||
+          !Number.isFinite(pt[0]) ||
+          !Number.isFinite(pt[1]) ||
+          pt[0] < -180 ||
+          pt[0] > 180 ||
+          pt[1] < -90 ||
+          pt[1] > 90
+        ) {
+          throw new BadRequestException(
+            'Aktivitas ditolak: Format koordinat GPS tidak valid.',
+          );
+        }
+      }
 
       for (let i = 0; i < coordinates.length - 1; i++) {
         const [lon1, lat1] = coordinates[i];
@@ -147,7 +183,13 @@ export class AntiCheatService {
       }
 
       // 3. Verifikasi Konsistensi Jarak yang Dilaporkan dengan Jalur Koordinat
-      // Mengizinkan toleransi margin deviasi wajar (faktor kelokan mikro GPS)
+      // Mencegah bypass dengan 2 titik identik (cumulativeDistance ~ 0) saat mengklaim jarak jauh
+      if (distanceMeters >= 100 && cumulativeDistance < 25) {
+        throw new BadRequestException(
+          'Aktivitas ditolak: Rute GPS tidak menunjukkan perpindahan yang memadai untuk jarak yang dilaporkan.',
+        );
+      }
+
       if (cumulativeDistance > 50) {
         const ratio = distanceMeters / cumulativeDistance;
         if (ratio < 0.25 || ratio > 3.0) {

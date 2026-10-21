@@ -42,10 +42,11 @@ const statusMeta: Record<MissionStatus, { label: string; tone: Tone }> = {
   completed: { label: 'Completed', tone: 'success' },
   failed: { label: 'Failed', tone: 'danger' },
   pending: { label: 'Pending', tone: 'warning' },
+  shielded: { label: 'Shielded', tone: 'neutral' },
 };
 
 export function StatusBadge({ status }: { status: MissionStatus }) {
-  const meta = statusMeta[status];
+  const meta = statusMeta[status] ?? statusMeta.pending;
   return (
     <Badge tone={meta.tone} dot>
       {meta.label}

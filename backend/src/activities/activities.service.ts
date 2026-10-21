@@ -35,13 +35,37 @@ export class ActivitiesService {
       );
     }
 
+    const nowMs = Date.now();
+    if (endedAt.getTime() > nowMs + 5 * 60_000) {
+      throw new BadRequestException(
+        'Waktu selesai olahraga tidak boleh berada di masa depan',
+      );
+    }
+
+    const wallClockSeconds = (endedAt.getTime() - startedAt.getTime()) / 1000;
+    if (wallClockSeconds < createActivityDto.durationSeconds * 0.8) {
+      throw new BadRequestException(
+        'Durasi aktivitas tidak konsisten dengan rentang waktu mulai dan selesai',
+      );
+    }
+
+    // Hitung ulang pace secara server-side agar tidak bisa dimanipulasi dari client
+    const serverAveragePace = Number(
+      (
+        createActivityDto.durationSeconds /
+        60 /
+        (createActivityDto.distanceMeters / 1000)
+      ).toFixed(2),
+    );
+
     // 1. Validasi Anti-Cheat Otomatis (Kecepatan, Anomali Pace, Lonjakan Koordinat Haversine)
     const validation = this.antiCheatService.validateActivity(
       createActivityDto.type,
       createActivityDto.distanceMeters,
       createActivityDto.durationSeconds,
-      createActivityDto.averagePace,
+      serverAveragePace,
       createActivityDto.routeGeoJson,
+      true,
     );
 
     // 2. Cari kandidat misi aktif yang ditugaskan kepada pengguna saat ini
@@ -62,8 +86,7 @@ export class ActivitiesService {
       const distanceMet =
         createActivityDto.distanceMeters >= quest.targetDistance;
       const paceMet =
-        !quest.targetMaxPace ||
-        createActivityDto.averagePace <= quest.targetMaxPace;
+        !quest.targetMaxPace || serverAveragePace <= quest.targetMaxPace;
       return distanceMet && paceMet;
     });
 
@@ -85,7 +108,7 @@ export class ActivitiesService {
           type: createActivityDto.type,
           distanceMeters: createActivityDto.distanceMeters,
           durationSeconds: createActivityDto.durationSeconds,
-          averagePace: createActivityDto.averagePace,
+          averagePace: serverAveragePace,
           routeGeoJson: createActivityDto.routeGeoJson,
           startedAt,
           endedAt,
@@ -171,8 +194,8 @@ export class ActivitiesService {
    * Mengambil riwayat seluruh rekaman olahraga pengguna lampau dengan agregasi metrik.
    */
   async getHistory(userId: string, page = 1, limit = 10) {
-    const pageNumber = Math.max(1, Number(page));
-    const pageSize = Math.max(1, Math.min(50, Number(limit)));
+    const pageNumber = Math.max(1, Number(page) || 1);
+    const pageSize = Math.max(1, Math.min(50, Number(limit) || 10));
     const skip = (pageNumber - 1) * pageSize;
 
     const [activities, totalCount, aggregate] = await Promise.all([

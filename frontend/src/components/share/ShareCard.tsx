@@ -22,6 +22,7 @@ const STATUS: Record<ActivityLog['missionStatus'], string> = {
   failed: '✗',
   in_progress: '●',
   pending: '●',
+  shielded: '🛡',
 };
 
 interface ShareCardProps {

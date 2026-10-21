@@ -58,7 +58,7 @@ export class SquadsService {
         data: {
           name: createSquadDto.name.trim(),
           inviteCode,
-          isPremium: createSquadDto.isPremium ?? false,
+          isPremium: false,
           createdById: userId,
         },
       });
@@ -156,7 +156,6 @@ export class SquadsService {
               select: {
                 id: true,
                 name: true,
-                email: true,
               },
             },
             _count: {
@@ -290,7 +289,6 @@ export class SquadsService {
           select: {
             id: true,
             name: true,
-            email: true,
           },
         },
         members: {
@@ -299,7 +297,6 @@ export class SquadsService {
               select: {
                 id: true,
                 name: true,
-                email: true,
                 rankPoints: true,
                 shieldTickets: true,
               },
@@ -333,7 +330,6 @@ export class SquadsService {
       members: squad.members.map((m) => ({
         id: m.user.id,
         name: m.user.name,
-        email: m.user.email,
         role: m.role,
         rankPoints: m.user.rankPoints,
         shieldTickets: m.user.shieldTickets,

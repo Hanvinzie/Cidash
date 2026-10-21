@@ -5,6 +5,7 @@ import {
   IsNotEmpty,
   IsNumber,
   IsPositive,
+  Max,
   Min,
 } from 'class-validator';
 import { ActivityType } from '@prisma/client';
@@ -15,10 +16,13 @@ export class CreateActivityDto {
 
   @IsNumber({}, { message: 'distanceMeters harus berupa angka dalam meter' })
   @IsPositive({ message: 'distanceMeters harus bernilai positif' })
+  @Min(50, { message: 'Jarak minimal aktivitas adalah 50 meter' })
+  @Max(200000, { message: 'Jarak maksimal aktivitas adalah 200 km' })
   distanceMeters: number;
 
   @IsInt({ message: 'durationSeconds harus berupa bilangan bulat detik' })
   @Min(10, { message: 'Durasi minimal adalah 10 detik' })
+  @Max(86400, { message: 'Durasi maksimal adalah 24 jam' })
   durationSeconds: number;
 
   @IsNumber({}, { message: 'averagePace harus berupa angka menit per kilometer' })

@@ -9,26 +9,72 @@ const MAX_ACCURACY_M = 150; // toleransi akurasi GPS mobile/laptop
 const MIN_STEP_KM = 0.003; // titik < 3 m dari titik terakhir dilewati (hemat memori & kurangi jitter)
 const SIM_ORIGIN = { lat: -6.2183, lng: 106.8022 }; // GBK, Jakarta
 const SIM_STEP_DEG = 0.000035; // ~3.8 m/detik (pace ±4:30/km)
+const SESSION_KEY = 'cidash_active_run_v1';
+
+interface PersistedRunState {
+  status: TrackStatus;
+  points: GeoPoint[];
+  distanceKm: number;
+  elapsedSec: number;
+  simulated: boolean;
+}
+
+function loadSessionState(): PersistedRunState | null {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PersistedRunState;
+    if (parsed.status === 'running' || parsed.status === 'paused') {
+      return { ...parsed, status: 'paused' }; // pulihkan dalam status paused agar aman setelah reload
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 type WakeLockSentinelLike = { release: () => Promise<void> };
 
 /**
  * Perekam rute berbasis Geolocation API.
- * `simulate` = gerakan sintetis untuk pengujian di desktop / tanpa izin lokasi.
+ * Menyimpan state sementara di sessionStorage agar tidak hilang saat refresh tidak sengaja.
  */
 export function useGeoTracker() {
-  const [status, setStatus] = useState<TrackStatus>('idle');
-  const [points, setPoints] = useState<GeoPoint[]>([]);
-  const [distanceKm, setDistanceKm] = useState(0);
-  const [elapsedSec, setElapsedSec] = useState(0);
+  const restored = useRef(loadSessionState());
+  const [status, setStatus] = useState<TrackStatus>(restored.current?.status ?? 'idle');
+  const [points, setPoints] = useState<GeoPoint[]>(restored.current?.points ?? []);
+  const [distanceKm, setDistanceKm] = useState(restored.current?.distanceKm ?? 0);
+  const [elapsedSec, setElapsedSec] = useState(restored.current?.elapsedSec ?? 0);
   /** Masalah lokasi saat merekam. 'timeout' = sinyal lemah (tracking tetap jalan). */
   const [issue, setIssue] = useState<LocationIssue | null>(null);
-  const [simulated, setSimulated] = useState(false);
+  const [simulated, setSimulated] = useState(restored.current?.simulated ?? false);
 
   const watchId = useRef<number | null>(null);
   const simTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastPoint = useRef<GeoPoint | null>(null);
+  const lastPoint = useRef<GeoPoint | null>(
+    restored.current?.points?.[restored.current.points.length - 1] ?? null,
+  );
   const wakeLock = useRef<WakeLockSentinelLike | null>(null);
+
+  // Simpan sesi aktif ke sessionStorage agar aman bila halaman ter-refresh
+  useEffect(() => {
+    try {
+      if (status === 'running' || status === 'paused') {
+        const snapshot: PersistedRunState = {
+          status,
+          points: points.slice(-500),
+          distanceKm,
+          elapsedSec,
+          simulated,
+        };
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(snapshot));
+      } else {
+        sessionStorage.removeItem(SESSION_KEY);
+      }
+    } catch {
+      /* sessionStorage penuh / private mode */
+    }
+  }, [status, points, distanceKm, elapsedSec, simulated]);
 
   const addPoint = useCallback((p: GeoPoint) => {
     const prev = lastPoint.current;
@@ -165,6 +211,11 @@ export function useGeoTracker() {
     setElapsedSec(0);
     setIssue(null);
     setStatus('idle');
+    try {
+      sessionStorage.removeItem(SESSION_KEY);
+    } catch {
+      /* ignore */
+    }
   }, [stopSources]);
 
   return { status, points, distanceKm, elapsedSec, issue, simulated, start, pause, resume, stop, reset };
