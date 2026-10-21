@@ -5,6 +5,9 @@ import Button from '../components/ui/Button';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
+import InstallBanner from '../components/ui/InstallBanner';
+import CircleMembersSheet from '../components/circle/CircleMembersSheet';
+import Picker, { InitialAvatar } from '../components/ui/Picker';
 import { useApp } from '../store/AppContext';
 import { useLiveRooms } from '../hooks/useGroupRun';
 import { activityFor, circleOnboarding, groupRunFor, ROUTES } from '../routes';
@@ -20,6 +23,7 @@ export default function Dashboard() {
   const { user, circles, activeCircle, setActiveCircle, leaderboard, myRank, groupMissions } = useApp();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
+  const [showMembers, setShowMembers] = useState(false);
   const liveRooms = useLiveRooms(activeCircle?.id);
   const liveRoom = liveRooms.find((r) => r.status === 'live') ?? liveRooms[0];
 
@@ -64,29 +68,34 @@ export default function Dashboard() {
         <h1 className="text-2xl font-extrabold tracking-tight">@{user.username}</h1>
       </div>
 
+      <InstallBanner />
+
       {/* Circle + stats */}
       <Card className="space-y-4">
         <div className="flex items-center gap-3">
-          <label htmlFor="circle-switcher" className="sr-only">
-            Active circle
-          </label>
           <div className="min-w-0 flex-1">
-            <div className="relative">
-              <select
-                id="circle-switcher"
-                value={activeCircle.id}
-                onChange={(e) => setActiveCircle(e.target.value)}
-                className="w-full cursor-pointer appearance-none truncate bg-transparent py-0.5 pr-6 text-lg font-bold text-ink outline-none"
-              >
-                {circles.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <Icon name="chevronRight" size={16} className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 rotate-90 text-subtle" />
-            </div>
-            <p className="text-xs text-subtle">{activeCircle.memberCount} members</p>
+            <Picker
+              variant="title"
+              label="Active circle"
+              sheetTitle="Switch circle"
+              value={activeCircle.id}
+              onChange={setActiveCircle}
+              options={circles.map((c) => ({
+                value: c.id,
+                label: c.name,
+                description: `${c.memberCount} members · ${c.code}`,
+                leading: <InitialAvatar text={c.name} />,
+              }))}
+            />
+            <button
+              type="button"
+              onClick={() => setShowMembers(true)}
+              className="flex items-center gap-0.5 text-xs font-semibold text-subtle transition active:opacity-60"
+            >
+              <Icon name="users" size={13} className="mr-1" />
+              {activeCircle.memberCount} members
+              <Icon name="chevronRight" size={13} />
+            </button>
           </div>
           <button
             type="button"
@@ -98,7 +107,11 @@ export default function Dashboard() {
             <Icon name={copied ? 'copy' : 'share'} size={16} className="text-muted" />
           </button>
         </div>
-        {copied && <p className="text-xs font-semibold text-success" aria-live="polite">Code copied</p>}
+        {copied && (
+          <p className="text-xs font-semibold text-success" aria-live="polite">
+            Code copied
+          </p>
+        )}
 
         <dl className="grid grid-cols-2 divide-x divide-line rounded-xl bg-inset py-3">
           {stats.map((s) => (
@@ -198,7 +211,10 @@ export default function Dashboard() {
                       aria-valuemax={100}
                       aria-label={`${m.title} progress`}
                     >
-                      <div className="h-full rounded-full bg-cidash-primary transition-all" style={{ width: `${pct}%` }} />
+                      <div
+                        className="h-full rounded-full bg-cidash-primary transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
                     </div>
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-muted">
@@ -263,6 +279,7 @@ export default function Dashboard() {
           </ol>
         </Card>
       </section>
+      {showMembers && <CircleMembersSheet circle={activeCircle} onClose={() => setShowMembers(false)} />}
     </div>
   );
 }

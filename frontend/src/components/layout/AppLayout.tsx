@@ -9,11 +9,11 @@ import Icon, { type IconName } from '../ui/Icon';
 import RunnerLoader from '../ui/RunnerLoader';
 import ThemeToggle from '../ui/ThemeToggle';
 
-const navItems: { to: string; label: string; icon: IconName }[] = [
-  { to: ROUTES.dashboard, label: 'Home', icon: 'home' },
-  { to: ROUTES.customQuest, label: 'Quests', icon: 'bomb' },
-  { to: ROUTES.activity, label: 'Activity', icon: 'activity' },
-  { to: ROUTES.profile, label: 'Profile', icon: 'user' },
+const navItems: { to: string; label: string; icon: IconName; title: string }[] = [
+  { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'Cidash' },
+  { to: ROUTES.customQuest, label: 'Quests', icon: 'quest', title: 'Quests' },
+  { to: ROUTES.activity, label: 'Activity', icon: 'activity', title: 'Activity' },
+  { to: ROUTES.profile, label: 'Profile', icon: 'user', title: 'Profile' },
 ];
 
 /** Titik merah berdenyut di tab Activity saat lari sedang direkam di tab lain. */
@@ -31,52 +31,50 @@ function RecordingDot() {
 const tabIndex = (path: string) => navItems.findIndex((n) => path.startsWith(n.to));
 
 /**
- * App shell native: header & bottom nav diam, hanya <main> yang scroll.
- * Layout tidak pernah di-unmount saat pindah tab, dan posisi scroll tiap tab diingat.
+ * App shell: header fixed di atas (sticky di iOS bisa "nyangkut" saat toolbar Safari mengecil), bottom nav fixed, halaman scroll di dokumen.
+ * Dokumen yang scroll (bukan container internal) membuat address bar browser mobile
+ * otomatis menyembunyikan diri di semua halaman. Layout tidak di-unmount saat pindah tab,
+ * dan posisi scroll tiap tab diingat.
  */
 export default function AppLayout() {
   const { user } = useApp();
   const { pathname } = useLocation();
-  const scrollRef = useRef<HTMLElement>(null);
   const scrollPos = useRef(new Map<string, number>());
   const prevPath = useRef(pathname);
+  const current = navItems[Math.max(0, tabIndex(pathname))];
   const dir = Math.sign(tabIndex(pathname) - tabIndex(prevPath.current));
 
   // Simpan posisi scroll tab lama, pulihkan posisi tab baru.
   useLayoutEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = scrollPos.current.get(pathname) ?? 0;
+    window.scrollTo(0, scrollPos.current.get(pathname) ?? 0);
     prevPath.current = pathname;
-    const onScroll = () => scrollPos.current.set(pathname, el.scrollTop);
-    el.addEventListener('scroll', onScroll, { passive: true });
-    return () => el.removeEventListener('scroll', onScroll);
+    const onScroll = () => scrollPos.current.set(pathname, window.scrollY);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
   }, [pathname]);
 
   /** Tap tab yang sedang aktif = scroll ke atas (pola native iOS/Android). */
   const handleNavClick = (to: string) => {
     // Simpan posisi tab sekarang sebelum pindah (event scroll bisa belum terkirim).
-    if (scrollRef.current) scrollPos.current.set(pathname, scrollRef.current.scrollTop);
-    if (pathname.startsWith(to)) scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+    scrollPos.current.set(pathname, window.scrollY);
+    if (pathname.startsWith(to)) window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
     <RunSessionProvider>
-      <div className="flex h-full flex-col bg-canvas">
+      <div className="min-h-[100dvh] bg-canvas">
         {/* Top app bar */}
-        <header className="pt-safe z-20 shrink-0 border-b border-line/70 bg-canvas/90 backdrop-blur-md">
+        <header className="pt-safe fixed inset-x-0 top-0 z-20 border-b border-line/70 bg-canvas [transform:translateZ(0)]">
           <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
-            <NavLink
-              to={ROUTES.dashboard}
-              onClick={() => handleNavClick(ROUTES.dashboard)}
-              className="flex items-center gap-2"
-              aria-label="Cidash home"
+            {/* Home: wordmark "Cidash"; tab lain: judul halaman */}
+            <p
+              key={current.to}
+              className={`animate-fade-in font-extrabold tracking-tight ${
+                current.to === ROUTES.dashboard ? 'text-xl text-cidash-primary' : 'text-xl'
+              }`}
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-cidash-primary text-base font-extrabold text-cidash-on-primary">
-                C
-              </span>
-              <span className="text-lg font-extrabold tracking-tight">Cidash</span>
-            </NavLink>
+              {current.title}
+            </p>
             <div className="flex items-center gap-1">
               <NavLink
                 to={profileTopUp}
@@ -91,7 +89,7 @@ export default function AppLayout() {
           </div>
         </header>
 
-        <main ref={scrollRef} className="scroll-area flex-1">
+        <main className="min-h-[100dvh] pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[calc(3.5rem+env(safe-area-inset-top))]">
           <div
             key={pathname}
             className="animate-page mx-auto w-full max-w-md px-4 pb-8 pt-5"
@@ -111,7 +109,7 @@ export default function AppLayout() {
         </main>
 
         {/* Bottom navigation: icon + small label */}
-        <nav aria-label="Main navigation" className="pb-safe z-20 shrink-0 border-t border-line/70 bg-surface">
+        <nav aria-label="Main navigation" className="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-line/70 bg-surface [transform:translateZ(0)]">
           <ul className="mx-auto grid h-16 max-w-md grid-cols-4">
             {navItems.map((item) => (
               <li key={item.to}>

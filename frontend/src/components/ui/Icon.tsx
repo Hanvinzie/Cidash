@@ -18,6 +18,8 @@ const PATHS = {
   copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
   plus: 'M12 5v14M5 12h14',
   close: 'M6 6l12 12M18 6 6 18',
+  // quest: gulungan misi (diadaptasi dari Lucide `scroll-text`, lisensi ISC)
+  quest: 'M15 12h-5M15 8h-5M19 17V5a2 2 0 0 0-2-2H4M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3',
   bomb: 'M11 21a7 7 0 1 0 0-14 7 7 0 0 0 0 14Zm4-13 2.5-2.5M19 3l1 1m-2 2 2-2m1 3h-1M17 2v1',
   users: 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm-7 10a7 7 0 0 1 14 0m1-10a3 3 0 1 0 0-6m2 16h3a6 6 0 0 0-4-5.6',
   coin: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-14v10m3-8h-4a2 2 0 0 0 0 4h2a2 2 0 0 1 0 4H9',

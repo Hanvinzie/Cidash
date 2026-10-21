@@ -14,6 +14,7 @@ import type {
   ActivityType,
   BombMission,
   Circle,
+  CircleMember,
   GeoPoint,
   GroupMission,
   LeaderboardEntry,
@@ -59,6 +60,8 @@ interface AppState {
   circles: Circle[];
   activeCircle: Circle | null;
   members: Pick<User, 'id' | 'username'>[];
+  /** Semua anggota circle (termasuk user) — captain dulu, lalu urut Rank Points. */
+  membersOf: (circleId: string) => CircleMember[];
   leaderboard: LeaderboardEntry[];
   myRank: number | null;
   groupMissions: GroupMission[];
@@ -97,13 +100,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const others = leaderboardByCircle[activeCircle.id] ?? [];
     return [
       ...others,
-      { user: { id: user.id, username: user.username }, rankPoints: user.rankPoints, totalDistanceKm: +seasonDistanceKm.toFixed(1) },
+      {
+        user: { id: user.id, username: user.username },
+        rankPoints: user.rankPoints,
+        totalDistanceKm: +seasonDistanceKm.toFixed(1),
+      },
     ]
       .sort((a, b) => b.rankPoints - a.rankPoints)
       .map((e, i) => ({ ...e, rank: i + 1 }));
   }, [activeCircle, user, seasonDistanceKm]);
 
   const myRank = leaderboard.find((e) => e.user.id === user.id)?.rank ?? null;
+
+  // TODO: GET /squads/:id/leaderboard — respons backend sudah berisi anggota + role.
+  const membersOf = useCallback(
+    (circleId: string): CircleMember[] => {
+      const circle = circles.find((c) => c.id === circleId);
+      const stats = leaderboardByCircle[circleId] ?? [];
+      const me = {
+        id: user.id,
+        username: user.username,
+        rankPoints: user.rankPoints,
+        totalDistanceKm: +seasonDistanceKm.toFixed(1),
+      };
+      const others = (circleMembers[circleId] ?? []).map((m) => {
+        const s = stats.find((x) => x.user.id === m.id);
+        return { ...m, rankPoints: s?.rankPoints ?? 0, totalDistanceKm: s?.totalDistanceKm ?? 0 };
+      });
+      return [me, ...others]
+        .map((m) => ({
+          ...m,
+          role: m.id === circle?.captainId ? ('captain' as const) : ('member' as const),
+          isMe: m.id === user.id,
+        }))
+        .sort((a, b) => Number(b.role === 'captain') - Number(a.role === 'captain') || b.rankPoints - a.rankPoints);
+    },
+    [circles, user, seasonDistanceKm],
+  );
 
   // TODO: POST /auth/login | /auth/register — simpan JWT, bukan flag.
   const login = useCallback(() => {
@@ -117,12 +150,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // TODO: POST /circles
-  const createCircle = useCallback((name: string) => {
-    const circle: Circle = { id: newId('cir'), name, code: generateCircleCode(), memberCount: 1 };
-    setCircles((cs) => [...cs, circle]);
-    setActiveCircleId(circle.id);
-    return circle;
-  }, []);
+  const createCircle = useCallback(
+    (name: string) => {
+      const circle: Circle = { id: newId('cir'), name, code: generateCircleCode(), memberCount: 1, captainId: user.id };
+      setCircles((cs) => [...cs, circle]);
+      setActiveCircleId(circle.id);
+      return circle;
+    },
+    [user.id],
+  );
 
   // TODO: POST /circles/join — backend memvalidasi kode & mengembalikan circle.
   const joinCircle = useCallback(
@@ -144,7 +180,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // TODO: POST /quests/bomb — backend memotong koin (escrow).
   const sendBomb = useCallback(
     (input: SendBombInput) => {
-      const target = Object.values(circleMembers).flat().find((m) => m.id === input.targetUserId);
+      const target = Object.values(circleMembers)
+        .flat()
+        .find((m) => m.id === input.targetUserId);
       if (!target || input.wagerCoins > user.coins) return;
       setUser((u) => ({ ...u, coins: u.coins - input.wagerCoins }));
       setBombMissions((bs) => [
@@ -182,7 +220,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const base = { distanceKm: input.distanceKm, durationSec: input.durationSec };
 
       if (input.speedViolation) {
-        return { ...base, valid: false, reason: 'Unrealistic speed detected (looks like a motor vehicle).', rankPointsDelta: 0 };
+        return {
+          ...base,
+          valid: false,
+          reason: 'Unrealistic speed detected (looks like a motor vehicle).',
+          rankPointsDelta: 0,
+        };
       }
       if (input.distanceKm < 0.05) {
         return { ...base, valid: false, reason: 'Distance too short to verify (min. 50 m).', rankPointsDelta: 0 };
@@ -218,7 +261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         date: new Date().toLocaleDateString('en-US', { dateStyle: 'medium' }),
         routeLabel: bomb
           ? `Bomb from ${bomb.counterpart.username}`
-          : group?.title ?? (input.mode === 'group' ? 'Group Run' : 'Free workout'),
+          : (group?.title ?? (input.mode === 'group' ? 'Group Run' : 'Free workout')),
         missionStatus: missionStatus ?? 'completed',
         route: input.route,
         circle: activeCircle ? { name: activeCircle.name, code: activeCircle.code } : null,
@@ -235,7 +278,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     user,
     circles,
     activeCircle,
-    members: activeCircle ? circleMembers[activeCircle.id] ?? [] : [],
+    members: activeCircle ? (circleMembers[activeCircle.id] ?? []) : [],
+    membersOf,
     leaderboard,
     myRank,
     groupMissions: groupMissions.filter((g) => g.circleId === activeCircleId),

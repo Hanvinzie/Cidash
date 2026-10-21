@@ -50,15 +50,20 @@
   }
 
   /*
-   * App shell native: dokumen tidak pernah scroll / bounce (header & nav terkunci).
-   * Yang scroll hanya container .scroll-area di dalam layout.
+   * Dokumen yang scroll (agar address bar browser mobile bisa auto-hide), tetapi tanpa
+   * pull-to-refresh / efek karet di atas & bawah — header sticky tidak bisa "ditarik".
    */
-  html,
+  html {
+    overscroll-behavior: none; /* Android: tanpa pull-to-refresh / glow */
+  }
+  html.ios {
+    overscroll-behavior-y: auto; /* iOS: pantulan native agar scroll tidak terasa "patah" */
+  }
+  /* Setiap halaman minimal setinggi layar HP (dvh mengikuti toolbar browser yang berubah). */
   body,
   #root {
-    height: 100%;
-    overflow: hidden;
-    overscroll-behavior: none;
+    min-height: 100vh;
+    min-height: 100dvh;
   }
 
   body {
@@ -218,6 +223,8 @@
 
 .leaflet-container {
   outline: none !important;
+  touch-action: pan-y !important; /* jangan tangkap gestur scroll halaman */
+  cursor: default;
 }
 
 .leaflet-container .leaflet-control-attribution {

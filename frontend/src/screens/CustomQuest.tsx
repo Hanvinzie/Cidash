@@ -1,12 +1,12 @@
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ScreenHeader from '../components/ui/ScreenHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
-import { Input, Segmented, Select } from '../components/ui/Field';
+import { Input, Segmented } from '../components/ui/Field';
+import Picker, { InitialAvatar } from '../components/ui/Picker';
 import { useApp } from '../store/AppContext';
 import { activityFor, profileTopUp } from '../routes';
 import type { ActivityType, QuestDirection } from '../types';
@@ -63,8 +63,6 @@ export default function CustomQuest() {
 
   return (
     <div className="space-y-6">
-      <ScreenHeader title="Quests" />
-
       {/* Create Bomb Mission */}
       <Card className={showForm ? 'border-cidash-primary/40' : ''}>
         <button
@@ -75,7 +73,7 @@ export default function CustomQuest() {
           className="flex w-full items-center gap-3 text-left"
         >
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cidash-primary text-cidash-on-primary">
-            <Icon name={showForm ? 'close' : 'bomb'} size={20} />
+            <Icon name={showForm ? 'close' : 'quest'} size={20} />
           </span>
           <span className="flex-1">
             <span className="block font-bold">{showForm ? 'Close form' : 'Send a Bomb Mission'}</span>
@@ -90,13 +88,17 @@ export default function CustomQuest() {
               <p className="text-center text-sm text-muted">There are no other members in this circle yet.</p>
             ) : (
               <form onSubmit={handleCreate} className="space-y-4">
-                <Select label="Challenge" value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} required>
-                  {members.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      @{m.username}
-                    </option>
-                  ))}
-                </Select>
+                <Picker
+                  label="Challenge"
+                  sheetTitle="Who are you challenging?"
+                  value={targetUserId}
+                  onChange={setTargetUserId}
+                  options={members.map((m) => ({
+                    value: m.id,
+                    label: `@${m.username}`,
+                    leading: <InitialAvatar text={m.username} />,
+                  }))}
+                />
 
                 <Segmented
                   ariaLabel="Activity type"
