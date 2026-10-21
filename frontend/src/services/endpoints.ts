@@ -1,6 +1,6 @@
 // ============================================================
 // Kontrak endpoint antara frontend & backend NestJS.
-// [ADA] = sudah ada di backend/src & terhubung ke AppContext
+// [ADA] = sudah ada di backend/src & terhubung ke AppContext   [BELUM] = belum ada di backend
 // "Circle" di UI = "Squad" di backend.
 // ============================================================
 
@@ -16,7 +16,7 @@ export const ENDPOINTS = {
     join: 'POST /squads/join', // [ADA] body: { inviteCode }
     mine: 'GET /squads/my', // [ADA]
     detail: 'GET /squads/:id', // [ADA]
-    leaderboard: 'GET /squads/:id/leaderboard', // [ADA] menyertakan totalDistanceKm
+    leaderboard: 'GET /squads/:id/leaderboard', // [ADA] menyertakan totalDistanceKm & role → juga sumber daftar anggota
     leave: 'POST /squads/:id/leave', // [ADA]
   },
   quests: {
@@ -30,5 +30,14 @@ export const ENDPOINTS = {
     create: 'POST /activities', // [ADA] backend memverifikasi Haversine + anti-cheat
     history: 'GET /activities/history', // [ADA] menyertakan routeGeoJson untuk Share Card
     detail: 'GET /activities/:id', // [ADA]
+  },
+  groupRun: {
+    // [BELUM] Saat ini memakai transport mock di services/groupRun.ts.
+    // Realtime: channel `group_run:<room_id>`, event `progress` tiap 5 detik, server broadcast `state`.
+    list: 'GET /group-runs?circleId=',
+    create: 'POST /group-runs',
+    join: 'POST /group-runs/:id/join',
+    start: 'POST /group-runs/:id/start',
+    leave: 'POST /group-runs/:id/leave',
   },
 } as const;

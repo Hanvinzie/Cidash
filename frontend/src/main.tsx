@@ -5,6 +5,7 @@ import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { AppProvider } from './store/AppContext';
 import { ThemeProvider } from './store/ThemeContext';
+import { ToastProvider } from './store/ToastContext';
 import './index.css';
 
 if (import.meta.env.DEV) {
@@ -31,9 +32,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
       <ThemeProvider>
-        <AppProvider>
-          <App />
-        </AppProvider>
+        <ToastProvider>
+          <AppProvider>
+            <App />
+          </AppProvider>
+        </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>
   </StrictMode>,

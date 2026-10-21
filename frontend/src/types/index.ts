@@ -25,6 +25,14 @@ export interface Circle {
   name: string;
   code: string; // kode unik 8 karakter
   memberCount: number;
+  captainId?: string; // pembuat circle (role CAPTAIN di backend)
+}
+
+export interface CircleMember extends Pick<User, 'id' | 'username'> {
+  role: 'captain' | 'member';
+  isMe: boolean;
+  rankPoints: number;
+  totalDistanceKm: number;
 }
 
 export interface LeaderboardEntry {

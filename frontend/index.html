@@ -3,20 +3,28 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#F6F6F8" />
     <meta
       name="description"
       content="Cidash — a social, gamified fitness tracker for private, invite-only circles."
     />
+    <!-- Mode standalone (tanpa address bar / toolbar browser) saat dipasang di Home Screen -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Cidash" />
+    <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <title>Cidash</title>
+
     <!-- Terapkan tema sebelum render agar tidak berkedip (lihat store/ThemeContext.tsx). -->
     <script>
       (function () {
+        // iOS: biarkan efek pantul native (header & nav fixed, jadi tidak ikut tertarik).
+        if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.indexOf('Mac') > -1 && navigator.maxTouchPoints > 1)) {
+          document.documentElement.classList.add('ios');
+        }
         var t = localStorage.getItem('cidash_theme');
         var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
         if (dark) {
@@ -25,8 +33,104 @@
         }
       })();
     </script>
+
+    <!-- Boot splash + animasi pelari. Kelas .runner juga dipakai komponen RunnerLoader. -->
+    <style>
+      html, body { margin: 0; background: #f6f6f8; }
+      html.dark, html.dark body { background: #0b0f17; }
+      #boot {
+        position: fixed; inset: 0; z-index: 2000;
+        display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+        background: #f6f6f8; color: #ea2845;
+        font-family: 'Plus Jakarta Sans Variable', system-ui, -apple-system, sans-serif;
+        transition: opacity 0.3s ease;
+      }
+      html.dark #boot { background: #0b0f17; }
+      #boot.hide { opacity: 0; pointer-events: none; }
+      #boot-msg { margin: 0; min-height: 18px; font-size: 13px; font-weight: 600; color: #6b7280; }
+      html.dark #boot-msg { color: #7a879c; }
+
+      /* Logo: tile "C" pop-in + kilau, wordmark naik perlahan */
+      .boot-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+      .boot-logo {
+        position: relative; overflow: hidden;
+        width: 52px; height: 52px; border-radius: 15px;
+        display: flex; align-items: center; justify-content: center;
+        background: #ea2845;
+        box-shadow: 0 10px 24px rgba(234, 40, 69, 0.3);
+        animation: boot-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both, boot-breathe 2s ease-in-out 0.8s infinite;
+      }
+      .boot-logo span { width: 26px; height: 26px; background: #fff; border-radius: 2px; }
+      .boot-logo::after {
+        content: ''; position: absolute; inset: -40%;
+        background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.45) 50%, transparent 60%);
+        animation: boot-shine 2.4s ease-in-out 0.7s infinite;
+      }
+      .boot-word {
+        font-size: 30px; font-weight: 800; letter-spacing: -0.5px; color: #111827;
+        animation: boot-rise 0.5s ease-out 0.25s both;
+      }
+      html.dark .boot-word { color: #f8fafc; }
+      @keyframes boot-pop { from { transform: scale(0.4) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
+      @keyframes boot-breathe { 50% { transform: scale(1.06); } }
+      @keyframes boot-shine { from { transform: translateX(-100%); } 60%, to { transform: translateX(100%); } }
+      @keyframes boot-rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .boot-logo, .boot-logo::after, .boot-word { animation: none !important; } }
+
+      .runner { width: 88px; height: 88px; overflow: visible; }
+      .runner .body { animation: runner-bob 0.3s ease-in-out infinite alternate; }
+      .runner .limb { transform-box: view-box; animation: runner-swing 0.6s ease-in-out infinite alternate; }
+      .runner .leg { transform-origin: 30px 38px; }
+      .runner .arm { transform-origin: 34px 22px; }
+      .runner .late { animation-delay: -0.6s; }
+      .runner .ground { stroke-dasharray: 6 10; animation: runner-ground 0.45s linear infinite; }
+      @keyframes runner-swing { from { transform: rotate(-34deg); } to { transform: rotate(34deg); } }
+      @keyframes runner-bob { from { transform: translateY(0); } to { transform: translateY(-2px); } }
+      @keyframes runner-ground { to { stroke-dashoffset: -16; } }
+      @media (prefers-reduced-motion: reduce) { .runner * { animation: none !important; } }
+    </style>
   </head>
   <body>
+    <div id="boot" role="status" aria-live="polite">
+      <div class="boot-brand" aria-label="Cidash">
+        <div class="boot-logo" aria-hidden="true"><span></span></div>
+        <span class="boot-word">Cidash</span>
+      </div>
+      <svg class="runner" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line class="ground" x1="4" y1="61" x2="60" y2="61" stroke-width="2" opacity="0.35" />
+        <g class="body">
+          <path class="limb arm" d="M34 22 L31 31 L37 34" opacity="0.45" />
+          <path class="limb leg late" d="M30 38 L33 48 L29 57" opacity="0.45" />
+          <line x1="35" y1="18" x2="30" y2="38" />
+          <path class="limb leg" d="M30 38 L33 48 L29 57" />
+          <path class="limb arm late" d="M34 22 L31 31 L37 34" />
+          <circle cx="37" cy="10" r="5" fill="currentColor" stroke="none" />
+        </g>
+      </svg>
+      <p id="boot-msg"></p>
+    </div>
+    <script>
+      (function () {
+        var msgs = ['Lacing up your shoes…', 'Checking GPS signal…', 'Connecting to your circle…', 'Warming up…'];
+        var el = document.getElementById('boot-msg');
+        var i = Math.floor(Math.random() * msgs.length);
+        el.textContent = msgs[i];
+        var timer = setInterval(function () { i = (i + 1) % msgs.length; el.textContent = msgs[i]; }, 2000);
+        window.__hideBoot = function () {
+          var boot = document.getElementById('boot');
+          window.__hideBoot = null;
+          // Tahan minimal 700 ms sejak halaman dibuka supaya animasi logo sempat selesai.
+          setTimeout(function () {
+            clearInterval(timer);
+            if (!boot) return;
+            boot.classList.add('hide');
+            setTimeout(function () { boot.remove(); }, 320);
+          }, Math.max(0, 700 - performance.now()));
+        };
+        // Pengaman: jangan pernah menutupi aplikasi lebih dari 8 detik.
+        setTimeout(function () { if (window.__hideBoot) window.__hideBoot(); }, 8000);
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

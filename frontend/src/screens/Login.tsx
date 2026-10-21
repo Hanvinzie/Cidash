@@ -3,6 +3,8 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-route
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Icon from '../components/ui/Icon';
+import Logo from '../components/ui/Logo';
+import InstallBanner from '../components/ui/InstallBanner';
 import ThemeToggle from '../components/ui/ThemeToggle';
 import { Input, Segmented } from '../components/ui/Field';
 import { useApp } from '../store/AppContext';
@@ -15,7 +17,7 @@ const CODE_PATTERN = /^[A-Z0-9]{8}$/;
 
 const HIGHLIGHTS = [
   { icon: 'users', text: 'Private, invite-only circles' },
-  { icon: 'bomb', text: 'Dare friends with Bomb Missions' },
+  { icon: 'quest', text: 'Dare friends with Bomb Missions' },
   { icon: 'trophy', text: 'Fresh leaderboard every season' },
 ] as const;
 
@@ -32,7 +34,10 @@ export default function Login() {
   const [password, setPassword] = useState('password123');
   const [circleName, setCircleName] = useState('');
   const [joinCode, setJoinCode] = useState(() =>
-    (params.get('code') ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8),
+    (params.get('code') ?? '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 8),
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,19 +89,22 @@ export default function Login() {
   }
 
   return (
-    <div className="relative min-h-screen bg-canvas">
+    <div className="relative min-h-[100dvh] bg-canvas">
       {/* Brand backdrop */}
-      <div className="absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-cidash-primary/15 to-transparent" aria-hidden />
+      <div
+        className="absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-cidash-primary/15 to-transparent"
+        aria-hidden
+      />
 
-      <div className="relative mx-auto w-full max-w-md px-5 pb-10 pt-6">
+      <div className="relative mx-auto w-full max-w-md px-5 pb-[calc(env(safe-area-inset-bottom)+2.5rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)]">
         <div className="mb-6 flex justify-end">
           <ThemeToggle />
         </div>
 
+        <InstallBanner className="mb-6" />
+
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-cidash-primary text-3xl font-extrabold text-cidash-on-primary shadow-lg shadow-cidash-primary/30">
-            C
-          </div>
+          <Logo size={64} className="mx-auto mb-4 shadow-lg shadow-cidash-primary/30" />
           <h1 className="text-3xl font-extrabold tracking-tight">Cidash</h1>
           <p className="mt-1 text-sm text-muted">Work out with the people you trust.</p>
         </div>
@@ -111,7 +119,10 @@ export default function Login() {
           <>
             <ul className="mb-6 grid grid-cols-3 gap-2">
               {HIGHLIGHTS.map((h) => (
-                <li key={h.text} className="flex flex-col items-center gap-2 rounded-2xl bg-surface/70 p-3 text-center shadow-card">
+                <li
+                  key={h.text}
+                  className="flex flex-col items-center gap-2 rounded-2xl bg-surface/70 p-3 text-center shadow-card"
+                >
                   <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
                     <Icon name={h.icon} size={18} />
                   </span>

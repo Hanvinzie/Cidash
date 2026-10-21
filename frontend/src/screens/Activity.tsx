@@ -1,31 +1,43 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import ScreenHeader from '../components/ui/ScreenHeader';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
-import { Segmented, Select } from '../components/ui/Field';
+import { Segmented } from '../components/ui/Field';
+import Picker from '../components/ui/Picker';
+import type { IconName } from '../components/ui/Icon';
 import GroupRunPanel from '../components/activity/GroupRunPanel';
+import LocationPrompt from '../components/activity/LocationPrompt';
 import VerificationModal from '../components/activity/VerificationModal';
-import ShareCardModal from '../components/share/ShareCardModal';
+import { RouteMap, ShareCardModal } from '../lazyScreens';
 import { useApp } from '../store/AppContext';
-import { useGeoTracker } from '../hooks/useGeoTracker';
-import { useGroupRun } from '../hooks/useGroupRun';
+import { useRunSession } from '../store/RunSession';
+import { useToast } from '../store/ToastContext';
 import { detectSpeedViolation, estimateCalories, formatDuration, formatPace } from '../lib/geo';
+import { LocationError, requestPosition, watchPermission, type LocationIssue } from '../lib/location';
 import { ROUTES } from '../routes';
 import type { ActivityLog, ActivityType, RunMode, VerificationResult } from '../types';
 
-// Leaflet (~45 KB gzip) hanya dimuat saat halaman Activity dibuka.
-const RouteMap = lazy(() => import('../components/map/RouteMap'));
-
 const GENERAL = 'general';
+
+function MissionIcon({ name }: { name: IconName }) {
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
+      <Icon name={name} size={18} />
+    </span>
+  );
+}
+const WEAK_SIGNAL = "Couldn't find your location. Make sure GPS is on and you're in an open area.";
+
+type BlockingIssue = Exclude<LocationIssue, 'timeout'>;
 
 export default function Activity() {
   const { user, activeCircle, groupMissions, bombMissions, recordActivity } = useApp();
+  const { tracker, group } = useRunSession();
+  const toast = useToast();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const tracker = useGeoTracker();
-  const { status, distanceKm, elapsedSec, points } = tracker;
+  const { status, distanceKm, elapsedSec, points, start: startTracking, resume: resumeTracking } = tracker;
   const tracking = status === 'running' || status === 'paused';
 
   /** Patch some query params (?mode, ?mission, ?room) without dropping the others. */
@@ -40,7 +52,7 @@ export default function Activity() {
     );
 
   // ---- Mode (Solo / Group) — stored in the URL for deep-linking ----
-  const mode: RunMode = params.get('mode') === 'group' ? 'group' : 'solo';
+  const mode: RunMode = params.get('mode') === 'group' || group.room ? 'group' : 'solo';
 
   // ---- Mission selection ----
   const openGroup = groupMissions.filter((m) => m.status !== 'completed');
@@ -55,13 +67,60 @@ export default function Activity() {
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [shareLog, setShareLog] = useState<ActivityLog | null>(null);
 
-  // ---- Group Run (progress sent automatically every 5 s while tracking) ----
-  const group = useGroupRun({
-    me: { id: user.id, username: user.username },
-    reporting: mode === 'group' && status === 'running',
-    distanceKm,
-    lastPoint: points[points.length - 1],
-  });
+  // ---- Location pre-run check ----
+  const [here, setHere] = useState<{ lat: number; lng: number } | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [prompt, setPrompt] = useState<BlockingIssue | null>(null);
+  /** 'check' = hanya memastikan izin + GPS (saat tab dibuka), tanpa mulai merekam. */
+  const pendingAction = useRef<'check' | 'start' | 'resume'>('check');
+
+  /** Pastikan izin + GPS aktif, lalu jalankan aksi. Gagal → panduan (modal) atau toast. */
+  const withLocation = useCallback(
+    async (action: 'check' | 'start' | 'resume') => {
+      pendingAction.current = action;
+      setLocating(true);
+      try {
+        const pos = await requestPosition(8_000);
+        const point = { lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: pos.timestamp };
+        setHere(point);
+        setPrompt(null);
+        if (action === 'start') startTracking(false, point);
+        else if (action === 'resume') resumeTracking();
+      } catch (e) {
+        const issue = e instanceof LocationError ? e.issue : 'unavailable';
+        if (issue === 'timeout') toast(WEAK_SIGNAL, 'error');
+        else setPrompt(issue);
+      } finally {
+        setLocating(false);
+      }
+    },
+    [startTracking, resumeTracking, toast],
+  );
+
+  // Setiap kali tab Activity dibuka: langsung minta izin lokasi (prompt native) / cek GPS,
+  // supaya saat user menekan Start lokasi sudah siap. Dilewati bila sedang merekam.
+  const checkedOnEnter = useRef(false);
+  useEffect(() => {
+    if (checkedOnEnter.current || status !== 'idle' || simulate) return;
+    checkedOnEnter.current = true;
+    void withLocation('check');
+  }, [status, simulate, withLocation]);
+
+  // Izin diubah dari pengaturan saat modal terbuka → lanjutkan otomatis.
+  useEffect(() => {
+    if (!prompt) return;
+    return watchPermission((state) => state === 'granted' && void withLocation(pendingAction.current));
+  }, [prompt, withLocation]);
+
+  // Masalah lokasi saat sedang merekam.
+  useEffect(() => {
+    if (!tracker.issue) return;
+    if (tracker.issue === 'timeout') toast('Weak GPS signal — keep moving in an open area.', 'info');
+    else {
+      pendingAction.current = 'resume';
+      setPrompt(tracker.issue);
+    }
+  }, [tracker.issue, toast]);
 
   // Deep-link ?room= -> join once automatically.
   const roomParam = params.get('room');
@@ -74,6 +133,16 @@ export default function Activity() {
   }, [mode, roomParam, group]);
 
   const canStart = mode === 'solo' || group.isLive;
+
+  function handleStart() {
+    if (simulate) tracker.start(true);
+    else void withLocation('start');
+  }
+
+  function handleResume() {
+    if (tracker.simulated) tracker.resume();
+    else void withLocation('resume');
+  }
 
   function handleStop() {
     tracker.stop();
@@ -97,28 +166,45 @@ export default function Activity() {
     if (to) navigate(to);
   }
 
-  const statusText =
-    status === 'running'
+  const statusText = locating
+    ? 'Finding your location…'
+    : status === 'running'
       ? tracker.simulated
-        ? 'Simulation mode'
-        : 'GPS on — recording route'
+        ? 'Simulation'
+        : 'Recording'
       : status === 'paused'
         ? 'Paused'
         : !canStart
-          ? 'Join a room and wait for the session to go LIVE.'
-          : 'Ready when you are';
+          ? 'Waiting for the session to go LIVE'
+          : here
+            ? 'GPS ready'
+            : simulate
+              ? 'Simulation'
+              : 'Location needed to start';
 
   return (
     <div className="space-y-5">
-      <ScreenHeader title="Activity" />
-
       <Segmented
         ariaLabel="Activity mode"
         value={mode}
-        onChange={(m) => !tracking && patchParams({ mode: m === 'group' ? 'group' : null, room: null })}
+        onChange={(m) => !tracking && !group.room && patchParams({ mode: m === 'group' ? 'group' : null, room: null })}
         options={[
-          { value: 'solo', label: <><Icon name="user" size={16} /> Solo / Quest</> },
-          { value: 'group', label: <><Icon name="users" size={16} /> Group run</> },
+          {
+            value: 'solo',
+            label: (
+              <>
+                <Icon name="user" size={16} /> Solo / Quest
+              </>
+            ),
+          },
+          {
+            value: 'group',
+            label: (
+              <>
+                <Icon name="users" size={16} /> Group run
+              </>
+            ),
+          },
         ]}
       />
 
@@ -131,40 +217,44 @@ export default function Activity() {
 
       {/* Mission selection */}
       <Card className="space-y-3">
-        <Select
+        <Picker
           label="What are you working on?"
+          sheetTitle="Choose a mission"
           value={missionId}
           disabled={tracking}
-          onChange={(e) => patchParams({ mission: e.target.value === GENERAL ? null : e.target.value })}
-        >
-          <option value={GENERAL}>Free workout</option>
-          {openGroup.length > 0 && (
-            <optgroup label="Circle missions">
-              {openGroup.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.title} ({m.progressKm}/{m.targetKm} km)
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {openBombs.length > 0 && (
-            <optgroup label="Bomb Missions">
-              {openBombs.map((b) => (
-                <option key={b.id} value={b.id}>
-                  @{b.counterpart.username} — {b.targetKm} km / {b.durationMin} min
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </Select>
+          onChange={(v) => patchParams({ mission: v === GENERAL ? null : v })}
+          options={[
+            {
+              value: GENERAL,
+              label: 'Free workout',
+              description: 'No mission — just move',
+              leading: <MissionIcon name="activity" />,
+            },
+            ...openGroup.map((m) => ({
+              value: m.id,
+              label: m.title,
+              description: `${m.progressKm} / ${m.targetKm} km · due ${m.deadline}`,
+              group: 'Circle missions',
+              leading: <MissionIcon name="target" />,
+            })),
+            ...openBombs.map((b) => ({
+              value: b.id,
+              label: `From @${b.counterpart.username}`,
+              description: `${b.targetKm} km in ${b.durationMin} min · ${b.wagerCoins} coins`,
+              group: 'Bomb Missions',
+              leading: <MissionIcon name="quest" />,
+            })),
+          ]}
+        />
 
         {mission ? (
-          <p className="flex items-center gap-1.5 rounded-xl bg-cidash-primary/10 px-3 py-2 text-xs text-ink">
+          <p className="flex items-center gap-1.5 rounded-xl bg-inset px-3 py-2 text-xs text-ink">
             <Icon name="target" size={14} className="text-cidash-primary" />
             Goal: <b>{mission.targetKm} km</b>
             {'durationMin' in mission && (
               <>
-                {' '}in <b>{mission.durationMin} min</b>
+                {' '}
+                in <b>{mission.durationMin} min</b>
               </>
             )}{' '}
             · {activityType === 'run' ? 'Run' : 'Ride'}
@@ -182,21 +272,42 @@ export default function Activity() {
             />
           )
         )}
+        {status === 'idle' && (
+          <label className="flex items-center justify-between border-t border-line/70 pt-3 text-sm">
+            <span>
+              <span className="block font-semibold">Simulation mode</span>
+              <span className="text-xs text-subtle">Test without GPS</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              checked={simulate}
+              onChange={(e) => setSimulate(e.target.checked)}
+              className="peer sr-only"
+            />
+            <span
+              aria-hidden
+              className="relative h-7 w-12 shrink-0 rounded-full bg-line transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:bg-cidash-primary peer-checked:after:translate-x-5"
+            />
+          </label>
+        )}
       </Card>
 
       {/* Map + live metrics */}
       <Card className="overflow-hidden p-0">
-        <div className="relative isolate h-56">
-          <Suspense fallback={<div className="flex h-full items-center justify-center bg-inset text-xs text-subtle">Loading map…</div>}>
-            <RouteMap points={points} />
+        <div className="relative isolate h-56 bg-inset">
+          <Suspense fallback={null}>
+            <RouteMap points={points} here={here} />
           </Suspense>
           <span
-            className={`absolute left-3 top-3 z-[500] flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow ${
-              status === 'running' ? 'bg-cidash-primary text-cidash-on-primary' : 'bg-surface/90 text-muted'
+            className={`absolute left-3 top-3 z-[500] flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
+              status === 'running' ? 'bg-cidash-primary text-cidash-on-primary' : 'bg-surface text-muted'
             }`}
             aria-live="polite"
           >
-            {status === 'running' && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />}
+            {(status === 'running' || locating) && (
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
+            )}
             {statusText}
           </span>
         </div>
@@ -214,31 +325,14 @@ export default function Activity() {
             </div>
           ))}
         </dl>
-
-        {tracker.error && (
-          <p role="alert" className="m-3 rounded-xl bg-danger/10 p-2 text-center text-xs font-medium text-danger">
-            {tracker.error}
-          </p>
-        )}
       </Card>
 
-      {status === 'idle' && (
-        <label className="flex items-center justify-center gap-2 text-xs text-muted">
-          <input
-            type="checkbox"
-            checked={simulate}
-            onChange={(e) => setSimulate(e.target.checked)}
-            className="h-4 w-4 accent-cidash-primary"
-          />
-          Simulation mode (test without GPS)
-        </label>
-      )}
-
-      {/* Controls stay reachable above the bottom navigation */}
-      <div className="sticky bottom-[calc(5rem+env(safe-area-inset-bottom))] z-10 flex gap-3">
+      {/* Controls: tetap terlihat di bawah layar saat scroll */}
+      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-10 flex gap-3">
         {status === 'idle' && (
-          <Button fullWidth size="lg" disabled={!canStart} onClick={() => tracker.start(simulate)} className="shadow-lg">
-            <Icon name="play" size={18} /> Start
+          <Button fullWidth size="lg" disabled={!canStart || locating} onClick={handleStart} className="shadow-lg">
+            <Icon name={locating ? 'locate' : 'play'} size={18} className={locating ? 'animate-spin' : ''} />
+            {locating ? 'Finding you…' : 'Start'}
           </Button>
         )}
         {status === 'running' && (
@@ -247,8 +341,8 @@ export default function Activity() {
           </Button>
         )}
         {status === 'paused' && (
-          <Button fullWidth size="lg" onClick={tracker.resume} className="shadow-lg">
-            <Icon name="play" size={18} /> Resume
+          <Button fullWidth size="lg" disabled={locating} onClick={handleResume} className="shadow-lg">
+            <Icon name="play" size={18} /> {locating ? 'Finding you…' : 'Resume'}
           </Button>
         )}
         {tracking && (
@@ -257,6 +351,20 @@ export default function Activity() {
           </Button>
         )}
       </div>
+
+      {prompt && (
+        <LocationPrompt
+          issue={prompt}
+          busy={locating}
+          onRetry={() => void withLocation(pendingAction.current)}
+          onSimulate={() => {
+            setPrompt(null);
+            setSimulate(true);
+            if (status === 'idle' && pendingAction.current === 'start') tracker.start(true);
+          }}
+          onClose={() => setPrompt(null)}
+        />
+      )}
 
       {result && (
         <VerificationModal
@@ -270,7 +378,11 @@ export default function Activity() {
         />
       )}
 
-      {shareLog && <ShareCardModal log={shareLog} username={user.username} onClose={() => setShareLog(null)} />}
+      {shareLog && (
+        <Suspense fallback={null}>
+          <ShareCardModal log={shareLog} username={user.username} onClose={() => setShareLog(null)} />
+        </Suspense>
+      )}
     </div>
   );
 }
