@@ -5,10 +5,10 @@ import type { GeoPoint } from '../types';
 
 export type TrackStatus = 'idle' | 'running' | 'paused' | 'finished';
 
-const MAX_ACCURACY_M = 50; // abaikan titik GPS yang terlalu tidak akurat
+const MAX_ACCURACY_M = 150; // toleransi akurasi GPS mobile/laptop
 const MIN_STEP_KM = 0.003; // titik < 3 m dari titik terakhir dilewati (hemat memori & kurangi jitter)
 const SIM_ORIGIN = { lat: -6.2183, lng: 106.8022 }; // GBK, Jakarta
-const SIM_STEP_DEG = 0.00003; // ~3.3 m/detik (pace ±5:00/km)
+const SIM_STEP_DEG = 0.000035; // ~3.8 m/detik (pace ±4:30/km)
 
 type WakeLockSentinelLike = { release: () => Promise<void> };
 
@@ -43,7 +43,8 @@ export function useGeoTracker() {
 
   // ---- Layar tetap menyala selama merekam (GPS browser berhenti bila layar mati) ----
   const lockScreen = useCallback(async () => {
-    const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinelLike> } }).wakeLock;
+    const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinelLike> } })
+      .wakeLock;
     if (!wl || wakeLock.current) return;
     try {
       wakeLock.current = await wl.request('screen');
@@ -66,6 +67,7 @@ export function useGeoTracker() {
   const startSources = useCallback(
     (simulate: boolean) => {
       if (simulate) {
+        if (!lastPoint.current) addPoint({ ...SIM_ORIGIN, timestamp: Date.now() });
         simTimer.current = setInterval(() => {
           const prev = lastPoint.current ?? { ...SIM_ORIGIN, timestamp: Date.now() };
           addPoint({
@@ -79,8 +81,9 @@ export function useGeoTracker() {
       watchId.current = navigator.geolocation.watchPosition(
         (pos) => {
           setIssue(null);
-          if (pos.coords.accuracy > MAX_ACCURACY_M) return;
-          addPoint({ lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: pos.timestamp });
+          // Titik pertama selalu diterima agar peta langsung terpusat ke lokasi pengguna.
+          if (lastPoint.current && pos.coords.accuracy > MAX_ACCURACY_M) return;
+          addPoint({ lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: pos.timestamp || Date.now() });
         },
         (err) => {
           const next = issueFromError(err);

@@ -32,6 +32,8 @@ export default function CustomQuest() {
 
   // Bomb mission form state
   const [targetUserId, setTargetUserId] = useState(members[0]?.id ?? '');
+  // Anggota bisa berubah setelah sinkron backend — jatuhkan ke anggota pertama bila pilihan lama hilang.
+  const effectiveTargetId = members.some((m) => m.id === targetUserId) ? targetUserId : (members[0]?.id ?? '');
   const [activityType, setActivityType] = useState<ActivityType>('run');
   const [targetKm, setTargetKm] = useState(3);
   const [durationMin, setDurationMin] = useState(25);
@@ -50,8 +52,15 @@ export default function CustomQuest() {
 
   function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!canWager || !targetUserId) return;
-    sendBomb({ targetUserId, type: activityType, targetKm, durationMin, deadline, wagerCoins: effectiveWager });
+    if (!canWager || !effectiveTargetId) return;
+    sendBomb({
+      targetUserId: effectiveTargetId,
+      type: activityType,
+      targetKm,
+      durationMin,
+      deadline,
+      wagerCoins: effectiveWager,
+    });
     setShowForm(false);
     setTab('sent');
   }
@@ -91,7 +100,7 @@ export default function CustomQuest() {
                 <Picker
                   label="Challenge"
                   sheetTitle="Who are you challenging?"
-                  value={targetUserId}
+                  value={effectiveTargetId}
                   onChange={setTargetUserId}
                   options={members.map((m) => ({
                     value: m.id,

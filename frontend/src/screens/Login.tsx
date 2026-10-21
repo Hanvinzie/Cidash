@@ -29,6 +29,9 @@ export default function Login() {
 
   const [step, setStep] = useState<Step>(isAuthenticated && params.get('step') === 'circle' ? 'circle' : 'auth');
   const [mode, setMode] = useState<AuthMode>('login');
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('budi@cidash.id');
+  const [password, setPassword] = useState('password123');
   const [circleName, setCircleName] = useState('');
   const [joinCode, setJoinCode] = useState(() =>
     (params.get('code') ?? '')
@@ -36,28 +39,53 @@ export default function Login() {
       .replace(/[^A-Z0-9]/g, '')
       .slice(0, 8),
   );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const redirectTo = (location.state as { from?: string } | null)?.from ?? ROUTES.dashboard;
 
-  // Already signed in and not onboarding → go straight to the dashboard.
   if (isAuthenticated && step === 'auth') return <Navigate to={redirectTo} replace />;
 
-  function handleAuth(e: FormEvent<HTMLFormElement>) {
+  async function handleAuth(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    login(); // TODO: kirim kredensial ke backend
-    setStep('circle');
+    setError(null);
+    setLoading(true);
+    try {
+      await login({ mode, name: username, email, password });
+      setStep('circle');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Authentication failed');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function handleCreate(e: FormEvent<HTMLFormElement>) {
+  async function handleCreate(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    createCircle(circleName.trim());
-    navigate(ROUTES.dashboard, { replace: true });
+    setError(null);
+    setLoading(true);
+    try {
+      await createCircle(circleName.trim());
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create circle');
+    } finally {
+      setLoading(false);
+    }
   }
 
-  function handleJoin(e: FormEvent<HTMLFormElement>) {
+  async function handleJoin(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    joinCircle(joinCode);
-    navigate(ROUTES.dashboard, { replace: true });
+    setError(null);
+    setLoading(true);
+    try {
+      await joinCircle(joinCode);
+      navigate(redirectTo, { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Invalid or already joined invite code');
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -81,6 +109,12 @@ export default function Login() {
           <p className="mt-1 text-sm text-muted">Work out with the people you trust.</p>
         </div>
 
+        {error && (
+          <div role="alert" className="mb-4 rounded-xl bg-danger/10 px-4 py-3 text-xs font-semibold text-danger">
+            {error}
+          </div>
+        )}
+
         {step === 'auth' ? (
           <>
             <ul className="mb-6 grid grid-cols-3 gap-2">
@@ -102,7 +136,10 @@ export default function Login() {
                 <Segmented
                   ariaLabel="Authentication mode"
                   value={mode}
-                  onChange={setMode}
+                  onChange={(m) => {
+                    setMode(m);
+                    setError(null);
+                  }}
                   options={[
                     { value: 'login', label: 'Sign in' },
                     { value: 'register', label: 'Sign up' },
@@ -111,18 +148,38 @@ export default function Login() {
               </div>
 
               <form onSubmit={handleAuth} className="space-y-3">
-                {mode === 'register' && <Input label="Username" required minLength={3} autoComplete="username" />}
-                <Input label="Email" type="email" required autoComplete="email" placeholder="you@example.com" />
+                {mode === 'register' && (
+                  <Input
+                    label="Username"
+                    required
+                    minLength={3}
+                    autoComplete="username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="Your display name"
+                  />
+                )}
+                <Input
+                  label="Email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
                 <Input
                   label="Password"
                   type="password"
                   required
-                  minLength={8}
-                  placeholder="At least 8 characters"
+                  minLength={6}
+                  placeholder="At least 6 characters"
                   autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
                 />
-                <Button type="submit" fullWidth className="!mt-5">
-                  {mode === 'login' ? 'Sign in' : 'Create account'}
+                <Button type="submit" fullWidth disabled={loading} className="!mt-5">
+                  {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
                 </Button>
               </form>
 
@@ -132,16 +189,24 @@ export default function Login() {
                 <span className="h-px flex-1 bg-line" />
               </div>
 
-              {/* TODO: OAuth provider via backend */}
               <Button
                 variant="secondary"
                 fullWidth
-                onClick={() => {
-                  login();
-                  setStep('circle');
+                disabled={loading}
+                onClick={async () => {
+                  setError(null);
+                  setLoading(true);
+                  try {
+                    await login({ mode: 'login', email: 'budi@cidash.id', password: 'password123' });
+                    setStep('circle');
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Demo login failed');
+                  } finally {
+                    setLoading(false);
+                  }
                 }}
               >
-                Continue with Google
+                Continue with Demo Account (Budi)
               </Button>
             </Card>
           </>
@@ -162,7 +227,7 @@ export default function Login() {
                 className="text-center font-mono text-lg uppercase tracking-[0.3em]"
                 hint={`${joinCode.length}/8`}
               />
-              <Button type="submit" fullWidth disabled={!CODE_PATTERN.test(joinCode)}>
+              <Button type="submit" fullWidth disabled={loading || !CODE_PATTERN.test(joinCode)}>
                 Join circle
               </Button>
             </form>
@@ -183,7 +248,7 @@ export default function Login() {
                 minLength={3}
                 maxLength={40}
               />
-              <Button type="submit" variant="outline" fullWidth disabled={circleName.trim().length < 3}>
+              <Button type="submit" variant="outline" fullWidth disabled={loading || circleName.trim().length < 3}>
                 <Icon name="plus" size={16} /> Create circle
               </Button>
             </form>

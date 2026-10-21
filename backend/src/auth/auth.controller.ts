@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -31,5 +32,19 @@ export class AuthController {
   @Get('me')
   async getProfile(@CurrentUser() user: { id: string }) {
     return this.authService.getProfile(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Post('top-up')
+  async topUp(
+    @CurrentUser('id') userId: string,
+    @Body() body: { coins?: number },
+  ) {
+    const coins = Number(body?.coins ?? 0);
+    if (!Number.isFinite(coins) || coins <= 0) {
+      throw new BadRequestException('Jumlah koin top-up harus lebih dari 0');
+    }
+    return this.authService.topUpCoins(userId, Math.round(coins));
   }
 }
