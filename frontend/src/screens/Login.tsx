@@ -56,11 +56,11 @@ export default function Login() {
   }
 
   return (
-    <div className="relative min-h-screen bg-canvas">
+    <div className="scroll-area relative h-full bg-canvas">
       {/* Brand backdrop */}
       <div className="absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-cidash-primary/15 to-transparent" aria-hidden />
 
-      <div className="relative mx-auto w-full max-w-md px-5 pb-10 pt-6">
+      <div className="relative mx-auto w-full max-w-md px-5 pb-[calc(env(safe-area-inset-bottom)+2.5rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)]">
         <div className="mb-6 flex justify-end">
           <ThemeToggle />
         </div>

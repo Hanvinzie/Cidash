@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -8,7 +8,7 @@ import Icon, { type IconName } from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
 import { Segmented } from '../components/ui/Field';
 import RouteSvg from '../components/share/RouteSvg';
-import ShareCardModal from '../components/share/ShareCardModal';
+import { ShareCardModal } from '../lazyScreens';
 import { coinPackages } from '../data/mock';
 import { formatDuration } from '../lib/geo';
 import { useApp } from '../store/AppContext';
@@ -93,7 +93,7 @@ export default function Profile() {
                 key={p.id}
                 type="button"
                 onClick={() => handleBuy(p.coins + (p.bonusCoins ?? 0))}
-                className="flex w-full items-center justify-between rounded-xl border border-line bg-inset px-4 py-3 text-left transition hover:border-cidash-primary"
+                className="flex w-full items-center justify-between rounded-xl border border-line bg-inset px-4 py-3 text-left transition hover:border-cidash-primary active:scale-[0.98]"
               >
                 <span className="flex items-center gap-2">
                   <Icon name="coin" size={18} className="text-warning" />
@@ -137,7 +137,7 @@ export default function Profile() {
                   type="button"
                   onClick={() => setShareLog(a)}
                   aria-label={`Share ${a.distanceKm} km ${a.type === 'run' ? 'run' : 'ride'}`}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary transition hover:bg-cidash-primary/20"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary transition hover:bg-cidash-primary/20 active:scale-90"
                 >
                   <Icon name="share" size={18} />
                 </button>
@@ -169,7 +169,7 @@ export default function Profile() {
                 <button
                   type="button"
                   onClick={() => handleOpenCircle(c.id)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-inset"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-inset active:bg-inset"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
                     <Icon name="users" size={18} />
@@ -228,7 +228,11 @@ export default function Profile() {
         <Icon name="logout" size={18} /> Sign out
       </Button>
 
-      {shareLog && <ShareCardModal log={shareLog} username={user.username} onClose={() => setShareLog(null)} />}
+      {shareLog && (
+        <Suspense fallback={null}>
+          <ShareCardModal log={shareLog} username={user.username} onClose={() => setShareLog(null)} />
+        </Suspense>
+      )}
     </div>
   );
 }

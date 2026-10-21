@@ -1,28 +1,36 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/routing/ProtectedRoute';
+import HideBoot from './components/routing/HideBoot';
+import RunnerLoader from './components/ui/RunnerLoader';
+import { Activity, CustomQuest, Dashboard, Login, Profile } from './lazyScreens';
 import { ROUTES } from './routes';
 
-// Code-splitting per halaman: tiap layar dimuat saat pertama dibuka.
-const Login = lazy(() => import('./screens/Login'));
-const Dashboard = lazy(() => import('./screens/Dashboard'));
-const CustomQuest = lazy(() => import('./screens/CustomQuest'));
-const Activity = lazy(() => import('./screens/Activity'));
-const Profile = lazy(() => import('./screens/Profile'));
-
-function PageFallback() {
-  return <div className="p-10 text-center text-sm text-subtle">Loading…</div>;
+function BootFallback() {
+  return (
+    <div className="flex h-full items-center justify-center">
+      <RunnerLoader />
+    </div>
+  );
 }
 
 export default function App() {
   return (
-    <Suspense fallback={<PageFallback />}>
+    <Suspense fallback={<BootFallback />}>
       <Routes>
         {/* Publik: login & onboarding (tanpa bottom navigation) */}
-        <Route path={ROUTES.login} element={<Login />} />
+        <Route
+          path={ROUTES.login}
+          element={
+            <>
+              <HideBoot />
+              <Login />
+            </>
+          }
+        />
 
-        {/* Terproteksi: wajib login, memakai layout + bottom navigation */}
+        {/* Terproteksi: wajib login, memakai layout + bottom navigation (Suspense halaman ada di layout) */}
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
             <Route path={ROUTES.dashboard} element={<Dashboard />} />

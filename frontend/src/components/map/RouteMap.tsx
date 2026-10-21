@@ -8,15 +8,23 @@ const DEFAULT_CENTER: [number, number] = [-6.2183, 106.8022];
 /** Menggeser peta mengikuti posisi terakhir. */
 function FollowLatest({ position }: { position: [number, number] | null }) {
   const map = useMap();
+  const lat = position?.[0];
+  const lng = position?.[1];
   useEffect(() => {
-    if (position) map.panTo(position);
-  }, [map, position]);
+    if (lat !== undefined && lng !== undefined) map.panTo([lat, lng], { animate: true });
+  }, [map, lat, lng]);
   return null;
 }
 
-export default function RouteMap({ points }: { points: GeoPoint[] }) {
+interface RouteMapProps {
+  points: GeoPoint[];
+  /** Posisi user sebelum mulai merekam (hasil izin lokasi). */
+  here?: { lat: number; lng: number } | null;
+}
+
+export default function RouteMap({ points, here }: RouteMapProps) {
   const path = points.map((p) => [p.lat, p.lng] as [number, number]);
-  const latest = path.length > 0 ? path[path.length - 1] : null;
+  const latest = path.length > 0 ? path[path.length - 1] : here ? ([here.lat, here.lng] as [number, number]) : null;
 
   return (
     <MapContainer
@@ -24,6 +32,7 @@ export default function RouteMap({ points }: { points: GeoPoint[] }) {
       zoom={16}
       zoomControl={false}
       attributionControl
+      keyboard={false}
       className="h-full w-full"
     >
       <TileLayer
@@ -32,7 +41,10 @@ export default function RouteMap({ points }: { points: GeoPoint[] }) {
       />
       {path.length > 1 && <Polyline positions={path} pathOptions={{ color: '#ea2845', weight: 5 }} />}
       {latest && (
-        <CircleMarker center={latest} radius={7} pathOptions={{ color: '#fff', fillColor: '#ea2845', fillOpacity: 1 }} />
+        <>
+          <CircleMarker center={latest} radius={14} pathOptions={{ stroke: false, fillColor: '#ea2845', fillOpacity: 0.18 }} />
+          <CircleMarker center={latest} radius={7} pathOptions={{ color: '#fff', weight: 3, fillColor: '#ea2845', fillOpacity: 1 }} />
+        </>
       )}
       <FollowLatest position={latest} />
     </MapContainer>

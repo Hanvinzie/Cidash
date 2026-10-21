@@ -7,6 +7,8 @@ export default defineConfig({
   server: {
     port: 5173,
     host: true,
+    allowedHosts: true
+    
   },
   plugins: [
     react(),
@@ -20,7 +22,9 @@ export default defineConfig({
           'A social, gamified fitness tracker for private, invite-only circles.',
         theme_color: '#ea2845',
         background_color: '#F6F6F8',
+        id: '/',
         display: 'standalone',
+        display_override: ['standalone', 'fullscreen'],
         orientation: 'portrait',
         start_url: '/',
         scope: '/',
