@@ -67,6 +67,18 @@ export class QuestsController {
   }
 
   /**
+   * Menolak tantangan misi (menggunakan Shield Ticket jika tersedia, atau menyerah/FAILED).
+   */
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/reject')
+  async rejectQuest(
+    @Param('id') questId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.questsService.rejectQuest(questId, userId);
+  }
+
+  /**
    * Membaca informasi detail dari suatu misi.
    */
   @Get(':id')

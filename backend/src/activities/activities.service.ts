@@ -227,6 +227,7 @@ export class ActivitiesService {
           Math.round((item.distanceMeters / 1000) * 100) / 100,
         durationSeconds: item.durationSeconds,
         averagePace: item.averagePace,
+        routeGeoJson: item.routeGeoJson,
         startedAt: item.startedAt,
         endedAt: item.endedAt,
         completedQuest: item.questMatches[0] ?? null,
@@ -252,7 +253,7 @@ export class ActivitiesService {
 
     if (activity.userId !== userId) {
       throw new ForbiddenException(
-        'Akses ditolak. Anda tidak berhak melihat aktivitas pengguna lain',
+        'Akses ditolak. Anda hanya dapat melihat detail aktivitas Anda sendiri.',
       );
     }
 

@@ -1,7 +1,7 @@
 # CiDash — Backend Service
 > REST API, Authentication, and Business Logic Engine for **CiDash (Circle Dashboard)**.
 
-Dibangun dengan **NestJS 12**, **Prisma ORM 5**, dan **PostgreSQL (Supabase)**.
+Dibangun dengan **NestJS 12**, **Prisma ORM 5**, dan **PostgreSQL (Supabase)**. Dilengkapi dengan mode *graceful connection* pada `PrismaService` serta dukungan CORS penuh untuk Frontend React PWA.
 
 ---
 
@@ -33,16 +33,17 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 
 ## Endpoint API Utama
 
-### 1. Autentikasi (`/auth`)
-* `POST /auth/register` — Mendaftarkan pengguna baru (`email`, `password`, `name`).
+### 1. Autentikasi & Wallet (`/auth`)
+* `POST /auth/register` — Mendaftarkan pengguna baru (`email`, `password`, `name`) dengan saldo awal 60 koin & 1 shield ticket.
 * `POST /auth/login` — Autentikasi dan penerbitan Bearer Token JWT.
 * `GET /auth/me` — Membaca profil pengguna terotentikasi saat ini (*Protected by JWT Guard*).
+* `POST /auth/top-up` — Menambah saldo koin pengguna (`coins`) dan mencatat transaksi `TOP_UP` di `CoinTransaction`.
 
 ### 2. Lingkaran Pertemanan / Circle (`/squads`)
 * `POST /squads` — Membuat circle baru, generate kode 8 karakter unik, dan menetapkan pembuat sebagai `CAPTAIN`.
 * `POST /squads/join` — Bergabung ke circle menggunakan kode undangan 8 karakter.
 * `GET /squads/my` — Mengambil daftar circle yang diikuti beserta status peran dan jumlah misi.
-* `GET /squads/:id/leaderboard` — Mengambil urutan peringkat anggota circle berdasarkan `rankPoints`.
+* `GET /squads/:id/leaderboard` — Mengambil urutan peringkat anggota circle berdasarkan `rankPoints` beserta akumulasi jarak `totalDistanceKm`.
 * `GET /squads/:id` — Mengambil detail circle dan daftar anggota.
 * `POST /squads/:id/leave` — Keluar dari circle (jika Captain keluar, kepemimpinan otomatis dialihkan ke anggota tertua).
 * `DELETE /squads/:id/members/:userId` — Mengeluarkan anggota dari circle (khusus peran `CAPTAIN`).
@@ -50,67 +51,32 @@ Model Prisma di [`prisma/schema.prisma`](file:///D:/CiDash/backend/prisma/schema
 ### 3. Quest & Bomb Mission (`/quests`)
 * `POST /quests` — Mengirimkan *Bomb Mission* P2P ke teman satu Circle (verifikasi dan pemotongan 20 koin pembuat).
 * `GET /quests/active` — Daftar misi aktif dari Circle yang diikuti pengguna beserta sisa waktu hitung mundur.
-* `POST /quests/:id/shield` — Menggunakan 1 *Shield Ticket* untuk membatalkan penalti misi (status menjadi `SHIELDED`).
 * `POST /quests/:id/accept` — Menerima tantangan misi (status menjadi `ACCEPTED`).
+* `POST /quests/:id/reject` — Menolak tantangan misi (otomatis memakai *Shield Ticket* jika tersedia, atau memproses status `FAILED` beserta penalti/reward poin).
+* `POST /quests/:id/shield` — Menggunakan 1 *Shield Ticket* untuk membatalkan penalti misi (status menjadi `SHIELDED`).
 * `GET /quests/:id` — Mengambil informasi detail dari suatu misi.
 * `POST /quests/cron/expire-check` — Pemicu manual pengecekan misi kedaluwarsa (otomatis berjalan tiap jam via `@Cron`).
 
 ### 4. Aktivitas GPS & Anti-Cheat (`/activities`)
 * `POST /activities` — Mengirimkan log hasil perekaman GPS (validasi anti-cheat kecepatan wajar & rumus Haversine, auto-match penyelesaian quest, dan alokasi rankPoints).
-* `GET /activities/history` — Riwayat rekaman olahraga pengguna dengan paginasi, metrik jarak total, dan durasi.
+* `GET /activities/history` — Riwayat rekaman olahraga pengguna dengan paginasi, metrik jarak total, durasi, serta `routeGeoJson` untuk pembuatan *Share Card*.
 * `GET /activities/:id` — Detail lengkap satu aktivitas beserta array koordinat GeoJSON rute peta.
 
 ---
 
 ## Panduan Menjalankan Backend
 
-### Prasyarat:
-* Node.js v20+ & npm
-* PostgreSQL connection URL
-
-### 1. Instalasi Dependensi
+Dari root monorepo, cukup jalankan:
 ```bash
-npm install
+npm run dev
 ```
-
-### 2. Pengaturan `.env`
-Pastikan file `.env` sudah memuat variabel berikut:
-```env
-DATABASE_URL="postgresql://username:password@localhost:5432/cidash?schema=public"
-JWT_SECRET="your-jwt-secret-key"
-PORT=3000
-```
-
-### 3. Migrasi & Generate Prisma Client
+Atau khusus backend saja:
 ```bash
-npx prisma generate
-npx prisma db push
+npm run dev:backend
 ```
 
-### 4. Menjalankan Server
+### Seed Data Demo
 ```bash
-# Mode Development (Hot-Reload)
-npm run start:dev
-
-# Mode Production
-npm run build
-npm run start:prod
+npm run seed --workspace backend
 ```
-
-### 5. Testing & Code Quality
-```bash
-# Menjalankan Linter
-npm run lint
-
-# Menjalankan Unit Test
-npm run test
-
-# Menjalankan E2E Test
-npm run test:e2e
-```
-
----
-
-## Dokumentasi Lengkap
-Spesifikasi lengkap, skenario pitch demo, dan Business Model Canvas dapat diakses di:  
-[Dokumentasi Spesifikasi CiDash](../docs/SPESIFIKASI_PROYEK_CIDASH.md)
+Menghasilkan 4 akun demo (`budi@cidash.id`, `captain@cidash.id`, `siti@cidash.id`, `reza@cidash.id` dengan password `password123`) yang tergabung dalam Circle **GBK Sunset Runners** (`RUN8MORN`).

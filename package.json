@@ -8,6 +8,7 @@
     "backend"
   ],
   "scripts": {
+    "predev": "node -e \"const fs=require('fs');if(!fs.existsSync('backend/.env')&&fs.existsSync('backend/.env.example'))fs.copyFileSync('backend/.env.example','backend/.env');if(!fs.existsSync('frontend/.env')&&fs.existsSync('frontend/.env.example'))fs.copyFileSync('frontend/.env.example','frontend/.env');console.log('\\n======================================================\\n  CIDASH DEV SERVER (Ctrl + Klik link di bawah):\\n  -> Frontend (Web App) : http://localhost:5173\\n  -> Backend  (REST API): http://localhost:3000\\n======================================================\\n');\"",
     "dev": "concurrently -n \"backend,frontend\" -c \"magenta,cyan\" \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:frontend": "npm run dev --workspace frontend",
     "dev:backend": "npm run start:dev --workspace backend",
