@@ -9,7 +9,8 @@ import {
   initialUser,
   leaderboardByCircle,
 } from '../data/mock';
-import { http, post, tokenStore } from '../services/http';
+import { del, http, post, tokenStore } from '../services/http';
+import { useToast } from './ToastContext';
 import type {
   ActivityLog,
   ActivityType,
@@ -68,6 +69,7 @@ interface BackendUser {
 
 interface AppState {
   isAuthenticated: boolean;
+  hydrating: boolean;
   user: User;
   circles: Circle[];
   activeCircle: Circle | null;
@@ -80,15 +82,19 @@ interface AppState {
   bombMissions: BombMission[];
   activityHistory: ActivityLog[];
 
-  login: (credentials?: AuthCredentials) => Promise<void>;
+  login: (credentials?: AuthCredentials) => Promise<{ circleCount: number }>;
   logout: () => void;
+  updateProfileName: (name: string) => void;
   setActiveCircle: (id: string) => void;
   createCircle: (name: string) => Promise<Circle>;
   joinCircle: (code: string) => Promise<Circle>;
+  leaveCircle: (circleId: string) => Promise<void>;
+  kickMember: (circleId: string, targetUserId: string) => Promise<void>;
   topUp: (coins: number) => void;
   sendBomb: (input: SendBombInput) => void;
   acceptBomb: (id: string) => void;
   rejectBomb: (id: string) => void;
+  useShield: (id: string) => void;
   recordActivity: (input: RecordActivityInput) => VerificationResult;
 }
 
@@ -116,21 +122,42 @@ function parseGeoJsonRoute(routeGeoJson: unknown): GeoPoint[] {
     }));
 }
 
+/** Build a valid multi-point coordinate path matching distanceMeters when few GPS points exist. */
+function buildConsistentCoordinates(route: GeoPoint[], distanceMeters: number): [number, number][] {
+  if (route.length >= 2) {
+    return route.map((p) => [p.lng, p.lat]);
+  }
+  const startLat = route[0]?.lat ?? -6.2183;
+  const startLng = route[0]?.lng ?? 106.8022;
+  const steps = Math.max(2, Math.min(50, Math.ceil(distanceMeters / 250) + 1));
+  const stepMeters = distanceMeters / (steps - 1);
+  const stepDegLat = stepMeters / 111_320;
+  return Array.from({ length: steps }, (_, i) => [
+    +(startLng + i * stepDegLat * 0.15).toFixed(6),
+    +(startLat + i * stepDegLat).toFixed(6),
+  ]);
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
+  const toast = useToast();
+  const hasToken = Boolean(tokenStore.get());
   const [isAuthenticated, setAuth] = useState(
     () => localStorage.getItem(AUTH_KEY) === '1' || Boolean(tokenStore.get()),
   );
-  const [user, setUser] = useState<User>(initialUser);
-  const [seasonDistanceKm, setSeasonDistanceKm] = useState(61.1);
-  const [circles, setCircles] = useState<Circle[]>(initialCircles);
-  const [activeCircleId, setActiveCircleId] = useState<string | null>(initialCircles[0]?.id ?? null);
+  const [hydrating, setHydrating] = useState(hasToken);
+  const [user, setUser] = useState<User>({ ...initialUser, shieldTickets: 1 });
+  const [seasonDistanceKm, setSeasonDistanceKm] = useState(hasToken ? 0 : 61.1);
+  const [circles, setCircles] = useState<Circle[]>(hasToken ? [] : initialCircles);
+  const [activeCircleId, setActiveCircleId] = useState<string | null>(
+    hasToken ? null : (initialCircles[0]?.id ?? null),
+  );
   const [backendLeaderboard, setBackendLeaderboard] = useState<LeaderboardEntry[] | null>(null);
   const [backendMembers, setBackendMembers] = useState<Pick<User, 'id' | 'username'>[] | null>(null);
   /** Captain circle aktif menurut backend (role CAPTAIN di leaderboard). */
   const [backendCaptainId, setBackendCaptainId] = useState<string | null>(null);
-  const [groupMissions, setGroupMissions] = useState<GroupMission[]>(initialGroupMissions);
-  const [bombMissions, setBombMissions] = useState<BombMission[]>(initialBombMissions);
-  const [activityHistory, setActivityHistory] = useState<ActivityLog[]>(initialActivityHistory);
+  const [groupMissions, setGroupMissions] = useState<GroupMission[]>(hasToken ? [] : initialGroupMissions);
+  const [bombMissions, setBombMissions] = useState<BombMission[]>(hasToken ? [] : initialBombMissions);
+  const [activityHistory, setActivityHistory] = useState<ActivityLog[]>(hasToken ? [] : initialActivityHistory);
 
   const activeCircle = circles.find((c) => c.id === activeCircleId) ?? circles[0] ?? null;
 
@@ -138,11 +165,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (u: BackendUser): User => ({
       id: u.id,
       username: u.name,
+      email: u.email,
       rankPoints: u.rankPoints,
       coins: u.coinBalance,
+      shieldTickets: u.shieldTickets ?? 0,
     }),
     [],
   );
+
+  const logout = useCallback(() => {
+    tokenStore.clear();
+    localStorage.removeItem(AUTH_KEY);
+    setBackendLeaderboard(null);
+    setBackendMembers(null);
+    setBackendCaptainId(null);
+    setAuth(false);
+  }, []);
+
+  useEffect(() => {
+    const onUnauthorized = () => {
+      logout();
+      toast('Session expired. Please sign in again.', 'error');
+    };
+    window.addEventListener('cidash:unauthorized', onUnauthorized);
+    return () => window.removeEventListener('cidash:unauthorized', onUnauthorized);
+  }, [logout, toast]);
 
   const syncCircleLeaderboard = useCallback(async (circleId: string, currentUserId: string) => {
     try {
@@ -152,6 +199,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           userId: string;
           name: string;
           rankPoints: number;
+          shieldTickets?: number;
           totalDistanceKm?: number;
           role?: 'CAPTAIN' | 'MEMBER';
         }[];
@@ -213,7 +261,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             dateStyle: 'medium',
             timeStyle: 'short',
           }),
-          wagerCoins: 20,
+          wagerCoins: Math.max(5, Math.round(q.stakesPoints / 2)),
           rewardRankPoints: q.stakesPoints,
           penaltyRankPoints: q.stakesPoints,
           status:
@@ -223,12 +271,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
                 ? 'completed'
                 : q.status === 'FAILED'
                   ? 'failed'
-                  : 'pending',
+                  : q.status === 'SHIELDED'
+                    ? 'shielded'
+                    : 'pending',
         };
       });
       setBombMissions(mapped);
     } catch {
-      // Biarkan state lokal jika gagal
+      // Keep local state if offline
     }
   }, []);
 
@@ -253,6 +303,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         type: a.type === 'RUNNING' ? 'run' : 'bike',
         mode: 'solo',
         distanceKm: a.distanceKilometers,
+        durationSeconds: a.durationSeconds,
         durationSec: a.durationSeconds,
         date: new Date(a.startedAt).toLocaleDateString('en-US', { dateStyle: 'medium' }),
         routeLabel: a.completedQuest?.rewardTitle ?? 'Recorded workout',
@@ -262,14 +313,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }));
       setActivityHistory(logs);
     } catch {
-      // Biarkan state lokal jika gagal
+      // Keep local state if offline
     }
   }, []);
 
-  const hydrateFromBackend = useCallback(async () => {
+  const hydrateFromBackend = useCallback(async (): Promise<Circle[]> => {
     const token = tokenStore.get();
-    if (!token) return;
+    if (!token) {
+      setHydrating(false);
+      return [];
+    }
 
+    setHydrating(true);
     try {
       const [me, mySquadsRes] = await Promise.all([
         http<BackendUser>('/auth/me'),
@@ -279,6 +334,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             name: string;
             inviteCode: string;
             totalMembers: number;
+            captain?: { id: string; name: string } | null;
           }[];
         }>('/squads/my'),
       ]);
@@ -291,10 +347,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         name: s.name,
         code: s.inviteCode,
         memberCount: s.totalMembers,
+        captainId: s.captain?.id,
       }));
 
       setCircles(mappedCircles);
-      const selectedCircle = mappedCircles[0] ?? null;
+      const selectedCircle =
+        mappedCircles.find((c) => c.id === activeCircleId) ?? mappedCircles[0] ?? null;
       setActiveCircleId(selectedCircle?.id ?? null);
 
       if (mappedCircles.length > 0) {
@@ -328,6 +386,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ]);
           return [...prev, ...extra];
         });
+      } else {
+        setBackendLeaderboard([]);
+        setBackendMembers([]);
+        setBombMissions([]);
       }
 
       await Promise.all([
@@ -335,10 +397,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
         syncQuests(selectedCircle?.id),
         syncActivities(selectedCircle),
       ]);
+
+      return mappedCircles;
     } catch {
-      // Biarkan state yang ada
+      return [];
+    } finally {
+      setHydrating(false);
     }
-  }, [mapBackendUser, syncActivities, syncCircleLeaderboard, syncQuests]);
+  }, [activeCircleId, mapBackendUser, syncActivities, syncCircleLeaderboard, syncQuests]);
 
   useEffect(() => {
     if (isAuthenticated && tokenStore.get()) {
@@ -371,7 +437,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const myRank = leaderboard.find((e) => e.user.id === user.id)?.rank ?? null;
 
-  // Daftar anggota: data backend (GET /squads/:id/leaderboard) untuk circle aktif, mock untuk lainnya.
   const membersOf = useCallback(
     (circleId: string): CircleMember[] => {
       const circle = circles.find((c) => c.id === circleId);
@@ -408,7 +473,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const login = useCallback(
-    async (credentials?: AuthCredentials) => {
+    async (credentials?: AuthCredentials): Promise<{ circleCount: number }> => {
       const mode = credentials?.mode ?? 'login';
       const email = credentials?.email?.trim() || 'budi@cidash.id';
       const password = credentials?.password || 'password123';
@@ -422,19 +487,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       localStorage.setItem(AUTH_KEY, '1');
       setUser(mapBackendUser(res.user));
       setAuth(true);
-      await hydrateFromBackend();
+      const loadedCircles = await hydrateFromBackend();
+      return { circleCount: loadedCircles.length };
     },
     [hydrateFromBackend, mapBackendUser],
   );
 
-  const logout = useCallback(() => {
-    tokenStore.clear();
-    localStorage.removeItem(AUTH_KEY);
-    setBackendLeaderboard(null);
-    setBackendMembers(null);
-    setBackendCaptainId(null);
-    setAuth(false);
-  }, []);
+  const updateProfileName = useCallback(
+    (name: string) => {
+      const trimmed = name.trim();
+      if (trimmed.length < 2) return;
+      setUser((u) => ({ ...u, username: trimmed }));
+      toast('Profile name updated', 'success');
+    },
+    [toast],
+  );
 
   const createCircle = useCallback(
     async (name: string): Promise<Circle> => {
@@ -452,15 +519,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         setCircles((cs) => [circle, ...cs.filter((c) => c.id !== circle.id)]);
         setActiveCircleId(circle.id);
+        toast(`Circle "${circle.name}" created!`, 'success');
         return circle;
       }
 
       const circle: Circle = { id: newId('cir'), name, code: generateCircleCode(), memberCount: 1, captainId: user.id };
       setCircles((cs) => [...cs, circle]);
       setActiveCircleId(circle.id);
+      toast(`Circle "${circle.name}" created!`, 'success');
       return circle;
     },
-    [user.id],
+    [toast, user.id],
   );
 
   const joinCircle = useCallback(
@@ -479,6 +548,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         setCircles((cs) => [circle, ...cs.filter((c) => c.id !== circle.id)]);
         setActiveCircleId(circle.id);
+        toast(`Joined "${circle.name}"!`, 'success');
         return circle;
       }
 
@@ -486,46 +556,93 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const circle = existing ?? { id: newId('cir'), name: `Circle ${normalized}`, code: normalized, memberCount: 2 };
       if (!existing) setCircles((cs) => [...cs, circle]);
       setActiveCircleId(circle.id);
+      toast(`Joined "${circle.name}"!`, 'success');
       return circle;
     },
-    [circles],
+    [circles, toast],
   );
 
-  const topUp = useCallback((coins: number) => {
-    setUser((u) => ({ ...u, coins: u.coins + coins }));
-    if (tokenStore.get()) {
-      void post<{ coinBalance: number }>('/auth/top-up', { coins })
-        .then((res) => {
-          setUser((u) => ({ ...u, coins: res.coinBalance }));
-        })
-        .catch(() => undefined);
-    }
-  }, []);
+  const leaveCircle = useCallback(
+    async (circleId: string): Promise<void> => {
+      if (tokenStore.get()) {
+        const res = await post<{ message: string }>(`/squads/${circleId}/leave`);
+        toast(res.message || 'Left circle', 'info');
+        await hydrateFromBackend();
+        return;
+      }
+      setCircles((cs) => {
+        const remaining = cs.filter((c) => c.id !== circleId);
+        if (activeCircleId === circleId) {
+          setActiveCircleId(remaining[0]?.id ?? null);
+        }
+        return remaining;
+      });
+      toast('Left circle', 'info');
+    },
+    [activeCircleId, hydrateFromBackend, toast],
+  );
+
+  const kickMember = useCallback(
+    async (circleId: string, targetUserId: string): Promise<void> => {
+      if (tokenStore.get()) {
+        const res = await del<{ message: string }>(`/squads/${circleId}/members/${targetUserId}`);
+        toast(res.message || 'Member removed from circle', 'info');
+        await syncCircleLeaderboard(circleId, user.id);
+        await hydrateFromBackend();
+        return;
+      }
+      toast('Member removed from circle', 'info');
+    },
+    [hydrateFromBackend, syncCircleLeaderboard, toast, user.id],
+  );
+
+  const topUp = useCallback(
+    (coins: number) => {
+      const previousCoins = user.coins;
+      setUser((u) => ({ ...u, coins: u.coins + coins }));
+      if (tokenStore.get()) {
+        void post<{ coinBalance: number }>('/auth/top-up', { coins })
+          .then((res) => {
+            setUser((u) => ({ ...u, coins: res.coinBalance }));
+            toast(`Added ${coins} coins to your wallet!`, 'success');
+          })
+          .catch((err) => {
+            setUser((u) => ({ ...u, coins: previousCoins }));
+            toast(err instanceof Error ? err.message : 'Top-up failed', 'error');
+          });
+      } else {
+        toast(`Added ${coins} demo coins!`, 'success');
+      }
+    },
+    [toast, user.coins],
+  );
 
   const sendBomb = useCallback(
     (input: SendBombInput) => {
       const allMembers = backendMembers ?? Object.values(circleMembers).flat();
       const target = allMembers.find((m) => m.id === input.targetUserId);
-      if (!target || input.wagerCoins > user.coins) return;
+      if (!target || input.wagerCoins > user.coins) {
+        toast('Not enough coins or invalid target member', 'error');
+        return;
+      }
 
+      const prevCoins = user.coins;
       setUser((u) => ({ ...u, coins: Math.max(0, u.coins - input.wagerCoins) }));
       const tempId = newId('bm');
-      setBombMissions((bs) => [
-        {
-          id: tempId,
-          direction: 'sent',
-          counterpart: target,
-          type: input.type,
-          targetKm: input.targetKm,
-          durationMin: input.durationMin,
-          deadline: new Date(input.deadline).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
-          wagerCoins: input.wagerCoins,
-          rewardRankPoints: input.wagerCoins * 2,
-          penaltyRankPoints: input.wagerCoins,
-          status: 'pending',
-        },
-        ...bs,
-      ]);
+      const optimisticMission: BombMission = {
+        id: tempId,
+        direction: 'sent',
+        counterpart: target,
+        type: input.type,
+        targetKm: input.targetKm,
+        durationMin: input.durationMin,
+        deadline: new Date(input.deadline).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+        wagerCoins: input.wagerCoins,
+        rewardRankPoints: input.wagerCoins * 2,
+        penaltyRankPoints: input.wagerCoins * 2,
+        status: 'pending',
+      };
+      setBombMissions((bs) => [optimisticMission, ...bs]);
 
       if (tokenStore.get() && activeCircle) {
         const maxPace = +(input.durationMin / Math.max(0.5, input.targetKm)).toFixed(2);
@@ -536,17 +653,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
           targetDistance: Math.round(input.targetKm * 1000),
           targetMaxPace: maxPace,
           stakesPoints: input.wagerCoins * 2,
+          wagerCoins: input.wagerCoins,
           rewardTitle: 'P2P Bomb Mission',
           deadline: new Date(input.deadline).toISOString(),
         })
           .then((res) => {
             setUser((u) => ({ ...u, coins: res.remainingCoinBalance }));
+            toast(`Bomb Mission sent to @${target.username}!`, 'success');
             return syncQuests(activeCircle.id);
           })
-          .catch(() => undefined);
+          .catch((err) => {
+            setUser((u) => ({ ...u, coins: prevCoins }));
+            setBombMissions((bs) => bs.filter((b) => b.id !== tempId));
+            toast(err instanceof Error ? err.message : 'Failed to send Bomb Mission', 'error');
+          });
+      } else {
+        toast(`Bomb Mission sent to @${target.username}!`, 'success');
       }
     },
-    [activeCircle, backendMembers, syncQuests, user.coins],
+    [activeCircle, backendMembers, syncQuests, toast, user.coins],
   );
 
   const acceptBomb = useCallback(
@@ -554,23 +679,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setBombMissions((bs) => bs.map((b) => (b.id === id ? { ...b, status: 'in_progress' } : b)));
       if (tokenStore.get()) {
         void post(`/quests/${id}/accept`)
-          .then(() => syncQuests(activeCircle?.id))
-          .catch(() => undefined);
+          .then(() => {
+            toast('Challenge accepted! Good luck!', 'success');
+            return syncQuests(activeCircle?.id);
+          })
+          .catch((err) => {
+            toast(err instanceof Error ? err.message : 'Failed to accept challenge', 'error');
+            void syncQuests(activeCircle?.id);
+          });
+      } else {
+        toast('Challenge accepted! Good luck!', 'success');
       }
     },
-    [activeCircle?.id, syncQuests],
+    [activeCircle?.id, syncQuests, toast],
+  );
+
+  const useShield = useCallback(
+    (id: string) => {
+      if ((user.shieldTickets ?? 0) < 1) {
+        toast('You do not have any Shield Tickets left', 'error');
+        return;
+      }
+      setBombMissions((bs) => bs.filter((b) => b.id !== id));
+      setUser((u) => ({ ...u, shieldTickets: Math.max(0, (u.shieldTickets ?? 1) - 1) }));
+      if (tokenStore.get()) {
+        void post<{ message?: string }>(`/quests/${id}/shield`)
+          .then((res) => {
+            toast(res.message || 'Shield Ticket used! Penalty neutralized.', 'success');
+            return Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]);
+          })
+          .catch((err) => {
+            toast(err instanceof Error ? err.message : 'Failed to use Shield Ticket', 'error');
+            void Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]);
+          });
+      } else {
+        toast('Shield Ticket used! Penalty neutralized.', 'success');
+      }
+    },
+    [activeCircle?.id, hydrateFromBackend, syncQuests, toast, user.shieldTickets],
   );
 
   const rejectBomb = useCallback(
     (id: string) => {
+      const quest = bombMissions.find((b) => b.id === id);
       setBombMissions((bs) => bs.filter((b) => b.id !== id));
       if (tokenStore.get()) {
-        void post(`/quests/${id}/reject`)
-          .then(() => Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]))
-          .catch(() => undefined);
+        void post<{ message?: string; shielded?: boolean; penaltyPoints?: number }>(`/quests/${id}/reject`)
+          .then((res) => {
+            if (res.shielded) {
+              toast('Shield Ticket automatically used — 0 RP penalty!', 'info');
+            } else {
+              toast(`Mission declined (−${res.penaltyPoints ?? quest?.penaltyRankPoints ?? 0} RP)`, 'info');
+            }
+            return Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]);
+          })
+          .catch((err) => {
+            toast(err instanceof Error ? err.message : 'Failed to decline challenge', 'error');
+            void Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]);
+          });
+      } else {
+        if ((user.shieldTickets ?? 0) >= 1) {
+          setUser((u) => ({ ...u, shieldTickets: (u.shieldTickets ?? 1) - 1 }));
+          toast('Shield Ticket automatically used — 0 RP penalty!', 'info');
+        } else if (quest) {
+          setUser((u) => ({ ...u, rankPoints: Math.max(0, u.rankPoints - quest.penaltyRankPoints) }));
+          toast(`Mission declined (−${quest.penaltyRankPoints} RP)`, 'info');
+        }
       }
     },
-    [activeCircle?.id, hydrateFromBackend, syncQuests],
+    [activeCircle?.id, bombMissions, hydrateFromBackend, syncQuests, toast, user.shieldTickets],
   );
 
   const recordActivity = useCallback(
@@ -594,6 +771,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
       }
 
+      const prevRankPoints = user.rankPoints;
+      const prevSeasonDistance = seasonDistanceKm;
       let rankPointsDelta = Math.max(10, Math.floor(input.distanceKm) * 10);
       let missionStatus: VerificationResult['missionStatus'];
 
@@ -603,8 +782,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (bomb) {
         const success = input.distanceKm >= bomb.targetKm && input.durationSec <= bomb.durationMin * 60;
         missionStatus = success ? 'completed' : 'failed';
-        rankPointsDelta = success ? bomb.rewardRankPoints : -bomb.penaltyRankPoints;
-        if (success) setUser((u) => ({ ...u, coins: u.coins + bomb.wagerCoins }));
+        rankPointsDelta = success ? baseRankPlusQuest(input.distanceKm, bomb.rewardRankPoints) : -bomb.penaltyRankPoints;
         setBombMissions((bs) => bs.map((b) => (b.id === bomb.id ? { ...b, status: missionStatus! } : b)));
       } else if (group) {
         const progressKm = +(group.progressKm + input.distanceKm).toFixed(2);
@@ -615,8 +793,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
       setUser((u) => ({ ...u, rankPoints: Math.max(0, u.rankPoints + rankPointsDelta) }));
       setSeasonDistanceKm((d) => d + input.distanceKm);
+      const logId = newId('act');
       const log: ActivityLog = {
-        id: newId('act'),
+        id: logId,
         type: input.type,
         mode: input.mode,
         distanceKm: +input.distanceKm.toFixed(2),
@@ -637,16 +816,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const averagePace = +(durationSeconds / 60 / (distanceMeters / 1000)).toFixed(2);
         const endedAt = new Date();
         const startedAt = new Date(endedAt.getTime() - durationSeconds * 1000);
-        const coordinates =
-          input.route.length >= 2
-            ? input.route.map((p) => [p.lng, p.lat])
-            : [
-                [106.802, -6.218],
-                [106.805, -6.215],
-              ];
+        const coordinates = buildConsistentCoordinates(input.route, distanceMeters);
 
         void post<{
-          rewards?: { currentRankPoints: number };
+          rewards?: { currentRankPoints: number; totalPointsGained: number };
         }>('/activities', {
           type: input.type === 'run' ? 'RUNNING' : 'CYCLING',
           distanceMeters,
@@ -669,12 +842,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
               syncActivities(activeCircle),
             ]);
           })
-          .catch(() => undefined);
+          .catch((err) => {
+            // Rollback optimistic update on backend anti-cheat rejection
+            setUser((u) => ({ ...u, rankPoints: prevRankPoints }));
+            setSeasonDistanceKm(prevSeasonDistance);
+            setActivityHistory((h) => h.filter((item) => item.id !== logId));
+            toast(
+              err instanceof Error ? err.message : 'Activity rejected by server verification',
+              'error',
+            );
+          });
       }
 
       return { ...base, valid: true, rankPointsDelta, missionStatus, log };
     },
-    [activeCircle, bombMissions, groupMissions, syncActivities, syncCircleLeaderboard, syncQuests, user.id],
+    [
+      activeCircle,
+      bombMissions,
+      groupMissions,
+      seasonDistanceKm,
+      syncActivities,
+      syncCircleLeaderboard,
+      syncQuests,
+      toast,
+      user.id,
+      user.rankPoints,
+    ],
   );
 
   const members = useMemo(() => {
@@ -684,6 +877,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value: AppState = {
     isAuthenticated,
+    hydrating,
     user,
     circles,
     activeCircle,
@@ -696,17 +890,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     activityHistory,
     login,
     logout,
+    updateProfileName,
     setActiveCircle: setActiveCircleId,
     createCircle,
     joinCircle,
+    leaveCircle,
+    kickMember,
     topUp,
     sendBomb,
     acceptBomb,
     rejectBomb,
+    useShield,
     recordActivity,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+}
+
+function baseRankPlusQuest(distanceKm: number, questBonus: number): number {
+  return Math.max(10, Math.floor(distanceKm) * 10) + questBonus;
 }
 
 export function useApp(): AppState {

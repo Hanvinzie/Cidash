@@ -18,7 +18,9 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    const { email, password, name } = registerDto;
+    const email = registerDto.email.trim().toLowerCase();
+    const name = registerDto.name.trim();
+    const { password } = registerDto;
 
     // Cek apakah email sudah terdaftar
     const existingUser = await this.prisma.user.findUnique({
@@ -66,7 +68,8 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    const { email, password } = loginDto;
+    const email = loginDto.email.trim().toLowerCase();
+    const { password } = loginDto;
 
     // Cari user berdasarkan email
     const user = await this.prisma.user.findUnique({

@@ -5,7 +5,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
-import { JwtStrategy } from './strategies/jwt.strategy';
+import { JwtStrategy, resolveJwtSecret } from './strategies/jwt.strategy';
 
 @Module({
   imports: [
@@ -14,7 +14,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || 'supersecret_cidash_jwt_key',
+        secret: resolveJwtSecret(configService),
         signOptions: {
           expiresIn: (configService.get<string>('JWT_EXPIRES_IN') || '7d') as any,
         },

@@ -1,12 +1,13 @@
-import { Suspense, useState } from 'react';
+import { FormEvent, Suspense, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import CoinBalance from '../components/ui/CoinBalance';
 import Icon, { type IconName } from '../components/ui/Icon';
+import Modal from '../components/ui/Modal';
 import SectionTitle from '../components/ui/SectionTitle';
-import { Segmented } from '../components/ui/Field';
+import { Input, Segmented } from '../components/ui/Field';
 import RouteSvg from '../components/share/RouteSvg';
 import { ShareCardModal } from '../lazyScreens';
 import { coinPackages } from '../data/mock';
@@ -17,29 +18,36 @@ import { circleOnboarding, ROUTES } from '../routes';
 import CircleMembersSheet from '../components/circle/CircleMembersSheet';
 import type { ActivityLog, Circle } from '../types';
 
-const SETTINGS: { label: string; icon: IconName }[] = [
-  { label: 'Edit profile', icon: 'edit' },
-  { label: 'Notifications', icon: 'bell' },
-  { label: 'Privacy & security', icon: 'shield' },
-  { label: 'Help', icon: 'help' },
+type SettingKey = 'edit' | 'notifications' | 'privacy' | 'help';
+
+const SETTINGS: { key: SettingKey; label: string; icon: IconName }[] = [
+  { key: 'edit', label: 'Edit profile', icon: 'edit' },
+  { key: 'notifications', label: 'Notifications', icon: 'bell' },
+  { key: 'privacy', label: 'Privacy & security', icon: 'shield' },
+  { key: 'help', label: 'Help & rules', icon: 'help' },
 ];
 
 export default function Profile() {
-  const { user, circles, activeCircle, setActiveCircle, activityHistory, topUp, logout } = useApp();
+  const { user, circles, activeCircle, setActiveCircle, activityHistory, topUp, updateProfileName, logout } = useApp();
   const { preference, setPreference } = useTheme();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [shareLog, setShareLog] = useState<ActivityLog | null>(null);
   const [membersCircle, setMembersCircle] = useState<Circle | null>(null);
+  const [activeSetting, setActiveSetting] = useState<SettingKey | null>(null);
+  const [nameInput, setNameInput] = useState(user.username);
+  const [notifBomb, setNotifBomb] = useState(() => localStorage.getItem('cidash_notif_bomb') !== '0');
+  const [notifGroup, setNotifGroup] = useState(() => localStorage.getItem('cidash_notif_group') !== '0');
   const showTopUp = params.get('topup') === '1';
 
   const totalKm = activityHistory.reduce((sum, a) => sum + a.distanceKm, 0);
+  const shieldCount = user.shieldTickets ?? 0;
 
   // Top-up panel state lives in the URL so other screens can deep-link to it.
   const toggleTopUp = () => setParams(showTopUp ? {} : { topup: '1' }, { replace: true });
 
   function handleBuy(coins: number) {
-    topUp(coins); // TODO: buat transaksi Payment Gateway, koin masuk via webhook
+    topUp(coins); // Demo mode top-up
     setParams({}, { replace: true });
   }
 
@@ -53,6 +61,12 @@ export default function Profile() {
     navigate(ROUTES.login, { replace: true });
   }
 
+  function handleSaveProfile(e: FormEvent, close: () => void) {
+    e.preventDefault();
+    updateProfileName(nameInput);
+    close();
+  }
+
   return (
     <div className="space-y-7">
       {/* Identity */}
@@ -64,10 +78,13 @@ export default function Profile() {
           >
             {user.username.charAt(0)}
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h1 className="truncate text-xl font-extrabold">@{user.username}</h1>
-            <p className="text-xs text-subtle">ID: {user.id}</p>
+            <p className="truncate text-xs text-subtle">{user.email ?? `ID: ${user.id}`}</p>
           </div>
+          <Badge tone="primary">
+            <Icon name="shield" size={13} /> {shieldCount} {shieldCount === 1 ? 'Shield' : 'Shields'}
+          </Badge>
         </div>
         <dl className="mt-4 grid grid-cols-3 divide-x divide-line rounded-xl bg-inset py-3 text-center">
           {[
@@ -89,7 +106,7 @@ export default function Profile() {
         <CoinBalance coins={user.coins} onTopUp={toggleTopUp} topUpLabel={showTopUp ? 'Close' : 'Top up'} />
         {showTopUp && (
           <Card className="mt-3 space-y-2">
-            <p className="text-xs font-semibold text-muted">Choose a package (paid via payment gateway)</p>
+            <p className="text-xs font-semibold text-muted">Choose a package (Demo instant top-up)</p>
             {coinPackages.map((p) => (
               <button
                 key={p.id}
@@ -112,41 +129,45 @@ export default function Profile() {
       {/* History & route gallery */}
       <section>
         <SectionTitle>Activity history</SectionTitle>
-        <ul className="space-y-3">
-          {activityHistory.map((a) => (
-            <li key={a.id}>
-              <Card className="flex items-center gap-3 p-3">
-                <RouteSvg
-                  points={a.route}
-                  width={64}
-                  height={64}
-                  strokeWidth={3}
-                  padding={6}
-                  className="h-14 w-14 shrink-0 rounded-xl bg-cidash-primary/5 text-subtle"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="font-bold">
-                    {a.type === 'run' ? 'Run' : 'Ride'} · {a.distanceKm} km
-                  </p>
-                  <p className="truncate text-xs text-subtle">
-                    {a.date} · {formatDuration(a.durationSec)}
-                  </p>
-                  <div className="mt-1">
-                    <StatusBadge status={a.missionStatus} />
+        {activityHistory.length === 0 ? (
+          <Card className="py-8 text-center text-sm text-subtle">No recorded workouts yet.</Card>
+        ) : (
+          <ul className="space-y-3">
+            {activityHistory.map((a) => (
+              <li key={a.id}>
+                <Card className="flex items-center gap-3 p-3">
+                  <RouteSvg
+                    points={a.route}
+                    width={64}
+                    height={64}
+                    strokeWidth={3}
+                    padding={6}
+                    className="h-14 w-14 shrink-0 rounded-xl bg-cidash-primary/5 text-subtle"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold">
+                      {a.type === 'run' ? 'Run' : 'Ride'} · {a.distanceKm} km
+                    </p>
+                    <p className="truncate text-xs text-subtle">
+                      {a.date} · {formatDuration(a.durationSec)}
+                    </p>
+                    <div className="mt-1">
+                      <StatusBadge status={a.missionStatus} />
+                    </div>
                   </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShareLog(a)}
-                  aria-label={`Share ${a.distanceKm} km ${a.type === 'run' ? 'run' : 'ride'}`}
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary transition hover:bg-cidash-primary/20 active:scale-90"
-                >
-                  <Icon name="share" size={18} />
-                </button>
-              </Card>
-            </li>
-          ))}
-        </ul>
+                  <button
+                    type="button"
+                    onClick={() => setShareLog(a)}
+                    aria-label={`Share ${a.distanceKm} km ${a.type === 'run' ? 'run' : 'ride'}`}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary transition hover:bg-cidash-primary/20 active:scale-90"
+                  >
+                    <Icon name="share" size={18} />
+                  </button>
+                </Card>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {/* Circles */}
@@ -164,31 +185,35 @@ export default function Profile() {
         >
           My circles
         </SectionTitle>
-        <Card className="p-0">
-          <ul className="divide-y divide-line/70">
-            {circles.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => setMembersCircle(c)}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-inset active:bg-inset"
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
-                    <Icon name="users" size={18} />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-2 text-sm font-semibold">
-                      <span className="truncate">{c.name}</span>
-                      {c.id === activeCircle?.id && <Badge tone="primary">Active</Badge>}
+        {circles.length === 0 ? (
+          <Card className="py-8 text-center text-sm text-subtle">You haven't joined any circles yet.</Card>
+        ) : (
+          <Card className="p-0">
+            <ul className="divide-y divide-line/70">
+              {circles.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    onClick={() => setMembersCircle(c)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-inset active:bg-inset"
+                  >
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
+                      <Icon name="users" size={18} />
                     </span>
-                    <span className="text-xs text-subtle">{c.memberCount} members</span>
-                  </span>
-                  <span className="font-mono text-xs font-bold tracking-widest text-muted">{c.code}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 text-sm font-semibold">
+                        <span className="truncate">{c.name}</span>
+                        {c.id === activeCircle?.id && <Badge tone="primary">Active</Badge>}
+                      </span>
+                      <span className="text-xs text-subtle">{c.memberCount} members</span>
+                    </span>
+                    <span className="font-mono text-xs font-bold tracking-widest text-muted">{c.code}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
       </section>
 
       {/* Settings (incl. appearance) */}
@@ -231,10 +256,13 @@ export default function Profile() {
           </div>
           <ul className="divide-y divide-line/70">
             {SETTINGS.map((item) => (
-              <li key={item.label}>
-                {/* TODO: halaman detail pengaturan */}
+              <li key={item.key}>
                 <button
                   type="button"
+                  onClick={() => {
+                    if (item.key === 'edit') setNameInput(user.username);
+                    setActiveSetting(item.key);
+                  }}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition hover:bg-inset"
                 >
                   <Icon name={item.icon} size={18} className="text-muted" />
@@ -260,6 +288,110 @@ export default function Profile() {
             handleOpenCircle(membersCircle.id);
           }}
         />
+      )}
+
+      {activeSetting === 'edit' && (
+        <Modal title="Edit profile" onClose={() => setActiveSetting(null)}>
+          {(close) => (
+            <form onSubmit={(e) => handleSaveProfile(e, () => close())} className="space-y-4">
+              <Input
+                label="Display name"
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                minLength={2}
+                maxLength={60}
+                required
+              />
+              <Button type="submit" fullWidth disabled={nameInput.trim().length < 2}>
+                Save changes
+              </Button>
+            </form>
+          )}
+        </Modal>
+      )}
+
+      {activeSetting === 'notifications' && (
+        <Modal title="Notifications" onClose={() => setActiveSetting(null)}>
+          {(close) => (
+            <div className="space-y-4">
+              <label className="flex items-center justify-between text-sm">
+                <span>
+                  <span className="block font-semibold">Bomb Mission alerts</span>
+                  <span className="text-xs text-subtle">When a friend sends or completes a dare</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={notifBomb}
+                  onChange={(e) => {
+                    setNotifBomb(e.target.checked);
+                    localStorage.setItem('cidash_notif_bomb', e.target.checked ? '1' : '0');
+                  }}
+                  className="h-5 w-5 accent-cidash-primary"
+                />
+              </label>
+              <label className="flex items-center justify-between text-sm">
+                <span>
+                  <span className="block font-semibold">Live Group Run invites</span>
+                  <span className="text-xs text-subtle">When a circle member starts a live lobby</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={notifGroup}
+                  onChange={(e) => {
+                    setNotifGroup(e.target.checked);
+                    localStorage.setItem('cidash_notif_group', e.target.checked ? '1' : '0');
+                  }}
+                  className="h-5 w-5 accent-cidash-primary"
+                />
+              </label>
+              <Button fullWidth onClick={() => close()}>
+                Done
+              </Button>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {activeSetting === 'privacy' && (
+        <Modal title="Privacy & security" onClose={() => setActiveSetting(null)}>
+          {(close) => (
+            <div className="space-y-3 text-sm text-muted">
+              <p>
+                <b>Invite-only Circles:</b> Only members with your 8-character circle code can view the circle leaderboard or send Bomb Missions.
+              </p>
+              <p>
+                <b>Email Privacy:</b> Your email address is never exposed to other circle members.
+              </p>
+              <p>
+                <b>Anti-Cheat Verification:</b> Every workout is verified on the server using Haversine coordinate continuity and speed limits to keep leaderboards fair.
+              </p>
+              <Button fullWidth onClick={() => close()} className="mt-2">
+                Got it
+              </Button>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {activeSetting === 'help' && (
+        <Modal title="How Cidash works" onClose={() => setActiveSetting(null)}>
+          {(close) => (
+            <div className="space-y-3 text-sm text-muted">
+              <p>
+                <b>Rank Points (RP):</b> Earn 10 RP per kilometer on every verified run or ride, plus bonus stakes from completing Bomb Missions.
+              </p>
+              <p>
+                <b>Bomb Missions:</b> Spend coins to challenge a circle friend with a distance & time goal. If they succeed, they win the stakes RP; if they fail or expire, you win the RP!
+              </p>
+              <p>
+                <b>Shield Tickets:</b> Use a Shield Ticket to neutralize an incoming Bomb Mission without losing any Rank Points.
+              </p>
+              <Button fullWidth onClick={() => close()} className="mt-2">
+                Close
+              </Button>
+            </div>
+          )}
+        </Modal>
       )}
 
       {shareLog && (

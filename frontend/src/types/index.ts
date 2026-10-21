@@ -8,16 +8,19 @@ export type MissionStatus =
   | 'in_progress'
   | 'completed'
   | 'failed'
-  | 'pending';
+  | 'pending'
+  | 'shielded';
 
 export type QuestDirection = 'incoming' | 'sent';
 
 export interface User {
   id: string;
   username: string;
+  email?: string;
   avatarUrl?: string;
   rankPoints: number;
   coins: number;
+  shieldTickets?: number;
 }
 
 export interface Circle {
@@ -33,6 +36,7 @@ export interface CircleMember extends Pick<User, 'id' | 'username'> {
   isMe: boolean;
   rankPoints: number;
   totalDistanceKm: number;
+  shieldTickets?: number;
 }
 
 export interface LeaderboardEntry {

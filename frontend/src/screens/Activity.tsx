@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
+import Modal from '../components/ui/Modal';
 import { Segmented } from '../components/ui/Field';
 import Picker from '../components/ui/Picker';
 import type { IconName } from '../components/ui/Icon';
@@ -64,6 +65,7 @@ export default function Activity() {
   const [freeType, setFreeType] = useState<ActivityType>('run');
   const activityType = mission?.type ?? freeType;
   const [simulate, setSimulate] = useState(false);
+  const [confirmFinish, setConfirmFinish] = useState(false);
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [shareLog, setShareLog] = useState<ActivityLog | null>(null);
 
@@ -144,7 +146,13 @@ export default function Activity() {
     else void withLocation('resume');
   }
 
-  function handleStop() {
+  function requestStop() {
+    if (status === 'running') tracker.pause();
+    setConfirmFinish(true);
+  }
+
+  function confirmStop() {
+    setConfirmFinish(false);
     tracker.stop();
     setResult(
       recordActivity({
@@ -157,6 +165,12 @@ export default function Activity() {
         speedViolation: detectSpeedViolation(points, activityType),
       }),
     );
+  }
+
+  function discardWorkout() {
+    setConfirmFinish(false);
+    tracker.reset();
+    toast('Workout discarded', 'info');
   }
 
   function closeResult(to?: string) {
@@ -275,8 +289,8 @@ export default function Activity() {
         {status === 'idle' && (
           <label className="flex items-center justify-between border-t border-line/70 pt-3 text-sm">
             <span>
-              <span className="block font-semibold">Simulation mode</span>
-              <span className="text-xs text-subtle">Test without GPS</span>
+              <span className="block font-semibold">Simulation mode (Demo)</span>
+              <span className="text-xs text-subtle">Test GPS movement on desktop</span>
             </span>
             <input
               type="checkbox"
@@ -346,11 +360,53 @@ export default function Activity() {
           </Button>
         )}
         {tracking && (
-          <Button fullWidth size="lg" variant="danger" onClick={handleStop} className="bg-surface shadow-lg">
+          <Button fullWidth size="lg" variant="danger" onClick={requestStop} className="bg-surface shadow-lg">
             <Icon name="stop" size={18} /> Finish
           </Button>
         )}
       </div>
+
+      {confirmFinish && (
+        <Modal title="Finish workout?" onClose={() => setConfirmFinish(false)}>
+          {(close) => (
+            <div className="space-y-4 text-center">
+              <p className="text-sm text-muted">
+                You've recorded <b>{distanceKm.toFixed(2)} km</b> in <b>{formatDuration(elapsedSec)}</b>.
+                {distanceKm < 0.05 && (
+                  <span className="mt-1 block text-xs font-semibold text-warning">
+                    Note: Activities under 50 meters are too short to earn Rank Points.
+                  </span>
+                )}
+              </p>
+              <div className="space-y-2">
+                <Button fullWidth onClick={() => close(confirmStop)}>
+                  <Icon name="check" size={16} /> Finish & verify
+                </Button>
+                <Button
+                  variant="secondary"
+                  fullWidth
+                  onClick={() =>
+                    close(() => {
+                      setConfirmFinish(false);
+                      handleResume();
+                    })
+                  }
+                >
+                  <Icon name="play" size={16} /> Keep going
+                </Button>
+                <Button
+                  variant="ghost"
+                  fullWidth
+                  className="!text-danger hover:!bg-danger/10"
+                  onClick={() => close(discardWorkout)}
+                >
+                  Discard workout
+                </Button>
+              </div>
+            </div>
+          )}
+        </Modal>
+      )}
 
       {prompt && (
         <LocationPrompt

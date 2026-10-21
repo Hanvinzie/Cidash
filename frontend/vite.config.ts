@@ -46,6 +46,12 @@ export default defineConfig({
     port: 5173,
     host: true,
     allowedHosts: true, // izinkan domain tunnel (ngrok) — hanya berlaku untuk dev server
+    proxy: {
+      '/auth': { target: 'http://localhost:3000', changeOrigin: true },
+      '/squads': { target: 'http://localhost:3000', changeOrigin: true },
+      '/quests': { target: 'http://localhost:3000', changeOrigin: true },
+      '/activities': { target: 'http://localhost:3000', changeOrigin: true },
+    },
   },
   plugins: [
     react(),

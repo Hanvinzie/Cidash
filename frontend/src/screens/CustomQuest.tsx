@@ -24,15 +24,15 @@ const defaultDeadline = () => hoursFromNow(24);
 const DEADLINE_PRESETS = [6, 12, 24, 48];
 
 export default function CustomQuest() {
-  const { user, members, bombMissions, sendBomb, acceptBomb, rejectBomb } = useApp();
+  const { user, members, bombMissions, sendBomb, acceptBomb, rejectBomb, useShield } = useApp();
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<QuestDirection>('incoming');
   const [showForm, setShowForm] = useState(false);
+  const [confirmDeclineId, setConfirmDeclineId] = useState<string | null>(null);
 
   // Bomb mission form state
   const [targetUserId, setTargetUserId] = useState(members[0]?.id ?? '');
-  // Anggota bisa berubah setelah sinkron backend — jatuhkan ke anggota pertama bila pilihan lama hilang.
   const effectiveTargetId = members.some((m) => m.id === targetUserId) ? targetUserId : (members[0]?.id ?? '');
   const [activityType, setActivityType] = useState<ActivityType>('run');
   const [targetKm, setTargetKm] = useState(3);
@@ -42,6 +42,8 @@ export default function CustomQuest() {
   const canWager = maxWager >= MIN_WAGER;
   const [wager, setWager] = useState(Math.max(MIN_WAGER, Math.min(20, maxWager)));
   const effectiveWager = Math.min(wager, maxWager);
+
+  const shieldCount = user.shieldTickets ?? 0;
 
   const counts = {
     incoming: bombMissions.filter((q) => q.direction === 'incoming').length,
@@ -72,6 +74,22 @@ export default function CustomQuest() {
 
   return (
     <div className="space-y-6">
+      {/* Shield Ticket balance info */}
+      <div className="flex items-center justify-between rounded-2xl border border-line/70 bg-surface px-4 py-3 shadow-card">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
+            <Icon name="shield" size={18} />
+          </span>
+          <div>
+            <p className="text-xs font-bold">Shield Tickets</p>
+            <p className="text-[11px] text-subtle">Blocks RP penalty when declining a mission</p>
+          </div>
+        </div>
+        <Badge tone={shieldCount > 0 ? 'primary' : 'neutral'}>
+          {shieldCount} {shieldCount === 1 ? 'ticket' : 'tickets'}
+        </Badge>
+      </div>
+
       {/* Create Bomb Mission */}
       <Card className={showForm ? 'border-cidash-primary/40' : ''}>
         <button
@@ -167,7 +185,7 @@ export default function CustomQuest() {
                 {canWager ? (
                   <div className="rounded-xl bg-inset p-3">
                     <Input
-                      label={`Wager: ${effectiveWager} coins`}
+                      label={`Cost: ${effectiveWager} coins`}
                       type="range"
                       min={MIN_WAGER}
                       max={maxWager}
@@ -177,8 +195,8 @@ export default function CustomQuest() {
                       className="border-0 bg-transparent px-0 accent-cidash-primary focus:ring-0"
                     />
                     <div className="mt-1 grid grid-cols-2 gap-2 text-center text-xs font-semibold">
-                      <span className="rounded-lg bg-success/10 py-1.5 text-success">Win +{effectiveWager * 2} RP</span>
-                      <span className="rounded-lg bg-danger/10 py-1.5 text-danger">Lose −{effectiveWager} RP</span>
+                      <span className="rounded-lg bg-success/10 py-1.5 text-success">Target Stakes: +{effectiveWager * 2} RP</span>
+                      <span className="rounded-lg bg-danger/10 py-1.5 text-danger">Fail Penalty: −{effectiveWager * 2} RP</span>
                     </div>
                   </div>
                 ) : (
@@ -257,19 +275,64 @@ export default function CustomQuest() {
                   </div>
 
                   {q.direction === 'incoming' && q.status === 'pending' && (
-                    <div className="mt-3 flex gap-2">
-                      <Button size="sm" variant="secondary" fullWidth onClick={() => rejectBomb(q.id)}>
-                        Decline
-                      </Button>
-                      <Button size="sm" fullWidth onClick={() => handleAccept(q.id)}>
-                        Accept & start
-                      </Button>
-                    </div>
+                    confirmDeclineId === q.id ? (
+                      <div className="mt-3 rounded-xl border border-danger/30 bg-danger/5 p-3 text-center">
+                        <p className="mb-2 text-xs font-semibold text-ink">
+                          {shieldCount > 0
+                            ? 'Use 1 Shield Ticket to block this challenge with 0 RP penalty?'
+                            : `Declining without a Shield Ticket will deduct ${q.penaltyRankPoints} RP. Continue?`}
+                        </p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="secondary" fullWidth onClick={() => setConfirmDeclineId(null)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={shieldCount > 0 ? 'primary' : 'danger'}
+                            fullWidth
+                            onClick={() => {
+                              setConfirmDeclineId(null);
+                              if (shieldCount > 0) useShield(q.id);
+                              else rejectBomb(q.id);
+                            }}
+                          >
+                            {shieldCount > 0 ? 'Use Shield (0 RP)' : `Decline (−${q.penaltyRankPoints} RP)`}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          fullWidth
+                          onClick={() => setConfirmDeclineId(q.id)}
+                        >
+                          {shieldCount > 0 ? (
+                            <>
+                              <Icon name="shield" size={14} /> Shield
+                            </>
+                          ) : (
+                            'Decline'
+                          )}
+                        </Button>
+                        <Button size="sm" fullWidth onClick={() => handleAccept(q.id)}>
+                          Accept & start
+                        </Button>
+                      </div>
+                    )
                   )}
                   {q.direction === 'incoming' && q.status === 'in_progress' && (
-                    <Button size="sm" fullWidth className="mt-3" onClick={() => navigate(activityFor(q.id))}>
-                      Continue <Icon name="chevronRight" size={14} />
-                    </Button>
+                    <div className="mt-3 flex gap-2">
+                      {shieldCount > 0 && (
+                        <Button size="sm" variant="secondary" onClick={() => useShield(q.id)}>
+                          <Icon name="shield" size={14} /> Shield
+                        </Button>
+                      )}
+                      <Button size="sm" fullWidth onClick={() => navigate(activityFor(q.id))}>
+                        Continue <Icon name="chevronRight" size={14} />
+                      </Button>
+                    </div>
                   )}
                 </Card>
               </li>
