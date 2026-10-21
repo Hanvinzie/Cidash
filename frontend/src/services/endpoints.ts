@@ -16,7 +16,7 @@ export const ENDPOINTS = {
     join: 'POST /squads/join', // [ADA] body: { code }
     mine: 'GET /squads/my', // [ADA]
     detail: 'GET /squads/:id', // [ADA]
-    leaderboard: 'GET /squads/:id/leaderboard', // [ADA]
+    leaderboard: 'GET /squads/:id/leaderboard', // [ADA] juga sumber daftar anggota (berisi role CAPTAIN/MEMBER)
     leave: 'POST /squads/:id/leave', // [ADA]
     missions: 'GET /squads/:id/missions', // [BELUM] misi harian/mingguan grup
   },

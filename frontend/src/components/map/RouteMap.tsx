@@ -30,10 +30,17 @@ export default function RouteMap({ points, here }: RouteMapProps) {
     <MapContainer
       center={latest ?? DEFAULT_CENTER}
       zoom={16}
+      // Peta statis (mengikuti posisi otomatis) — jari yang menyentuh peta tetap men-scroll halaman.
+      dragging={false}
+      touchZoom={false}
+      doubleClickZoom={false}
+      scrollWheelZoom={false}
+      boxZoom={false}
+      keyboard={false}
       zoomControl={false}
       attributionControl
-      keyboard={false}
       className="h-full w-full"
+      style={{ touchAction: 'pan-y' }}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

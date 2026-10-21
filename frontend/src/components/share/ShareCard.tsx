@@ -29,7 +29,13 @@ interface ShareCardProps {
   username: string;
 }
 
-const label: CSSProperties = { fontSize: 10, fontWeight: 600, letterSpacing: 1, textTransform: 'uppercase', color: C.soft };
+const label: CSSProperties = {
+  fontSize: 10,
+  fontWeight: 600,
+  letterSpacing: 1,
+  textTransform: 'uppercase',
+  color: C.soft,
+};
 
 /**
  * Kartu 360×640 (diekspor ×3 = 1080×1920, rasio IG Story). Style inline + ukuran tetap
@@ -60,27 +66,34 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
       }}
     >
       {/* Ornamen lingkaran khas kartu saldo Cidash */}
-      <div style={{ position: 'absolute', right: -90, top: -90, width: 260, height: 260, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
-      <div style={{ position: 'absolute', left: -120, bottom: 120, width: 240, height: 240, borderRadius: '50%', background: 'rgba(0,0,0,0.06)' }} />
+      <div
+        style={{
+          position: 'absolute',
+          right: -90,
+          top: -90,
+          width: 260,
+          height: 260,
+          borderRadius: '50%',
+          background: 'rgba(255,255,255,0.08)',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          left: -120,
+          bottom: 120,
+          width: 240,
+          height: 240,
+          borderRadius: '50%',
+          background: 'rgba(0,0,0,0.06)',
+        }}
+      />
 
       {/* Header */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div
-            style={{
-              width: 30,
-              height: 30,
-              borderRadius: 9,
-              background: C.white,
-              color: C.red,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 17,
-              fontWeight: 800,
-            }}
-          >
-            C
+          <div style={{ width: 30, height: 30, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ width: 18, height: 18, background: C.white, borderRadius: 1 }} />
           </div>
           <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.3 }}>Cidash</span>
         </div>
@@ -114,9 +127,20 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
       </div>
 
       {/* Metrik */}
-      <div style={{ position: 'relative', display: 'flex', marginTop: 16, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
+      <div
+        style={{
+          position: 'relative',
+          display: 'flex',
+          marginTop: 16,
+          paddingTop: 14,
+          borderTop: `1px solid ${C.line}`,
+        }}
+      >
         {metrics.map((m, i) => (
-          <div key={m.label} style={{ flex: 1, paddingLeft: i ? 14 : 0, borderLeft: i ? `1px solid ${C.line}` : 'none' }}>
+          <div
+            key={m.label}
+            style={{ flex: 1, paddingLeft: i ? 14 : 0, borderLeft: i ? `1px solid ${C.line}` : 'none' }}
+          >
             <p style={{ margin: 0, fontSize: 20, fontWeight: 800 }}>{m.value}</p>
             <p style={{ ...label, margin: '2px 0 0' }}>{m.label}</p>
           </div>
@@ -164,7 +188,16 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
             <QRCodeSVG value={joinLink(log.circle.code)} size={68} level="M" fgColor={C.ink} bgColor={C.white} />
             <div style={{ minWidth: 0, flex: 1 }}>
               <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#6B7280' }}>Run with @{username}</p>
-              <p style={{ margin: '1px 0 4px', fontSize: 14, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              <p
+                style={{
+                  margin: '1px 0 4px',
+                  fontSize: 14,
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
                 {log.circle.name}
               </p>
               <span

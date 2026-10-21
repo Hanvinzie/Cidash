@@ -32,6 +32,16 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
     [onClose],
   );
 
+  // Kunci scroll halaman di belakang sheet.
+  useEffect(() => {
+    const html = document.documentElement;
+    const prev = html.style.overflow;
+    html.style.overflow = 'hidden';
+    return () => {
+      html.style.overflow = prev;
+    };
+  }, []);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
     document.addEventListener('keydown', onKey);

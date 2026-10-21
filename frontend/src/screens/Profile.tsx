@@ -14,7 +14,8 @@ import { formatDuration } from '../lib/geo';
 import { useApp } from '../store/AppContext';
 import { useTheme, type ThemePreference } from '../store/ThemeContext';
 import { circleOnboarding, ROUTES } from '../routes';
-import type { ActivityLog } from '../types';
+import CircleMembersSheet from '../components/circle/CircleMembersSheet';
+import type { ActivityLog, Circle } from '../types';
 
 const SETTINGS: { label: string; icon: IconName }[] = [
   { label: 'Edit profile', icon: 'edit' },
@@ -29,6 +30,7 @@ export default function Profile() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [shareLog, setShareLog] = useState<ActivityLog | null>(null);
+  const [membersCircle, setMembersCircle] = useState<Circle | null>(null);
   const showTopUp = params.get('topup') === '1';
 
   const totalKm = activityHistory.reduce((sum, a) => sum + a.distanceKm, 0);
@@ -168,7 +170,7 @@ export default function Profile() {
               <li key={c.id}>
                 <button
                   type="button"
-                  onClick={() => handleOpenCircle(c.id)}
+                  onClick={() => setMembersCircle(c)}
                   className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-inset active:bg-inset"
                 >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
@@ -200,9 +202,30 @@ export default function Profile() {
               value={preference}
               onChange={setPreference}
               options={[
-                { value: 'light', label: <><Icon name="sun" size={16} /> Light</> },
-                { value: 'dark', label: <><Icon name="moon" size={16} /> Dark</> },
-                { value: 'system', label: <><Icon name="monitor" size={16} /> Auto</> },
+                {
+                  value: 'light',
+                  label: (
+                    <>
+                      <Icon name="sun" size={16} /> Light
+                    </>
+                  ),
+                },
+                {
+                  value: 'dark',
+                  label: (
+                    <>
+                      <Icon name="moon" size={16} /> Dark
+                    </>
+                  ),
+                },
+                {
+                  value: 'system',
+                  label: (
+                    <>
+                      <Icon name="monitor" size={16} /> Auto
+                    </>
+                  ),
+                },
               ]}
             />
           </div>
@@ -227,6 +250,17 @@ export default function Profile() {
       <Button variant="danger" fullWidth onClick={handleLogout}>
         <Icon name="logout" size={18} /> Sign out
       </Button>
+
+      {membersCircle && (
+        <CircleMembersSheet
+          circle={membersCircle}
+          onClose={() => setMembersCircle(null)}
+          onOpenCircle={() => {
+            setMembersCircle(null);
+            handleOpenCircle(membersCircle.id);
+          }}
+        />
+      )}
 
       {shareLog && (
         <Suspense fallback={null}>

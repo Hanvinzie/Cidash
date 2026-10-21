@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, ReactNode } from 'react';
 
 const controlClass =
   'w-full rounded-xl border border-line bg-inset px-3 py-2.5 text-base text-ink sm:text-sm placeholder:text-subtle outline-none transition focus:border-cidash-primary focus:bg-surface disabled:opacity-60';
@@ -23,32 +23,6 @@ export function Input({ label, hint, className = '', id, ...rest }: FieldProps &
         </label>
       )}
       <input id={inputId} className={`${controlClass} ${className}`} {...rest} />
-      {hint && <div className="mt-1.5 text-[11px] text-subtle">{hint}</div>}
-    </div>
-  );
-}
-
-/** Labeled select. */
-export function Select({
-  label,
-  hint,
-  className = '',
-  id,
-  children,
-  ...rest
-}: FieldProps & SelectHTMLAttributes<HTMLSelectElement>) {
-  const autoId = useId();
-  const selectId = id ?? autoId;
-  return (
-    <div>
-      {label && (
-        <label htmlFor={selectId} className={labelClass}>
-          {label}
-        </label>
-      )}
-      <select id={selectId} className={`${controlClass} ${className}`} {...rest}>
-        {children}
-      </select>
       {hint && <div className="mt-1.5 text-[11px] text-subtle">{hint}</div>}
     </div>
   );
