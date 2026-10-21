@@ -7,6 +7,8 @@ const token = (name) => `rgb(var(--c-${name}) / <alpha-value>)`;
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   darkMode: 'class',
+  // hover: hanya aktif di perangkat yang punya hover sungguhan (mouse) — di HP tidak ada state hover "nyangkut".
+  future: { hoverOnlyWhenSupported: true },
   theme: {
     extend: {
       fontFamily: {

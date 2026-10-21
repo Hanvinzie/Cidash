@@ -49,19 +49,60 @@
     --c-danger: 248 113 113; /* #F87171 */
   }
 
+  /*
+   * App shell native: dokumen tidak pernah scroll / bounce (header & nav terkunci).
+   * Yang scroll hanya container .scroll-area di dalam layout.
+   */
   html,
   body,
   #root {
-    min-height: 100%;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   body {
     @apply m-0 bg-canvas font-sans text-ink antialiased;
     -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+    touch-action: manipulation; /* tanpa double-tap zoom & delay 300 ms */
   }
 
+  /* Elemen kontrol tidak bisa diseleksi / di-long-press seperti teks web. */
+  button,
+  a,
+  nav,
+  [role='tab'] {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  img,
+  svg {
+    -webkit-user-drag: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Sembunyikan scrollbar di semua browser (scroll tetap berfungsi). */
+  * {
+    scrollbar-width: none;
+  }
+  *::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Tidak ada outline/kotak merah saat disentuh; ring fokus hanya untuk keyboard di desktop. */
+  :focus,
   :focus-visible {
-    @apply outline-none ring-2 ring-cidash-primary ring-offset-2 ring-offset-canvas;
+    outline: none;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    button:focus-visible,
+    a:focus-visible,
+    [role='tab']:focus-visible {
+      @apply ring-2 ring-cidash-primary/60 ring-offset-2 ring-offset-canvas;
+    }
   }
 }
 
@@ -69,11 +110,114 @@
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom);
   }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  /* Area scroll internal: momentum scroll, tanpa menarik dokumen di belakangnya. */
+  .scroll-area {
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .animate-page {
+    animation: page-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .animate-fade-in {
+    animation: fade-in 200ms ease-out both;
+  }
+  .animate-fade-out {
+    animation: fade-in 180ms ease-in reverse both;
+  }
+  .animate-sheet-up {
+    /* fill backwards: setelah selesai, transform dari drag (inline style) tetap berlaku */
+    animation: sheet-up 280ms cubic-bezier(0.2, 0.9, 0.25, 1) backwards;
+  }
+  .animate-sheet-down {
+    animation: sheet-down 200ms ease-in forwards;
+  }
+  .animate-toast {
+    animation: toast-in 420ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+  .animate-rise {
+    animation: rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+}
+
+/* --page-dir: 1 = tab di kanan, -1 = tab di kiri (diset AppLayout). */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateX(calc(var(--page-dir, 0) * 16px)) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes sheet-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes sheet-down {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateY(100%);
+  }
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-120%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }
 
 /* Peta OSM lebih gelap di dark mode (hanya layer tile; rute merah tidak ikut terinversi). */
 .dark .leaflet-tile-pane {
   filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+
+.leaflet-container {
+  outline: none !important;
 }
 
 .leaflet-container .leaflet-control-attribution {

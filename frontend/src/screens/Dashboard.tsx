@@ -91,7 +91,7 @@ export default function Dashboard() {
           <button
             type="button"
             onClick={handleShare}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-inset px-3 py-2 transition hover:bg-line"
+            className="flex shrink-0 items-center gap-2 rounded-xl bg-inset px-3 py-2 transition hover:bg-line active:scale-95"
             aria-label={`Share invite code ${activeCircle.code}`}
           >
             <span className="font-mono text-sm font-bold tracking-widest text-cidash-primary">{activeCircle.code}</span>
@@ -134,8 +134,10 @@ export default function Dashboard() {
           className="relative flex flex-col items-start gap-3 rounded-2xl border border-line/70 bg-surface p-4 text-left shadow-card transition hover:border-cidash-primary/60 active:scale-[0.98]"
         >
           {liveRoom?.status === 'live' && (
-            <span className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-danger/15 px-2 py-0.5 text-[10px] font-bold text-danger">
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-danger" /> LIVE
+            <span className="absolute right-4 top-4">
+              <Badge tone="danger" dot pulse>
+                Live
+              </Badge>
             </span>
           )}
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
