@@ -13,6 +13,7 @@ import { SquadsService } from './squads.service';
 import { CreateSquadDto, JoinSquadDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RateLimit } from '../common/guards/rate-limit.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('squads')
@@ -22,6 +23,7 @@ export class SquadsController {
   /**
    * Membuat Circle baru dengan kode 8 karakter acak unik dan menetapkan pembuat sebagai CAPTAIN.
    */
+  @RateLimit(10, 60_000)
   @Post()
   async createSquad(
     @CurrentUser('id') userId: string,
@@ -33,6 +35,7 @@ export class SquadsController {
   /**
    * Bergabung ke dalam Circle menggunakan kode undangan 8 karakter.
    */
+  @RateLimit(10, 60_000)
   @HttpCode(HttpStatus.OK)
   @Post('join')
   async joinSquad(

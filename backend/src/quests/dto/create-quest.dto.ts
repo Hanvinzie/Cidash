@@ -28,6 +28,8 @@ export class CreateQuestDto {
 
   @IsNumber({}, { message: 'targetDistance harus berupa angka dalam meter' })
   @IsPositive({ message: 'targetDistance harus bernilai positif' })
+  @Min(100, { message: 'targetDistance minimal 100 meter' })
+  @Max(200000, { message: 'targetDistance maksimal 200 km' })
   targetDistance: number;
 
   @IsOptional()
@@ -39,6 +41,12 @@ export class CreateQuestDto {
   @Min(5, { message: 'Taruhan minimal 5 poin' })
   @Max(500, { message: 'Taruhan maksimal 500 poin' })
   stakesPoints: number;
+
+  @IsOptional()
+  @IsInt({ message: 'wagerCoins harus berupa bilangan bulat' })
+  @Min(5, { message: 'Taruhan koin minimal 5 koin' })
+  @Max(100, { message: 'Taruhan koin maksimal 100 koin' })
+  wagerCoins?: number;
 
   @IsOptional()
   @IsString({ message: 'rewardTitle harus berupa teks' })

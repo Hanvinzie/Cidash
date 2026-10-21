@@ -15,13 +15,19 @@ interface CircleMembersSheetProps {
   onOpenCircle?: () => void;
 }
 
-/** Bottom sheet daftar anggota circle: role, status lari live, Rank Points & jarak season. */
+/** Bottom sheet daftar anggota circle: role, status lari live, Rank Points, Kick (Captain), & Leave Circle. */
 export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: CircleMembersSheetProps) {
-  const { membersOf } = useApp();
+  const { membersOf, leaveCircle, kickMember } = useApp();
   const members = membersOf(circle.id);
+  const myMember = members.find((m) => m.isMe);
+  const amCaptain = myMember?.role === 'captain';
+
   const rooms = useLiveRooms(circle.id);
   const runningNow = new Set(rooms.filter((r) => r.status === 'live').flatMap((r) => r.participants.map((p) => p.userId)));
   const [copied, setCopied] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const [kickingUserId, setKickingUserId] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function shareInvite() {
     const text = `Join my circle "${circle.name}" on Cidash with code: ${circle.code}`;
@@ -34,6 +40,26 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
       }
     } catch {
       /* dibatalkan user */
+    }
+  }
+
+  async function handleKick(userId: string) {
+    setBusy(true);
+    try {
+      await kickMember(circle.id, userId);
+      setKickingUserId(null);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleLeave(close: (after?: () => void) => void) {
+    setBusy(true);
+    try {
+      await leaveCircle(circle.id);
+      close();
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -75,6 +101,38 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
                   {m.rankPoints.toLocaleString('en-US')}
                   <span className="block text-[10px] font-medium text-subtle">RP</span>
                 </span>
+
+                {amCaptain && !m.isMe && (
+                  kickingUserId === m.id ? (
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleKick(m.id)}
+                        className="rounded-lg bg-danger px-2 py-1 text-[11px] font-bold text-white"
+                      >
+                        Kick
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setKickingUserId(null)}
+                        className="rounded-lg bg-inset px-2 py-1 text-[11px] font-semibold text-muted"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setKickingUserId(m.id)}
+                      aria-label={`Remove @${m.username} from circle`}
+                      className="rounded-lg p-1.5 text-subtle transition hover:bg-danger/10 hover:text-danger"
+                    >
+                      <Icon name="close" size={15} />
+                    </button>
+                  )
+                )}
               </li>
             ))}
           </ul>
@@ -88,6 +146,47 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
               <Button fullWidth onClick={() => close(onOpenCircle)}>
                 Open circle <Icon name="chevronRight" size={16} />
               </Button>
+            )}
+
+            {!confirmLeave ? (
+              <Button
+                fullWidth
+                variant="ghost"
+                className="!text-danger hover:!bg-danger/10"
+                onClick={() => setConfirmLeave(true)}
+              >
+                <Icon name="logout" size={15} /> Leave circle
+              </Button>
+            ) : (
+              <div className="rounded-xl border border-danger/30 bg-danger/5 p-3 text-center">
+                <p className="mb-2.5 text-xs font-semibold text-ink">
+                  {amCaptain && members.length > 1
+                    ? 'Leave this circle? Captain role will transfer to the next longest-standing member.'
+                    : amCaptain
+                      ? 'Leave and delete this circle? You are the only member.'
+                      : `Are you sure you want to leave "${circle.name}"?`}
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    fullWidth
+                    disabled={busy}
+                    onClick={() => setConfirmLeave(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    fullWidth
+                    disabled={busy}
+                    onClick={() => void handleLeave(close)}
+                  >
+                    {busy ? 'Leaving…' : 'Confirm leave'}
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
         </div>

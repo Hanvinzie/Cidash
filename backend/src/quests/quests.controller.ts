@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
+  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -13,6 +15,7 @@ import { QuestsService } from './quests.service';
 import { CreateQuestDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { RateLimit } from '../common/guards/rate-limit.guard';
 
 @UseGuards(JwtAuthGuard)
 @Controller('quests')
@@ -23,6 +26,7 @@ export class QuestsController {
    * Mengirimkan Bomb Mission P2P ke teman satu Circle.
    * Saldo koin pembuat diverifikasi dan dipotong secara otomatis.
    */
+  @RateLimit(20, 60_000)
   @Post()
   async createQuest(
     @CurrentUser('id') creatorId: string,
@@ -45,6 +49,7 @@ export class QuestsController {
   /**
    * Menggunakan Shield Ticket untuk membatalkan penalti dari misi aktif.
    */
+  @RateLimit(15, 60_000)
   @HttpCode(HttpStatus.OK)
   @Post(':id/shield')
   async useShieldTicket(
@@ -57,6 +62,7 @@ export class QuestsController {
   /**
    * Menerima tantangan misi (mengubah status PENDING menjadi ACCEPTED).
    */
+  @RateLimit(20, 60_000)
   @HttpCode(HttpStatus.OK)
   @Post(':id/accept')
   async acceptQuest(
@@ -69,6 +75,7 @@ export class QuestsController {
   /**
    * Menolak tantangan misi (menggunakan Shield Ticket jika tersedia, atau menyerah/FAILED).
    */
+  @RateLimit(20, 60_000)
   @HttpCode(HttpStatus.OK)
   @Post(':id/reject')
   async rejectQuest(
@@ -92,9 +99,14 @@ export class QuestsController {
   /**
    * Endpoint pemicu manual untuk mengecek dan memproses misi yang kedaluwarsa.
    */
+  @RateLimit(3, 60_000)
   @HttpCode(HttpStatus.OK)
   @Post('cron/expire-check')
-  async triggerExpireCheck() {
+  async triggerExpireCheck(@Headers('x-cron-secret') cronSecret?: string) {
+    const requiredSecret = process.env.CRON_SECRET?.trim();
+    if (requiredSecret && cronSecret !== requiredSecret) {
+      throw new ForbiddenException('Cron secret tidak valid');
+    }
     return this.questsService.expireOverdueQuests();
   }
 }

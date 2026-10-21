@@ -36,6 +36,8 @@ export class QuestsService {
       );
     }
 
+    const missionFee = createQuestDto.wagerCoins ?? BOMB_MISSION_FEE;
+
     // Verifikasi bahwa pembuat dan target sama-sama merupakan anggota circle yang dituju
     const [creatorMember, targetMember] = await Promise.all([
       this.prisma.squadMember.findUnique({
@@ -74,22 +76,28 @@ export class QuestsService {
       select: { id: true, coinBalance: true, name: true },
     });
 
-    if (!creator || creator.coinBalance < BOMB_MISSION_FEE) {
+    if (!creator || creator.coinBalance < missionFee) {
       throw new BadRequestException(
-        `Saldo koin tidak mencukupi. Diperlukan ${BOMB_MISSION_FEE} koin untuk mengirimkan Bomb Mission. Saldo saat ini: ${creator?.coinBalance ?? 0} koin.`,
+        `Saldo koin tidak mencukupi. Diperlukan ${missionFee} koin untuk mengirimkan Bomb Mission. Saldo saat ini: ${creator?.coinBalance ?? 0} koin.`,
       );
     }
 
     // Eksekusi transaksi atomik pemotongan koin, pencatatan mutasi koin, dan pembuatan misi
     const result = await this.prisma.$transaction(async (tx) => {
-      // 1. Potong saldo koin pembuat
+      // 1. Potong saldo koin pembuat dan pastikan tidak menjadi negatif akibat race condition
       const updatedCreator = await tx.user.update({
         where: { id: creatorId },
         data: {
-          coinBalance: { decrement: BOMB_MISSION_FEE },
+          coinBalance: { decrement: missionFee },
         },
         select: { coinBalance: true },
       });
+
+      if (updatedCreator.coinBalance < 0) {
+        throw new BadRequestException(
+          'Saldo koin tidak mencukupi untuk menyelesaikan transaksi ini.',
+        );
+      }
 
       // 2. Buat record Quest
       const quest = await tx.quest.create({
@@ -107,7 +115,7 @@ export class QuestsService {
         },
         include: {
           squad: { select: { id: true, name: true } },
-          targetUser: { select: { id: true, name: true, email: true } },
+          targetUser: { select: { id: true, name: true } },
         },
       });
 
@@ -115,7 +123,7 @@ export class QuestsService {
       await tx.coinTransaction.create({
         data: {
           userId: creatorId,
-          amount: -BOMB_MISSION_FEE,
+          amount: -missionFee,
           type: CoinTxType.BOMB_MISSION_FEE,
           reference: `BOMB-${quest.id.substring(0, 8)}`,
         },
@@ -126,7 +134,7 @@ export class QuestsService {
 
     return {
       message: 'Bomb Mission berhasil dikirimkan ke teman satu Circle',
-      cost: BOMB_MISSION_FEE,
+      cost: missionFee,
       remainingCoinBalance: result.remainingCoinBalance,
       quest: result.quest,
     };
@@ -265,12 +273,19 @@ export class QuestsService {
 
     // Transaksi atomik pengurangan 1 shield ticket dan pembaruan status misi menjadi SHIELDED
     const updatedQuest = await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
+      const updatedUser = await tx.user.update({
         where: { id: userId },
         data: {
           shieldTickets: { decrement: 1 },
         },
+        select: { shieldTickets: true },
       });
+
+      if (updatedUser.shieldTickets < 0) {
+        throw new BadRequestException(
+          'Anda tidak memiliki Shield Ticket yang dapat digunakan',
+        );
+      }
 
       return tx.quest.update({
         where: { id: questId },
@@ -285,6 +300,7 @@ export class QuestsService {
         'Shield Ticket berhasil digunakan. Pinalti poin dan status misi telah dinetralkan.',
       questId: updatedQuest.id,
       status: updatedQuest.status,
+      shielded: true,
     };
   }
 
@@ -371,6 +387,7 @@ export class QuestsService {
       questId: updated.id,
       status: updated.status,
       penaltyPoints: penaltyAmount,
+      shielded: false,
     };
   }
 
@@ -423,8 +440,8 @@ export class QuestsService {
       where: { id: questId },
       include: {
         squad: { select: { id: true, name: true, inviteCode: true } },
-        creator: { select: { id: true, name: true, email: true } },
-        targetUser: { select: { id: true, name: true, email: true } },
+        creator: { select: { id: true, name: true } },
+        targetUser: { select: { id: true, name: true } },
       },
     });
 

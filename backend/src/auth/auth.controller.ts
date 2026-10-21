@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   Body,
   Controller,
   Get,
@@ -10,18 +9,21 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { LoginDto, RegisterDto } from './dto';
+import { LoginDto, RegisterDto, TopUpDto } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RateLimit } from '../common/guards/rate-limit.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
+  @RateLimit(10, 60_000)
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
   }
 
+  @RateLimit(12, 60_000)
   @HttpCode(HttpStatus.OK)
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
@@ -34,17 +36,14 @@ export class AuthController {
     return this.authService.getProfile(user.id);
   }
 
+  @RateLimit(15, 60_000)
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @Post('top-up')
   async topUp(
     @CurrentUser('id') userId: string,
-    @Body() body: { coins?: number },
+    @Body() topUpDto: TopUpDto,
   ) {
-    const coins = Number(body?.coins ?? 0);
-    if (!Number.isFinite(coins) || coins <= 0) {
-      throw new BadRequestException('Jumlah koin top-up harus lebih dari 0');
-    }
-    return this.authService.topUpCoins(userId, Math.round(coins));
+    return this.authService.topUpCoins(userId, topUpDto.coins);
   }
 }

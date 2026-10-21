@@ -67,6 +67,19 @@ describe('ActivitiesService', () => {
       }).toThrow(BadRequestException);
     });
 
+    it('should reject when requireRoutePoints is true and fewer than 2 coordinates are given', () => {
+      expect(() => {
+        antiCheatService.validateActivity(
+          ActivityType.RUNNING,
+          5000,
+          1800,
+          6.0,
+          [],
+          true,
+        );
+      }).toThrow(BadRequestException);
+    });
+
     it('should pass normal running activity', () => {
       const result = antiCheatService.validateActivity(
         ActivityType.RUNNING,
@@ -82,12 +95,17 @@ describe('ActivitiesService', () => {
   describe('createActivity', () => {
     it('should record activity and complete matching active quest', async () => {
       const userId = 'user-1';
+      // 10 titik dengan jarak ~500m per langkah (~5 km total)
+      const coordinates = Array.from({ length: 11 }, (_, i) => [
+        106.8 + i * 0.0045,
+        -6.2,
+      ]);
       const dto = {
         type: ActivityType.RUNNING,
         distanceMeters: 5200,
         durationSeconds: 1800,
-        averagePace: 5.76,
-        routeGeoJson: { type: 'LineString', coordinates: [[106.8, -6.2], [106.81, -6.21]] },
+        averagePace: 5.77,
+        routeGeoJson: { type: 'LineString', coordinates },
         startedAt: new Date(Date.now() - 3600000).toISOString(),
         endedAt: new Date().toISOString(),
       };
