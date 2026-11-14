@@ -49,19 +49,73 @@ export function watchPermission(cb: (state: PermissionState) => void): () => voi
 }
 
 /**
- * Minta satu posisi. Memicu prompt izin native browser bila belum pernah ditanya.
- * Reject dengan LocationError(issue) bila gagal.
+ * Meminta posisi GPS segar dengan akurasi terbaik.
+ * Menggunakan watchPosition singkat (warm-up maks ~2.5 detik setelah fix pertama)
+ * bila fix awal masih kasar (> 25m, mis. estimasi menara seluler/Wi-Fi),
+ * lalu mengembalikan sampel paling akurat.
  */
-export function requestPosition(timeoutMs = 8000): Promise<GeolocationPosition> {
+export function requestPosition(timeoutMs = 10_000, targetAccuracyM = 25): Promise<GeolocationPosition> {
   if (!window.isSecureContext) return Promise.reject(new LocationError('insecure'));
   if (!('geolocation' in navigator)) return Promise.reject(new LocationError('unsupported'));
-  return new Promise((resolve, reject) =>
-    navigator.geolocation.getCurrentPosition(resolve, (err) => reject(new LocationError(issueFromError(err))), {
-      enableHighAccuracy: true,
-      timeout: timeoutMs,
-      maximumAge: 15_000,
-    }),
-  );
+
+  return new Promise((resolve, reject) => {
+    let bestPos: GeolocationPosition | null = null;
+    let watchId: number | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+
+    const cleanup = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (settleTimer !== null) clearTimeout(settleTimer);
+      clearTimeout(hardTimeout);
+    };
+
+    const finishWith = (pos: GeolocationPosition) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve(pos);
+    };
+
+    const failWith = (err: LocationError) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (bestPos) resolve(bestPos);
+      else reject(err);
+    };
+
+    const hardTimeout = setTimeout(() => {
+      failWith(new LocationError('timeout'));
+    }, timeoutMs);
+
+    watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        if (!bestPos || pos.coords.accuracy <= bestPos.coords.accuracy) {
+          bestPos = pos;
+        }
+        // Jika akurasi sudah tajam (<= 25m), langsung kembalikan tanpa menunggu.
+        if (pos.coords.accuracy <= targetAccuracyM) {
+          finishWith(pos);
+          return;
+        }
+        // Jika fix pertama masih agak kasar, beri waktu singkat (1.8 detik) untuk lock satelit GPS yang lebih tajam.
+        if (settleTimer === null) {
+          settleTimer = setTimeout(() => {
+            if (bestPos) finishWith(bestPos);
+          }, 1800);
+        }
+      },
+      (err) => {
+        failWith(new LocationError(issueFromError(err)));
+      },
+      {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: timeoutMs,
+      },
+    );
+  });
 }
 
 export const platform = (): 'ios' | 'android' | 'other' => {
