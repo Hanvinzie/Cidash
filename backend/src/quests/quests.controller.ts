@@ -7,6 +7,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   Query,
   UseGuards,
@@ -38,6 +39,7 @@ export class QuestsController {
   /**
    * Mengambil daftar seluruh misi aktif yang sedang berjalan di Circle pengguna.
    */
+  @RateLimit(60, 60_000)
   @Get('active')
   async getActiveQuests(
     @CurrentUser('id') userId: string,
@@ -53,10 +55,23 @@ export class QuestsController {
   @HttpCode(HttpStatus.OK)
   @Post(':id/shield')
   async useShieldTicket(
-    @Param('id') questId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) questId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.questsService.useShieldTicket(questId, userId);
+  }
+
+  /**
+   * Memperpanjang deadline Bomb Mission (+12 jam) dengan 10 koin (maks 1x per misi).
+   */
+  @RateLimit(15, 60_000)
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/snooze')
+  async snoozeQuest(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) questId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.questsService.snoozeQuest(questId, userId);
   }
 
   /**
@@ -66,7 +81,7 @@ export class QuestsController {
   @HttpCode(HttpStatus.OK)
   @Post(':id/accept')
   async acceptQuest(
-    @Param('id') questId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) questId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.questsService.acceptQuest(questId, userId);
@@ -79,7 +94,7 @@ export class QuestsController {
   @HttpCode(HttpStatus.OK)
   @Post(':id/reject')
   async rejectQuest(
-    @Param('id') questId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) questId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.questsService.rejectQuest(questId, userId);
@@ -88,9 +103,10 @@ export class QuestsController {
   /**
    * Membaca informasi detail dari suatu misi.
    */
+  @RateLimit(60, 60_000)
   @Get(':id')
   async getQuestDetail(
-    @Param('id') questId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) questId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.questsService.getQuestDetail(questId, userId);
