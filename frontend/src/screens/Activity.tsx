@@ -38,7 +38,15 @@ export default function Activity() {
   const toast = useToast();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const { status, distanceKm, elapsedSec, points, start: startTracking, resume: resumeTracking } = tracker;
+  const {
+    status,
+    distanceKm,
+    elapsedSec,
+    accuracyMeters,
+    points,
+    start: startTracking,
+    resume: resumeTracking,
+  } = tracker;
   const tracking = status === 'running' || status === 'paused';
 
   /** Patch some query params (?mode, ?mission, ?room) without dropping the others. */
@@ -70,7 +78,7 @@ export default function Activity() {
   const [shareLog, setShareLog] = useState<ActivityLog | null>(null);
 
   // ---- Location pre-run check ----
-  const [here, setHere] = useState<{ lat: number; lng: number } | null>(null);
+  const [here, setHere] = useState<{ lat: number; lng: number; accuracy?: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [prompt, setPrompt] = useState<BlockingIssue | null>(null);
   /** 'check' = hanya memastikan izin + GPS (saat tab dibuka), tanpa mulai merekam. */
@@ -83,7 +91,13 @@ export default function Activity() {
       setLocating(true);
       try {
         const pos = await requestPosition(8_000);
-        const point = { lat: pos.coords.latitude, lng: pos.coords.longitude, timestamp: pos.timestamp };
+        const point = {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          timestamp: pos.timestamp || Date.now(),
+          accuracy: pos.coords.accuracy,
+          speed: pos.coords.speed,
+        };
         setHere(point);
         setPrompt(null);
         if (action === 'start') startTracking(false, point);
@@ -180,18 +194,24 @@ export default function Activity() {
     if (to) navigate(to);
   }
 
+  const liveAcc = accuracyMeters ?? (here?.accuracy ? Math.round(here.accuracy) : null);
+
   const statusText = locating
-    ? 'Finding your location…'
+    ? 'Locking high-accuracy GPS…'
     : status === 'running'
       ? tracker.simulated
-        ? 'Simulation'
-        : 'Recording'
+        ? 'Simulation · ±4m GPS'
+        : liveAcc !== null
+          ? `Recording · ±${liveAcc}m GPS`
+          : 'Recording'
       : status === 'paused'
         ? 'Paused'
         : !canStart
           ? 'Waiting for the session to go LIVE'
           : here
-            ? 'GPS ready'
+            ? liveAcc !== null
+              ? `GPS ready (±${liveAcc}m)`
+              : 'GPS ready'
             : simulate
               ? 'Simulation'
               : 'Location needed to start';
@@ -311,7 +331,7 @@ export default function Activity() {
       <Card className="overflow-hidden p-0">
         <div className="relative isolate h-56 bg-inset">
           <Suspense fallback={null}>
-            <RouteMap points={points} here={here} />
+            <RouteMap points={points} here={here} accuracyMeters={liveAcc} />
           </Suspense>
           <span
             className={`absolute left-3 top-3 z-[500] flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
