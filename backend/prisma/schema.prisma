@@ -59,6 +59,8 @@ model User {
   questsReceived   Quest[]           @relation("ReceivedQuests")
   pointLedgers     PointLedger[]
   coinTransactions CoinTransaction[]
+
+  @@index([rankPoints(sort: Desc)])
 }
 
 model Squad {
@@ -85,6 +87,8 @@ model SquadMember {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([squadId, userId])
+  @@index([userId, joinedAt(sort: Desc)])
+  @@index([squadId, joinedAt(sort: Asc)])
 }
 
 model Activity {
@@ -100,6 +104,9 @@ model Activity {
 
   user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   questMatches    Quest[]
+
+  @@index([userId, startedAt(sort: Desc)])
+  @@index([userId, endedAt(sort: Desc)])
 }
 
 model Quest {
@@ -120,6 +127,10 @@ model Quest {
   creator        User         @relation("CreatedQuests", fields: [creatorId], references: [id])
   targetUser     User         @relation("ReceivedQuests", fields: [targetUserId], references: [id])
   activity       Activity?    @relation(fields: [activityId], references: [id])
+
+  @@index([squadId, status, deadline])
+  @@index([targetUserId, status, deadline])
+  @@index([status, deadline])
 }
 
 model PointLedger {
@@ -131,6 +142,8 @@ model PointLedger {
   createdAt DateTime    @default(now())
 
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model CoinTransaction {
@@ -138,8 +151,11 @@ model CoinTransaction {
   userId    String
   amount    Int         // Positif untuk Top Up, Negatif untuk pengeluaran biaya misi
   type      CoinTxType
-  reference String?     // ID transaksi Payment Gateway (Midtrans/Xendit)
+  reference String?     // ID transaksi Payment Gateway (Midtrans/Xendit) / kode aksi internal
   createdAt DateTime    @default(now())
 
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc), reference])
+  @@index([reference])
 }
