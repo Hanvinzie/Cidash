@@ -14,6 +14,7 @@ import { useToast } from './ToastContext';
 import type {
   ActivityLog,
   ActivityType,
+  AvailabilityStatus,
   BombMission,
   Circle,
   CircleMember,
@@ -27,6 +28,10 @@ import type {
 
 const AUTH_KEY = 'cidash_auth';
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const MAX_SHIELD_TICKETS = 2;
+const SHIELD_WEEKLY_COSTS = [25, 50] as const;
+const REST_WEEKLY_COSTS = [0, 15] as const;
+const SNOOZE_COST_COINS = 10;
 
 const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}`;
 const generateCircleCode = () =>
@@ -65,7 +70,21 @@ interface BackendUser {
   coinBalance: number;
   rankPoints: number;
   shieldTickets: number;
+  availabilityStatus?: AvailabilityStatus;
+  restUntil?: string | null;
+  weeklyShieldsBought?: number;
+  maxWeeklyShields?: number;
+  maxShieldTickets?: number;
+  nextShieldCost?: number | null;
+  weeklyRestUsed?: number;
+  maxWeeklyRest?: number;
+  nextRestCost?: number | null;
 }
+
+export type TargetMemberInfo = Pick<User, 'id' | 'username'> & {
+  availabilityStatus?: AvailabilityStatus;
+  restUntil?: string | null;
+};
 
 interface AppState {
   isAuthenticated: boolean;
@@ -73,7 +92,7 @@ interface AppState {
   user: User;
   circles: Circle[];
   activeCircle: Circle | null;
-  members: Pick<User, 'id' | 'username'>[];
+  members: TargetMemberInfo[];
   /** Semua anggota circle (termasuk user) — captain dulu, lalu urut Rank Points. */
   membersOf: (circleId: string) => CircleMember[];
   leaderboard: LeaderboardEntry[];
@@ -88,13 +107,17 @@ interface AppState {
   setActiveCircle: (id: string) => void;
   createCircle: (name: string) => Promise<Circle>;
   joinCircle: (code: string) => Promise<Circle>;
+  upgradeCircle: (circleId: string) => Promise<void>;
   leaveCircle: (circleId: string) => Promise<void>;
   kickMember: (circleId: string, targetUserId: string) => Promise<void>;
   topUp: (coins: number) => void;
+  buyShield: () => Promise<void>;
+  setAvailabilityStatus: (status: 'AVAILABLE' | 'RESTING') => Promise<void>;
   sendBomb: (input: SendBombInput) => void;
   acceptBomb: (id: string) => void;
   rejectBomb: (id: string) => void;
   useShield: (id: string) => void;
+  snoozeBomb: (id: string) => void;
   recordActivity: (input: RecordActivityInput) => VerificationResult;
 }
 
@@ -145,14 +168,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => localStorage.getItem(AUTH_KEY) === '1' || Boolean(tokenStore.get()),
   );
   const [hydrating, setHydrating] = useState(hasToken);
-  const [user, setUser] = useState<User>({ ...initialUser, shieldTickets: 1 });
+  const [user, setUser] = useState<User>({
+    ...initialUser,
+    shieldTickets: 1,
+    availabilityStatus: 'AVAILABLE',
+    restUntil: null,
+    weeklyShieldsBought: 0,
+    maxWeeklyShields: 2,
+    maxShieldTickets: MAX_SHIELD_TICKETS,
+    nextShieldCost: SHIELD_WEEKLY_COSTS[0],
+    weeklyRestUsed: 0,
+    maxWeeklyRest: 2,
+    nextRestCost: REST_WEEKLY_COSTS[0],
+  });
   const [seasonDistanceKm, setSeasonDistanceKm] = useState(hasToken ? 0 : 61.1);
   const [circles, setCircles] = useState<Circle[]>(hasToken ? [] : initialCircles);
   const [activeCircleId, setActiveCircleId] = useState<string | null>(
     hasToken ? null : (initialCircles[0]?.id ?? null),
   );
   const [backendLeaderboard, setBackendLeaderboard] = useState<LeaderboardEntry[] | null>(null);
-  const [backendMembers, setBackendMembers] = useState<Pick<User, 'id' | 'username'>[] | null>(null);
+  const [backendMembers, setBackendMembers] = useState<TargetMemberInfo[] | null>(null);
   /** Captain circle aktif menurut backend (role CAPTAIN di leaderboard). */
   const [backendCaptainId, setBackendCaptainId] = useState<string | null>(null);
   const [groupMissions, setGroupMissions] = useState<GroupMission[]>(hasToken ? [] : initialGroupMissions);
@@ -169,6 +204,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rankPoints: u.rankPoints,
       coins: u.coinBalance,
       shieldTickets: u.shieldTickets ?? 0,
+      availabilityStatus: u.availabilityStatus ?? 'AVAILABLE',
+      restUntil: u.restUntil ?? null,
+      weeklyShieldsBought: u.weeklyShieldsBought ?? 0,
+      maxWeeklyShields: u.maxWeeklyShields ?? 2,
+      maxShieldTickets: u.maxShieldTickets ?? MAX_SHIELD_TICKETS,
+      nextShieldCost:
+        u.nextShieldCost !== undefined
+          ? u.nextShieldCost
+          : (u.shieldTickets ?? 0) >= MAX_SHIELD_TICKETS
+            ? null
+            : SHIELD_WEEKLY_COSTS[u.weeklyShieldsBought ?? 0] ?? null,
+      weeklyRestUsed: u.weeklyRestUsed ?? 0,
+      maxWeeklyRest: u.maxWeeklyRest ?? 2,
+      nextRestCost:
+        u.nextRestCost !== undefined
+          ? u.nextRestCost
+          : REST_WEEKLY_COSTS[u.weeklyRestUsed ?? 0] ?? null,
     }),
     [],
   );
@@ -202,6 +254,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           shieldTickets?: number;
           totalDistanceKm?: number;
           role?: 'CAPTAIN' | 'MEMBER';
+          availabilityStatus?: AvailabilityStatus;
+          restUntil?: string | null;
         }[];
       }>(`/squads/${circleId}/leaderboard`);
 
@@ -210,13 +264,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
         user: { id: item.userId, username: item.name },
         rankPoints: item.rankPoints,
         totalDistanceKm: item.totalDistanceKm ?? 0,
+        availabilityStatus: item.availabilityStatus ?? 'AVAILABLE',
+        restUntil: item.restUntil ?? null,
       }));
       setBackendLeaderboard(entries);
       setBackendCaptainId(res.leaderboard.find((item) => item.role === 'CAPTAIN')?.userId ?? null);
       setBackendMembers(
         res.leaderboard
           .filter((item) => item.userId !== currentUserId)
-          .map((item) => ({ id: item.userId, username: item.name })),
+          .map((item) => ({
+            id: item.userId,
+            username: item.name,
+            availabilityStatus: item.availabilityStatus ?? 'AVAILABLE',
+            restUntil: item.restUntil ?? null,
+          })),
       );
     } catch {
       setBackendLeaderboard(null);
@@ -238,6 +299,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           stakesPoints: number;
           status: 'PENDING' | 'ACCEPTED' | 'COMPLETED' | 'FAILED' | 'SHIELDED';
           deadline: string;
+          snoozed?: boolean;
           creator: { id: string; name: string };
           targetUser: { id: string; name: string };
           isTargetUser: boolean;
@@ -264,6 +326,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           wagerCoins: Math.max(5, Math.round(q.stakesPoints / 2)),
           rewardRankPoints: q.stakesPoints,
           penaltyRankPoints: q.stakesPoints,
+          snoozed: Boolean(q.snoozed),
           status:
             q.status === 'ACCEPTED'
               ? 'in_progress'
@@ -333,7 +396,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: string;
             name: string;
             inviteCode: string;
+            isPremium?: boolean;
             totalMembers: number;
+            maxMembers?: number;
             captain?: { id: string; name: string } | null;
           }[];
         }>('/squads/my'),
@@ -346,7 +411,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: s.id,
         name: s.name,
         code: s.inviteCode,
+        isPremium: Boolean(s.isPremium),
         memberCount: s.totalMembers,
+        maxMembers: s.maxMembers ?? (s.isPremium ? 25 : 5),
         captainId: s.captain?.id,
       }));
 
@@ -429,6 +496,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         user: { id: user.id, username: user.username },
         rankPoints: user.rankPoints,
         totalDistanceKm: +seasonDistanceKm.toFixed(1),
+        availabilityStatus: user.availabilityStatus ?? 'AVAILABLE',
       },
     ]
       .sort((a, b) => b.rankPoints - a.rankPoints)
@@ -448,6 +516,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
             username: e.user.username,
             rankPoints: e.rankPoints,
             totalDistanceKm: e.totalDistanceKm,
+            availabilityStatus: e.availabilityStatus ?? 'AVAILABLE',
+            restUntil: e.restUntil ?? null,
           }))
         : [
             {
@@ -455,10 +525,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
               username: user.username,
               rankPoints: user.rankPoints,
               totalDistanceKm: +seasonDistanceKm.toFixed(1),
+              availabilityStatus: user.availabilityStatus ?? 'AVAILABLE',
+              restUntil: user.restUntil ?? null,
             },
             ...(circleMembers[circleId] ?? []).map((m) => {
               const s = (leaderboardByCircle[circleId] ?? []).find((x) => x.user.id === m.id);
-              return { ...m, rankPoints: s?.rankPoints ?? 0, totalDistanceKm: s?.totalDistanceKm ?? 0 };
+              const hasActiveSentToThem = bombMissions.some(
+                (b) =>
+                  b.direction === 'sent' &&
+                  b.counterpart.id === m.id &&
+                  (b.status === 'pending' || b.status === 'in_progress'),
+              );
+              return {
+                ...m,
+                rankPoints: s?.rankPoints ?? 0,
+                totalDistanceKm: s?.totalDistanceKm ?? 0,
+                availabilityStatus: (hasActiveSentToThem ? 'IN_MISSION' : 'AVAILABLE') as AvailabilityStatus,
+                restUntil: null,
+              };
             }),
           ];
       return list
@@ -469,7 +553,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }))
         .sort((a, b) => Number(b.role === 'captain') - Number(a.role === 'captain') || b.rankPoints - a.rankPoints);
     },
-    [circles, activeCircle?.id, backendLeaderboard, backendCaptainId, user, seasonDistanceKm],
+    [circles, activeCircle?.id, backendLeaderboard, backendCaptainId, user, seasonDistanceKm, bombMissions],
   );
 
   const login = useCallback(
@@ -507,26 +591,43 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (name: string): Promise<Circle> => {
       if (tokenStore.get()) {
         const res = await post<{
-          squad: { id: string; name: string; inviteCode: string; totalMembers?: number };
+          squad: {
+            id: string;
+            name: string;
+            inviteCode: string;
+            isPremium?: boolean;
+            totalMembers?: number;
+            maxMembers?: number;
+          };
         }>('/squads', { name: name.trim() });
 
         const circle: Circle = {
           id: res.squad.id,
           name: res.squad.name,
           code: res.squad.inviteCode,
+          isPremium: Boolean(res.squad.isPremium),
           memberCount: res.squad.totalMembers ?? 1,
+          maxMembers: res.squad.maxMembers ?? (res.squad.isPremium ? 25 : 5),
           captainId: user.id,
         };
         setCircles((cs) => [circle, ...cs.filter((c) => c.id !== circle.id)]);
         setActiveCircleId(circle.id);
-        toast(`Circle "${circle.name}" created!`, 'success');
+        toast(`Circle "${circle.name}" created (Free tier · max 5 members)!`, 'success');
         return circle;
       }
 
-      const circle: Circle = { id: newId('cir'), name, code: generateCircleCode(), memberCount: 1, captainId: user.id };
+      const circle: Circle = {
+        id: newId('cir'),
+        name,
+        code: generateCircleCode(),
+        isPremium: false,
+        memberCount: 1,
+        maxMembers: 5,
+        captainId: user.id,
+      };
       setCircles((cs) => [...cs, circle]);
       setActiveCircleId(circle.id);
-      toast(`Circle "${circle.name}" created!`, 'success');
+      toast(`Circle "${circle.name}" created (Free tier · max 5 members)!`, 'success');
       return circle;
     },
     [toast, user.id],
@@ -537,29 +638,100 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const normalized = code.trim().toUpperCase();
       if (tokenStore.get()) {
         const res = await post<{
-          squad: { id: string; name: string; inviteCode: string; totalMembers?: number };
+          squad: {
+            id: string;
+            name: string;
+            inviteCode: string;
+            isPremium?: boolean;
+            totalMembers?: number;
+            maxMembers?: number;
+          };
         }>('/squads/join', { inviteCode: normalized });
 
         const circle: Circle = {
           id: res.squad.id,
           name: res.squad.name,
           code: res.squad.inviteCode,
+          isPremium: Boolean(res.squad.isPremium),
           memberCount: res.squad.totalMembers ?? 2,
+          maxMembers: res.squad.maxMembers ?? (res.squad.isPremium ? 25 : 5),
         };
         setCircles((cs) => [circle, ...cs.filter((c) => c.id !== circle.id)]);
         setActiveCircleId(circle.id);
-        toast(`Joined "${circle.name}"!`, 'success');
+        toast(`Joined "${circle.name}" (${circle.memberCount}/${circle.maxMembers} members)!`, 'success');
         return circle;
       }
 
       const existing = circles.find((c) => c.code === normalized);
-      const circle = existing ?? { id: newId('cir'), name: `Circle ${normalized}`, code: normalized, memberCount: 2 };
+      if (existing) {
+        const max = existing.maxMembers ?? (existing.isPremium ? 25 : 5);
+        if (existing.memberCount >= max) {
+          throw new Error(
+            existing.isPremium
+              ? `Premium Circle "${existing.name}" is at maximum capacity (${max}/${max} members).`
+              : `Free Circle "${existing.name}" is full (${max}/${max} members). Upgrade to Premium to allow up to 25 members.`,
+          );
+        }
+      }
+      const circle = existing ?? {
+        id: newId('cir'),
+        name: `Circle ${normalized}`,
+        code: normalized,
+        isPremium: false,
+        memberCount: 2,
+        maxMembers: 5,
+      };
       if (!existing) setCircles((cs) => [...cs, circle]);
       setActiveCircleId(circle.id);
       toast(`Joined "${circle.name}"!`, 'success');
       return circle;
     },
     [circles, toast],
+  );
+
+  const upgradeCircle = useCallback(
+    async (circleId: string): Promise<void> => {
+      const upgradeCost = 100;
+      const target = circles.find((c) => c.id === circleId);
+      if (!target) return;
+      if (target.isPremium) {
+        toast('This circle is already on the Premium tier (max 25 members).', 'info');
+        return;
+      }
+      if (user.coins < upgradeCost) {
+        toast(`Need ${upgradeCost} coins to upgrade circle to Premium (up to 25 members).`, 'error');
+        return;
+      }
+
+      if (tokenStore.get()) {
+        try {
+          const res = await post<{
+            message: string;
+            remainingCoinBalance: number;
+            squad: { id: string; isPremium: boolean; maxMembers: number };
+          }>(`/squads/${circleId}/upgrade`);
+          setUser((u) => ({ ...u, coins: res.remainingCoinBalance }));
+          setCircles((cs) =>
+            cs.map((c) =>
+              c.id === circleId
+                ? { ...c, isPremium: true, maxMembers: res.squad.maxMembers ?? 25 }
+                : c,
+            ),
+          );
+          toast(res.message || 'Circle upgraded to Premium (max 25 members)!', 'success');
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Failed to upgrade circle', 'error');
+        }
+        return;
+      }
+
+      setUser((u) => ({ ...u, coins: u.coins - upgradeCost }));
+      setCircles((cs) =>
+        cs.map((c) => (c.id === circleId ? { ...c, isPremium: true, maxMembers: 25 } : c)),
+      );
+      toast(`"${target.name}" upgraded to Premium (max 25 members)!`, 'success');
+    },
+    [circles, toast, user.coins],
   );
 
   const leaveCircle = useCallback(
@@ -617,12 +789,175 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [toast, user.coins],
   );
 
+  const buyShield = useCallback(async (): Promise<void> => {
+    const owned = user.shieldTickets ?? 0;
+    const weeklyBought = user.weeklyShieldsBought ?? 0;
+
+    if (owned >= MAX_SHIELD_TICKETS) {
+      toast(`Inventory full (max ${MAX_SHIELD_TICKETS} Shield Tickets)`, 'error');
+      return;
+    }
+    if (weeklyBought >= SHIELD_WEEKLY_COSTS.length) {
+      toast(`Weekly limit reached (max ${SHIELD_WEEKLY_COSTS.length} shields/week to keep it fair)`, 'error');
+      return;
+    }
+
+    const cost = user.nextShieldCost ?? SHIELD_WEEKLY_COSTS[weeklyBought] ?? 25;
+    if (user.coins < cost) {
+      toast(`Not enough coins! Need ${cost} coins to buy a Shield Ticket.`, 'error');
+      return;
+    }
+
+    if (tokenStore.get()) {
+      try {
+        const res = await post<{
+          message: string;
+          user: BackendUser;
+        }>('/auth/buy-shield');
+        setUser(mapBackendUser(res.user));
+        toast(res.message || `Purchased 1 Shield Ticket for ${cost} coins!`, 'success');
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Failed to buy Shield Ticket', 'error');
+      }
+      return;
+    }
+
+    const nextBought = weeklyBought + 1;
+    const nextTickets = owned + 1;
+    setUser((u) => ({
+      ...u,
+      coins: u.coins - cost,
+      shieldTickets: nextTickets,
+      weeklyShieldsBought: nextBought,
+      nextShieldCost:
+        nextTickets >= MAX_SHIELD_TICKETS || nextBought >= SHIELD_WEEKLY_COSTS.length
+          ? null
+          : SHIELD_WEEKLY_COSTS[nextBought],
+    }));
+    toast(`Purchased 1 Shield Ticket for ${cost} coins!`, 'success');
+  }, [mapBackendUser, toast, user.coins, user.nextShieldCost, user.shieldTickets, user.weeklyShieldsBought]);
+
+  const setAvailabilityStatus = useCallback(
+    async (targetStatus: 'AVAILABLE' | 'RESTING'): Promise<void> => {
+      if (tokenStore.get()) {
+        try {
+          const res = await post<{
+            message: string;
+            coinBalance: number;
+            availabilityStatus: AvailabilityStatus;
+            restUntil: string | null;
+            weeklyRestUsed: number;
+            nextRestCost: number | null;
+          }>('/auth/status', { status: targetStatus });
+
+          setUser((u) => ({
+            ...u,
+            coins: res.coinBalance,
+            availabilityStatus: res.availabilityStatus,
+            restUntil: res.restUntil,
+            weeklyRestUsed: res.weeklyRestUsed,
+            nextRestCost: res.nextRestCost,
+          }));
+          toast(res.message, 'success');
+          if (activeCircle) {
+            void syncCircleLeaderboard(activeCircle.id, user.id);
+          }
+        } catch (err) {
+          toast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+        }
+        return;
+      }
+
+      if (targetStatus === 'AVAILABLE') {
+        const hasActiveIncoming = bombMissions.some(
+          (b) => b.direction === 'incoming' && (b.status === 'pending' || b.status === 'in_progress'),
+        );
+        setUser((u) => ({
+          ...u,
+          availabilityStatus: hasActiveIncoming ? 'IN_MISSION' : 'AVAILABLE',
+          restUntil: null,
+        }));
+        toast('Status set to Ready (Available for challenges)', 'success');
+        return;
+      }
+
+      const hasActiveIncoming = bombMissions.some(
+        (b) => b.direction === 'incoming' && (b.status === 'pending' || b.status === 'in_progress'),
+      );
+      if (hasActiveIncoming) {
+        toast('Finish or resolve your active incoming Bomb Mission before entering Rest Mode.', 'error');
+        return;
+      }
+
+      const used = user.weeklyRestUsed ?? 0;
+      if (used >= REST_WEEKLY_COSTS.length) {
+        toast(`Weekly Rest Mode limit reached (max ${REST_WEEKLY_COSTS.length}x/week).`, 'error');
+        return;
+      }
+      const cost = REST_WEEKLY_COSTS[used];
+      if (user.coins < cost) {
+        toast(`Not enough coins! Need ${cost} coins for an extra 24h Rest Mode.`, 'error');
+        return;
+      }
+
+      const nextUsed = used + 1;
+      const restUntil = new Date(Date.now() + 24 * 3600 * 1000).toISOString();
+      setUser((u) => ({
+        ...u,
+        coins: u.coins - cost,
+        availabilityStatus: 'RESTING',
+        restUntil,
+        weeklyRestUsed: nextUsed,
+        nextRestCost: nextUsed >= REST_WEEKLY_COSTS.length ? null : REST_WEEKLY_COSTS[nextUsed],
+      }));
+      toast(
+        cost > 0
+          ? `Rest Mode enabled for 24h (${cost} coins)`
+          : 'Free weekly Rest Mode enabled for 24h!',
+        'success',
+      );
+    },
+    [activeCircle, bombMissions, syncCircleLeaderboard, toast, user.coins, user.id, user.weeklyRestUsed],
+  );
+
+  const members = useMemo<TargetMemberInfo[]>(() => {
+    if (backendMembers) return backendMembers;
+    const raw = activeCircle ? (circleMembers[activeCircle.id] ?? []) : [];
+    return raw.map((m) => {
+      const hasActiveSentToThem = bombMissions.some(
+        (b) =>
+          b.direction === 'sent' &&
+          b.counterpart.id === m.id &&
+          (b.status === 'pending' || b.status === 'in_progress'),
+      );
+      return {
+        ...m,
+        availabilityStatus: hasActiveSentToThem ? 'IN_MISSION' : 'AVAILABLE',
+        restUntil: null,
+      };
+    });
+  }, [activeCircle, backendMembers, bombMissions]);
+
   const sendBomb = useCallback(
     (input: SendBombInput) => {
-      const allMembers = backendMembers ?? Object.values(circleMembers).flat();
-      const target = allMembers.find((m) => m.id === input.targetUserId);
+      if (user.availabilityStatus === 'RESTING') {
+        toast('You are in Rest Mode. Switch to Ready before sending a Bomb Mission.', 'error');
+        return;
+      }
+
+      const target = members.find((m) => m.id === input.targetUserId);
       if (!target || input.wagerCoins > user.coins) {
         toast('Not enough coins or invalid target member', 'error');
+        return;
+      }
+
+      if (target.availabilityStatus === 'RESTING') {
+        toast(`@${target.username} is currently in Rest Mode and cannot receive Bomb Missions.`, 'error');
+        return;
+      }
+
+      if (target.availabilityStatus === 'IN_MISSION') {
+        toast(`@${target.username} is already doing an active Bomb Mission (max 1 at a time).`, 'error');
         return;
       }
 
@@ -632,7 +967,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const optimisticMission: BombMission = {
         id: tempId,
         direction: 'sent',
-        counterpart: target,
+        counterpart: { id: target.id, username: target.username },
         type: input.type,
         targetKm: input.targetKm,
         durationMin: input.durationMin,
@@ -660,7 +995,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .then((res) => {
             setUser((u) => ({ ...u, coins: res.remainingCoinBalance }));
             toast(`Bomb Mission sent to @${target.username}!`, 'success');
-            return syncQuests(activeCircle.id);
+            return Promise.all([
+              syncQuests(activeCircle.id),
+              syncCircleLeaderboard(activeCircle.id, user.id),
+            ]);
           })
           .catch((err) => {
             setUser((u) => ({ ...u, coins: prevCoins }));
@@ -671,7 +1009,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toast(`Bomb Mission sent to @${target.username}!`, 'success');
       }
     },
-    [activeCircle, backendMembers, syncQuests, toast, user.coins],
+    [activeCircle, members, syncCircleLeaderboard, syncQuests, toast, user.availabilityStatus, user.coins, user.id],
   );
 
   const acceptBomb = useCallback(
@@ -697,11 +1035,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const useShield = useCallback(
     (id: string) => {
       if ((user.shieldTickets ?? 0) < 1) {
-        toast('You do not have any Shield Tickets left', 'error');
+        toast('You do not have any Shield Tickets left. Buy one with coins above!', 'error');
         return;
       }
+      const targetQuest = bombMissions.find((b) => b.id === id);
+      const refundPreview = targetQuest?.status === 'pending' ? Math.floor(targetQuest.wagerCoins / 2) : 0;
+
       setBombMissions((bs) => bs.filter((b) => b.id !== id));
-      setUser((u) => ({ ...u, shieldTickets: Math.max(0, (u.shieldTickets ?? 1) - 1) }));
+      setUser((u) => {
+        const nextTickets = Math.max(0, (u.shieldTickets ?? 1) - 1);
+        const bought = u.weeklyShieldsBought ?? 0;
+        return {
+          ...u,
+          shieldTickets: nextTickets,
+          nextShieldCost:
+            nextTickets >= MAX_SHIELD_TICKETS || bought >= SHIELD_WEEKLY_COSTS.length
+              ? null
+              : SHIELD_WEEKLY_COSTS[bought],
+        };
+      });
       if (tokenStore.get()) {
         void post<{ message?: string }>(`/quests/${id}/shield`)
           .then((res) => {
@@ -713,10 +1065,62 @@ export function AppProvider({ children }: { children: ReactNode }) {
             void Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]);
           });
       } else {
-        toast('Shield Ticket used! Penalty neutralized.', 'success');
+        toast(
+          refundPreview > 0
+            ? `Shield Ticket used! 0 RP penalty & ${refundPreview} coins (50%) refunded to @${targetQuest?.counterpart.username}.`
+            : 'Shield Ticket used! Penalty neutralized.',
+          'success',
+        );
       }
     },
-    [activeCircle?.id, hydrateFromBackend, syncQuests, toast, user.shieldTickets],
+    [activeCircle?.id, bombMissions, hydrateFromBackend, syncQuests, toast, user.shieldTickets],
+  );
+
+  const snoozeBomb = useCallback(
+    (id: string) => {
+      const quest = bombMissions.find((b) => b.id === id);
+      if (!quest) return;
+      if (quest.snoozed) {
+        toast('This mission has already been extended once (+12h max).', 'error');
+        return;
+      }
+      if (user.coins < SNOOZE_COST_COINS) {
+        toast(`Need ${SNOOZE_COST_COINS} coins to extend deadline by +12h.`, 'error');
+        return;
+      }
+
+      if (tokenStore.get()) {
+        void post<{
+          message: string;
+          remainingCoinBalance: number;
+          deadline: string;
+        }>(`/quests/${id}/snooze`)
+          .then((res) => {
+            setUser((u) => ({ ...u, coins: res.remainingCoinBalance }));
+            toast(res.message || 'Deadline extended by +12 hours!', 'success');
+            return syncQuests(activeCircle?.id);
+          })
+          .catch((err) => {
+            toast(err instanceof Error ? err.message : 'Failed to extend deadline', 'error');
+          });
+        return;
+      }
+
+      setUser((u) => ({ ...u, coins: u.coins - SNOOZE_COST_COINS }));
+      setBombMissions((bs) =>
+        bs.map((b) =>
+          b.id === id
+            ? {
+                ...b,
+                snoozed: true,
+                deadline: `${b.deadline} (+12h)`,
+              }
+            : b,
+        ),
+      );
+      toast(`Deadline extended by +12 hours (-${SNOOZE_COST_COINS} coins)!`, 'success');
+    },
+    [activeCircle?.id, bombMissions, syncQuests, toast, user.coins],
   );
 
   const rejectBomb = useCallback(
@@ -870,11 +1274,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ],
   );
 
-  const members = useMemo(() => {
-    if (backendMembers) return backendMembers;
-    return activeCircle ? (circleMembers[activeCircle.id] ?? []) : [];
-  }, [activeCircle, backendMembers]);
-
   const value: AppState = {
     isAuthenticated,
     hydrating,
@@ -894,13 +1293,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setActiveCircle: setActiveCircleId,
     createCircle,
     joinCircle,
+    upgradeCircle,
     leaveCircle,
     kickMember,
     topUp,
+    buyShield,
+    setAvailabilityStatus,
     sendBomb,
     acceptBomb,
     rejectBomb,
     useShield,
+    snoozeBomb,
     recordActivity,
   };
 

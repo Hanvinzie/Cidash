@@ -40,6 +40,8 @@ export default function Dashboard() {
     );
   }
 
+  const maxMembers = activeCircle.maxMembers ?? (activeCircle.isPremium ? 25 : 5);
+
   async function handleShare() {
     const text = `Join my circle "${activeCircle!.name}" on Cidash with code: ${activeCircle!.code}`;
     try {
@@ -80,20 +82,28 @@ export default function Dashboard() {
               sheetTitle="Switch circle"
               value={activeCircle.id}
               onChange={setActiveCircle}
-              options={circles.map((c) => ({
-                value: c.id,
-                label: c.name,
-                description: `${c.memberCount} members · ${c.code}`,
-                leading: <InitialAvatar text={c.name} />,
-              }))}
+              options={circles.map((c) => {
+                const cap = c.maxMembers ?? (c.isPremium ? 25 : 5);
+                return {
+                  value: c.id,
+                  label: c.name,
+                  description: `${c.memberCount}/${cap} members (${c.isPremium ? 'Premium' : 'Free'}) · ${c.code}`,
+                  leading: <InitialAvatar text={c.name} />,
+                };
+              })}
             />
             <button
               type="button"
               onClick={() => setShowMembers(true)}
-              className="flex items-center gap-0.5 text-xs font-semibold text-subtle transition active:opacity-60"
+              className="flex items-center gap-1 text-xs font-semibold text-subtle transition active:opacity-60"
             >
-              <Icon name="users" size={13} className="mr-1" />
-              {activeCircle.memberCount} members
+              <Icon name="users" size={13} />
+              <span>
+                {activeCircle.memberCount}/{maxMembers} members
+              </span>
+              <Badge tone={activeCircle.isPremium ? 'primary' : 'neutral'}>
+                {activeCircle.isPremium ? 'Premium' : 'Free'}
+              </Badge>
               <Icon name="chevronRight" size={13} />
             </button>
           </div>

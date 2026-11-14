@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -48,17 +49,32 @@ export class SquadsController {
   /**
    * Mengambil daftar seluruh Circle yang diikuti oleh pengguna saat ini.
    */
+  @RateLimit(60, 60_000)
   @Get('my')
   async getMySquads(@CurrentUser('id') userId: string) {
     return this.squadsService.getMySquads(userId);
   }
 
   /**
+   * Meng-upgrade Circle dari Free (maks 5 anggota) ke Premium (maks 25 anggota) menggunakan 100 koin.
+   */
+  @RateLimit(10, 60_000)
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/upgrade')
+  async upgradeSquad(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) squadId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.squadsService.upgradeSquad(squadId, userId);
+  }
+
+  /**
    * Mengambil urutan peringkat anggota (Leaderboard) Circle berdasarkan rankPoints.
    */
+  @RateLimit(60, 60_000)
   @Get(':id/leaderboard')
   async getLeaderboard(
-    @Param('id') squadId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) squadId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.squadsService.getLeaderboard(squadId, userId);
@@ -67,9 +83,10 @@ export class SquadsController {
   /**
    * Mengambil informasi detail dari suatu Circle.
    */
+  @RateLimit(60, 60_000)
   @Get(':id')
   async getSquadDetail(
-    @Param('id') squadId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) squadId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.squadsService.getSquadDetail(squadId, userId);
@@ -78,10 +95,11 @@ export class SquadsController {
   /**
    * Keluar dari Circle.
    */
+  @RateLimit(10, 60_000)
   @HttpCode(HttpStatus.OK)
   @Post(':id/leave')
   async leaveSquad(
-    @Param('id') squadId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) squadId: string,
     @CurrentUser('id') userId: string,
   ) {
     return this.squadsService.leaveSquad(squadId, userId);
@@ -90,12 +108,13 @@ export class SquadsController {
   /**
    * Mengeluarkan anggota dari Circle (hanya dapat dilakukan oleh Captain).
    */
+  @RateLimit(15, 60_000)
   @HttpCode(HttpStatus.OK)
   @Delete(':id/members/:userId')
   async kickMember(
-    @Param('id') squadId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) squadId: string,
     @CurrentUser('id') captainId: string,
-    @Param('userId') targetUserId: string,
+    @Param('userId', new ParseUUIDPipe({ version: '4' })) targetUserId: string,
   ) {
     return this.squadsService.kickMember(squadId, captainId, targetUserId);
   }

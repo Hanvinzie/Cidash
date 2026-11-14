@@ -6,13 +6,57 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
+import {
+  appMemoryCache,
+  invalidateSquadCache,
+  invalidateUserCache,
+  LEADERBOARD_CACHE_TTL_MS,
+} from '../common/cache/memory-cache';
 import { CreateSquadDto, JoinSquadDto } from './dto';
-import { Role } from '@prisma/client';
+import { CoinTxType, QuestStatus, Role } from '@prisma/client';
 import * as crypto from 'crypto';
+
+export const FREE_SQUAD_MAX_MEMBERS = 5;
+export const PREMIUM_SQUAD_MAX_MEMBERS = 25;
+export const PREMIUM_SQUAD_UPGRADE_COINS = 100;
+
+interface CachedLeaderboardPayload {
+  squad: {
+    id: string;
+    name: string;
+    inviteCode: string;
+    isPremium: boolean;
+    maxMembers: number;
+  };
+  totalMembers: number;
+  maxMembers: number;
+  memberIds: Set<string>;
+  entries: Array<{
+    rank: number;
+    userId: string;
+    name: string;
+    rankPoints: number;
+    shieldTickets: number;
+    totalDistanceKm: number;
+    role: Role;
+    joinedAt: Date;
+    availabilityStatus: 'AVAILABLE' | 'IN_MISSION' | 'RESTING';
+    restUntil: string | null;
+  }>;
+}
 
 @Injectable()
 export class SquadsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Menghitung batas maksimal kapasitas anggota berdasarkan tier Circle.
+   * - Free Tier: Maksimal 5 anggota
+   * - Premium Tier: Maksimal 25 anggota (batas aman beban realtime GPS & query leaderboard)
+   */
+  getMaxMembers(isPremium: boolean): number {
+    return isPremium ? PREMIUM_SQUAD_MAX_MEMBERS : FREE_SQUAD_MAX_MEMBERS;
+  }
 
   /**
    * Menghasilkan kode unik 8 karakter alfanumerik.
@@ -37,6 +81,7 @@ export class SquadsService {
       const candidateCode = this.generateRandomCode(8);
       const existing = await this.prisma.squad.findUnique({
         where: { inviteCode: candidateCode },
+        select: { id: true },
       });
       if (!existing) {
         return candidateCode;
@@ -52,13 +97,33 @@ export class SquadsService {
    */
   async createSquad(userId: string, createSquadDto: CreateSquadDto) {
     const inviteCode = await this.generateUniqueInviteCode();
+    const wantPremium = Boolean(createSquadDto.isPremium);
+
+    if (wantPremium && this.prisma.user?.findUnique) {
+      const creator = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { coinBalance: true },
+      });
+      if (!creator || creator.coinBalance < PREMIUM_SQUAD_UPGRADE_COINS) {
+        throw new BadRequestException(
+          `Saldo koin tidak mencukupi untuk membuat Circle Premium (${PREMIUM_SQUAD_UPGRADE_COINS} koin).`,
+        );
+      }
+    }
 
     const squad = await this.prisma.$transaction(async (tx) => {
+      if (wantPremium && tx.user?.update) {
+        await tx.user.update({
+          where: { id: userId },
+          data: { coinBalance: { decrement: PREMIUM_SQUAD_UPGRADE_COINS } },
+        });
+      }
+
       const newSquad = await tx.squad.create({
         data: {
           name: createSquadDto.name.trim(),
           inviteCode,
-          isPremium: false,
+          isPremium: wantPremium,
           createdById: userId,
         },
       });
@@ -71,8 +136,23 @@ export class SquadsService {
         },
       });
 
+      if (wantPremium && tx.coinTransaction?.create) {
+        await tx.coinTransaction.create({
+          data: {
+            userId,
+            amount: -PREMIUM_SQUAD_UPGRADE_COINS,
+            type: CoinTxType.BOMB_MISSION_FEE,
+            reference: `SQUAD-PREMIUM-${newSquad.id.substring(0, 8)}`,
+          },
+        });
+      }
+
       return newSquad;
     });
+
+    if (wantPremium) {
+      invalidateUserCache(userId);
+    }
 
     return {
       message: 'Circle berhasil dibuat',
@@ -84,12 +164,16 @@ export class SquadsService {
         createdAt: squad.createdAt,
         role: Role.CAPTAIN,
         totalMembers: 1,
+        maxMembers: this.getMaxMembers(squad.isPremium),
       },
     };
   }
 
   /**
    * Bergabung ke Circle menggunakan kode unik 8 karakter.
+   * Memvalidasi batas kapasitas anggota:
+   * - Free Circle: maksimal 5 anggota
+   * - Premium Circle: maksimal 25 anggota (batas aman performa realtime & server)
    */
   async joinSquad(userId: string, joinSquadDto: JoinSquadDto) {
     const normalizedCode = joinSquadDto.inviteCode.trim().toUpperCase();
@@ -122,6 +206,20 @@ export class SquadsService {
       throw new ConflictException('Anda sudah bergabung dalam Circle ini');
     }
 
+    const maxMembers = this.getMaxMembers(squad.isPremium);
+    const currentMembers = squad._count?.members ?? 0;
+
+    if (currentMembers >= maxMembers) {
+      if (!squad.isPremium) {
+        throw new BadRequestException(
+          `Circle Free "${squad.name}" sudah penuh (${currentMembers}/${FREE_SQUAD_MAX_MEMBERS} anggota). Upgrade Circle ke Premium untuk membuka kapasitas hingga ${PREMIUM_SQUAD_MAX_MEMBERS} anggota.`,
+        );
+      }
+      throw new BadRequestException(
+        `Circle Premium "${squad.name}" sudah mencapai kapasitas maksimal sistem (${currentMembers}/${PREMIUM_SQUAD_MAX_MEMBERS} anggota) demi menjaga stabilitas performa grup.`,
+      );
+    }
+
     await this.prisma.squadMember.create({
       data: {
         squadId: squad.id,
@@ -129,6 +227,8 @@ export class SquadsService {
         role: Role.MEMBER,
       },
     });
+
+    invalidateSquadCache(squad.id);
 
     return {
       message: 'Berhasil bergabung ke Circle',
@@ -138,7 +238,105 @@ export class SquadsService {
         inviteCode: squad.inviteCode,
         isPremium: squad.isPremium,
         role: Role.MEMBER,
-        totalMembers: squad._count.members + 1,
+        totalMembers: currentMembers + 1,
+        maxMembers,
+      },
+    };
+  }
+
+  /**
+   * Meng-upgrade Circle dari Free (maks 5 anggota) ke Premium (maks 25 anggota)
+   * menggunakan 100 Koin. Menjalankan query validasi secara paralel (`Promise.all`).
+   */
+  async upgradeSquad(squadId: string, userId: string) {
+    const [squad, membership, user] = await Promise.all([
+      this.prisma.squad.findUnique({
+        where: { id: squadId },
+        include: {
+          _count: { select: { members: true } },
+        },
+      }),
+      this.prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+      }),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, coinBalance: true },
+      }),
+    ]);
+
+    if (!squad) {
+      throw new NotFoundException('Circle tidak ditemukan');
+    }
+
+    if (!membership) {
+      throw new ForbiddenException(
+        'Akses ditolak. Anda bukan anggota Circle ini',
+      );
+    }
+
+    if (squad.isPremium) {
+      throw new BadRequestException(
+        `Circle "${squad.name}" sudah berstatus Premium (kapasitas maksimal ${PREMIUM_SQUAD_MAX_MEMBERS} anggota).`,
+      );
+    }
+
+    if (!user || user.coinBalance < PREMIUM_SQUAD_UPGRADE_COINS) {
+      throw new BadRequestException(
+        `Saldo koin tidak mencukupi. Diperlukan ${PREMIUM_SQUAD_UPGRADE_COINS} koin untuk meng-upgrade Circle ke Premium (saldo Anda: ${user?.coinBalance ?? 0} koin).`,
+      );
+    }
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { coinBalance: { decrement: PREMIUM_SQUAD_UPGRADE_COINS } },
+        select: { coinBalance: true },
+      });
+
+      if (updatedUser.coinBalance < 0) {
+        throw new BadRequestException('Saldo koin tidak mencukupi');
+      }
+
+      const updatedSquad = await tx.squad.update({
+        where: { id: squadId },
+        data: { isPremium: true },
+      });
+
+      await tx.coinTransaction.create({
+        data: {
+          userId,
+          amount: -PREMIUM_SQUAD_UPGRADE_COINS,
+          type: CoinTxType.BOMB_MISSION_FEE,
+          reference: `SQUAD-UPGRADE-${squadId.substring(0, 8)}`,
+        },
+      });
+
+      return {
+        squad: updatedSquad,
+        remainingCoinBalance: updatedUser.coinBalance,
+      };
+    });
+
+    invalidateUserCache(userId);
+    invalidateSquadCache(squadId);
+
+    return {
+      message: `Circle "${result.squad.name}" berhasil di-upgrade ke Premium (kapasitas hingga ${PREMIUM_SQUAD_MAX_MEMBERS} anggota)!`,
+      cost: PREMIUM_SQUAD_UPGRADE_COINS,
+      remainingCoinBalance: result.remainingCoinBalance,
+      squad: {
+        id: result.squad.id,
+        name: result.squad.name,
+        inviteCode: result.squad.inviteCode,
+        isPremium: true,
+        totalMembers: squad._count?.members ?? 1,
+        maxMembers: PREMIUM_SQUAD_MAX_MEMBERS,
       },
     };
   }
@@ -182,6 +380,7 @@ export class SquadsService {
       role: membership.role,
       joinedAt: membership.joinedAt,
       totalMembers: membership.squad._count.members,
+      maxMembers: this.getMaxMembers(membership.squad.isPremium),
       activeQuestsCount: membership.squad._count.quests,
       captain: membership.squad.createdBy
         ? {
@@ -199,29 +398,83 @@ export class SquadsService {
 
   /**
    * Mengambil urutan peringkat anggota Circle berdasarkan rankPoints.
+   * - Dilengkapi Micro-TTL Cache (5 detik per squadId) untuk meredam lonjakan query
+   *   saat hingga 25 anggota membuka Dashboard bersamaan.
+   * - Mengeksekusi query secara paralel (`Promise.all`) dan agregasi `activity.groupBy`.
    */
   async getLeaderboard(squadId: string, userId: string) {
-    const squad = await this.prisma.squad.findUnique({
-      where: { id: squadId },
-      select: {
-        id: true,
-        name: true,
-        inviteCode: true,
-      },
-    });
+    const cacheKey = `leaderboard:${squadId}`;
+    const cached = appMemoryCache.get<CachedLeaderboardPayload>(cacheKey);
+    if (cached && cached.memberIds.has(userId)) {
+      return {
+        squad: cached.squad,
+        totalMembers: cached.totalMembers,
+        maxMembers: cached.maxMembers,
+        leaderboard: cached.entries.map((entry) => ({
+          ...entry,
+          isCurrentUser: entry.userId === userId,
+        })),
+      };
+    }
+
+    const now = new Date();
+    const dayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
+
+    const [squad, membership, members] = await Promise.all([
+      this.prisma.squad.findUnique({
+        where: { id: squadId },
+        select: {
+          id: true,
+          name: true,
+          inviteCode: true,
+          isPremium: true,
+        },
+      }),
+      this.prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId,
+          },
+        },
+      }),
+      this.prisma.squadMember.findMany({
+        where: { squadId },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true,
+              rankPoints: true,
+              shieldTickets: true,
+              questsReceived: {
+                where: {
+                  status: { in: [QuestStatus.PENDING, QuestStatus.ACCEPTED] },
+                  deadline: { gt: now },
+                },
+                select: { id: true },
+              },
+              coinTransactions: {
+                where: {
+                  createdAt: { gte: dayAgo },
+                },
+                orderBy: { createdAt: 'desc' },
+                select: { reference: true },
+              },
+            },
+          },
+        },
+        orderBy: {
+          user: {
+            rankPoints: 'desc',
+          },
+        },
+      }),
+    ]);
 
     if (!squad) {
       throw new NotFoundException('Circle tidak ditemukan');
     }
-
-    const membership = await this.prisma.squadMember.findUnique({
-      where: {
-        squadId_userId: {
-          squadId,
-          userId,
-        },
-      },
-    });
 
     if (!membership) {
       throw new ForbiddenException(
@@ -229,35 +482,45 @@ export class SquadsService {
       );
     }
 
-    const members = await this.prisma.squadMember.findMany({
-      where: { squadId },
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            rankPoints: true,
-            shieldTickets: true,
-            activities: {
-              select: {
-                distanceMeters: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        user: {
-          rankPoints: 'desc',
-        },
-      },
-    });
+    const memberIds = members.map((m) => m.user.id);
+    const distanceSums =
+      memberIds.length > 0 && this.prisma.activity?.groupBy
+        ? ((await this.prisma.activity.groupBy({
+            by: ['userId'],
+            where: { userId: { in: memberIds } },
+            _sum: { distanceMeters: true },
+          })) ?? [])
+        : [];
 
-    const leaderboard = members.map((member, index) => {
-      const totalMeters = (member.user.activities ?? []).reduce(
-        (sum, act) => sum + (act.distanceMeters ?? 0),
-        0,
+    const distanceMap = new Map<string, number>(
+      distanceSums.map((row) => [row.userId, row._sum?.distanceMeters ?? 0]),
+    );
+
+    const entries = members.map((member, index) => {
+      const totalMeters = distanceMap.get(member.user.id) ?? 0;
+      const recentTxs = member.user.coinTransactions ?? [];
+      const latestRestTx = recentTxs.find(
+        (tx) =>
+          tx.reference?.startsWith('REST-ACTIVE:') ||
+          tx.reference?.startsWith('REST-END:'),
       );
+      let restUntil: string | null = null;
+      if (latestRestTx?.reference?.startsWith('REST-ACTIVE:')) {
+        const exp = new Date(
+          latestRestTx.reference.slice('REST-ACTIVE:'.length),
+        );
+        if (!isNaN(exp.getTime()) && exp > now) {
+          restUntil = exp.toISOString();
+        }
+      }
+      const activeMissionsCount = (member.user.questsReceived ?? []).length;
+      const availabilityStatus: 'AVAILABLE' | 'IN_MISSION' | 'RESTING' =
+        restUntil
+          ? 'RESTING'
+          : activeMissionsCount > 0
+            ? 'IN_MISSION'
+            : 'AVAILABLE';
+
       return {
         rank: index + 1,
         userId: member.user.id,
@@ -267,14 +530,33 @@ export class SquadsService {
         totalDistanceKm: Math.round((totalMeters / 1000) * 10) / 10,
         role: member.role,
         joinedAt: member.joinedAt,
-        isCurrentUser: member.user.id === userId,
+        availabilityStatus,
+        restUntil,
       };
     });
 
+    const maxMembers = this.getMaxMembers(squad.isPremium);
+    const cachePayload: CachedLeaderboardPayload = {
+      squad: {
+        ...squad,
+        maxMembers,
+      },
+      totalMembers: entries.length,
+      maxMembers,
+      memberIds: new Set(memberIds),
+      entries,
+    };
+
+    appMemoryCache.set(cacheKey, cachePayload, LEADERBOARD_CACHE_TTL_MS);
+
     return {
-      squad,
-      totalMembers: leaderboard.length,
-      leaderboard,
+      squad: cachePayload.squad,
+      totalMembers: cachePayload.totalMembers,
+      maxMembers: cachePayload.maxMembers,
+      leaderboard: entries.map((entry) => ({
+        ...entry,
+        isCurrentUser: entry.userId === userId,
+      })),
     };
   }
 
@@ -325,6 +607,7 @@ export class SquadsService {
       name: squad.name,
       inviteCode: squad.inviteCode,
       isPremium: squad.isPremium,
+      maxMembers: this.getMaxMembers(squad.isPremium),
       createdAt: squad.createdAt,
       captain: squad.createdBy,
       members: squad.members.map((m) => ({
@@ -388,6 +671,8 @@ export class SquadsService {
           });
         });
 
+        invalidateSquadCache(squadId);
+
         return {
           message:
             'Berhasil keluar dari Circle. Kepemimpinan dialihkan ke anggota tertua.',
@@ -396,6 +681,8 @@ export class SquadsService {
         await this.prisma.squad.delete({
           where: { id: squadId },
         });
+
+        invalidateSquadCache(squadId);
 
         return {
           message:
@@ -407,6 +694,8 @@ export class SquadsService {
     await this.prisma.squadMember.delete({
       where: { id: member.id },
     });
+
+    invalidateSquadCache(squadId);
 
     return {
       message: 'Berhasil keluar dari Circle',
@@ -421,40 +710,41 @@ export class SquadsService {
     captainUserId: string,
     targetUserId: string,
   ) {
-    const requester = await this.prisma.squadMember.findUnique({
-      where: {
-        squadId_userId: {
-          squadId,
-          userId: captainUserId,
-        },
-      },
-    });
-
-    if (!requester || requester.role !== Role.CAPTAIN) {
-      throw new ForbiddenException(
-        'Hanya Captain yang berhak mengeluarkan anggota dari Circle',
-      );
-    }
-
     if (captainUserId === targetUserId) {
       throw new BadRequestException(
         'Captain tidak dapat mengeluarkan diri sendiri. Gunakan fitur keluar dari Circle.',
       );
     }
 
-    const targetMember = await this.prisma.squadMember.findUnique({
-      where: {
-        squadId_userId: {
-          squadId,
-          userId: targetUserId,
+    const [requester, targetMember] = await Promise.all([
+      this.prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId: captainUserId,
+          },
         },
-      },
-      include: {
-        user: {
-          select: { name: true },
+      }),
+      this.prisma.squadMember.findUnique({
+        where: {
+          squadId_userId: {
+            squadId,
+            userId: targetUserId,
+          },
         },
-      },
-    });
+        include: {
+          user: {
+            select: { name: true },
+          },
+        },
+      }),
+    ]);
+
+    if (!requester || requester.role !== Role.CAPTAIN) {
+      throw new ForbiddenException(
+        'Hanya Captain yang berhak mengeluarkan anggota dari Circle',
+      );
+    }
 
     if (!targetMember) {
       throw new NotFoundException(
@@ -465,6 +755,8 @@ export class SquadsService {
     await this.prisma.squadMember.delete({
       where: { id: targetMember.id },
     });
+
+    invalidateSquadCache(squadId);
 
     return {
       message: `Anggota ${targetMember.user.name} berhasil dikeluarkan dari Circle`,
