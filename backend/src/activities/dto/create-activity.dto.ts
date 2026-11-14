@@ -4,6 +4,7 @@ import {
   IsInt,
   IsNotEmpty,
   IsNumber,
+  IsObject,
   IsPositive,
   Max,
   Min,
@@ -30,7 +31,8 @@ export class CreateActivityDto {
   averagePace: number;
 
   @IsNotEmpty({ message: 'routeGeoJson tidak boleh kosong' })
-  routeGeoJson: any;
+  @IsObject({ message: 'routeGeoJson harus berupa objek GeoJSON yang valid' })
+  routeGeoJson: Record<string, any>;
 
   @IsISO8601({}, { message: 'startedAt harus berupa format ISO 8601 date string' })
   startedAt: string;
