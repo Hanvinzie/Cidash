@@ -7,10 +7,16 @@ import {
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../database/prisma.service';
+import {
+  invalidateSquadCache,
+  invalidateUserCache,
+} from '../common/cache/memory-cache';
 import { CreateQuestDto } from './dto';
 import { CoinTxType, PointTxType, QuestStatus } from '@prisma/client';
 
 export const BOMB_MISSION_FEE = 20;
+export const SNOOZE_MISSION_FEE = 10;
+export const SNOOZE_DURATION_HOURS = 12;
 
 @Injectable()
 export class QuestsService {
@@ -19,8 +25,42 @@ export class QuestsService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Memeriksa apakah pengguna sedang berada dalam Rest Mode aktif (24 jam).
+   * Menggunakan `select: { reference: true }` agar PostgreSQL mengeksekusi Index-Only Scan.
+   */
+  private async isUserResting(userId: string): Promise<boolean> {
+    if (!this.prisma.coinTransaction?.findMany) return false;
+    const now = new Date();
+    const dayAgo = new Date(now.getTime() - 24 * 3600 * 1000);
+    const txs =
+      (await this.prisma.coinTransaction.findMany({
+        where: {
+          userId,
+          createdAt: { gte: dayAgo },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { reference: true },
+      })) ?? [];
+
+    const latestRest = txs.find(
+      (tx) =>
+        tx.reference?.startsWith('REST-ACTIVE:') ||
+        tx.reference?.startsWith('REST-END:'),
+    );
+    if (latestRest?.reference?.startsWith('REST-ACTIVE:')) {
+      const exp = new Date(latestRest.reference.slice('REST-ACTIVE:'.length));
+      return !isNaN(exp.getTime()) && exp > now;
+    }
+    return false;
+  }
+
+  /**
    * Mengirimkan Bomb Mission P2P ke teman satu Circle.
    * Dikenakan biaya koin virtual yang dipotong dari saldo pembuat.
+   * Dilengkapi proteksi anti-spam:
+   * - Pengirim tidak boleh sedang dalam Rest Mode
+   * - Target tidak boleh sedang dalam Rest Mode
+   * - Target maksimal hanya boleh memiliki 1 Bomb Mission aktif pada satu waktu (IN_MISSION)
    */
   async createQuest(creatorId: string, createQuestDto: CreateQuestDto) {
     if (creatorId === createQuestDto.targetUserId) {
@@ -29,8 +69,9 @@ export class QuestsService {
       );
     }
 
+    const now = new Date();
     const deadlineDate = new Date(createQuestDto.deadline);
-    if (isNaN(deadlineDate.getTime()) || deadlineDate <= new Date()) {
+    if (isNaN(deadlineDate.getTime()) || deadlineDate <= now) {
       throw new BadRequestException(
         'Deadline misi harus berupa waktu di masa depan',
       );
@@ -67,6 +108,41 @@ export class QuestsService {
     if (!targetMember) {
       throw new BadRequestException(
         'Target pengguna yang dituju bukan anggota dari Circle ini',
+      );
+    }
+
+    // Cek status Rest Mode pengirim & penerima serta antrean misi aktif target secara paralel
+    const [creatorResting, targetResting, targetActiveQuests] =
+      await Promise.all([
+        this.isUserResting(creatorId),
+        this.isUserResting(createQuestDto.targetUserId),
+        this.prisma.quest?.findMany
+          ? this.prisma.quest.findMany({
+              where: {
+                targetUserId: createQuestDto.targetUserId,
+                status: { in: [QuestStatus.PENDING, QuestStatus.ACCEPTED] },
+                deadline: { gt: now },
+              },
+              select: { id: true },
+            })
+          : Promise.resolve([]),
+      ]);
+
+    if (creatorResting) {
+      throw new BadRequestException(
+        'Anda sedang berada dalam Rest Mode. Ubah status menjadi Ready terlebih dahulu untuk mengirim Bomb Mission.',
+      );
+    }
+
+    if (targetResting) {
+      throw new BadRequestException(
+        'Target pengguna sedang berada dalam Rest Mode (Unavailable) dan tidak dapat menerima Bomb Mission saat ini.',
+      );
+    }
+
+    if ((targetActiveQuests ?? []).length >= 1) {
+      throw new BadRequestException(
+        'Target pengguna sedang fokus menyelesaikan Bomb Mission aktif lainnya (maksimal 1 misi aktif per pengguna agar tidak spam).',
       );
     }
 
@@ -132,6 +208,10 @@ export class QuestsService {
       return { quest, remainingCoinBalance: updatedCreator.coinBalance };
     });
 
+    invalidateUserCache(creatorId);
+    invalidateUserCache(createQuestDto.targetUserId);
+    invalidateSquadCache(createQuestDto.squadId);
+
     return {
       message: 'Bomb Mission berhasil dikirimkan ke teman satu Circle',
       cost: missionFee,
@@ -193,6 +273,18 @@ export class QuestsService {
       },
     });
 
+    const snoozeRefs = quests.map((q) => `SNOOZE-${q.id.substring(0, 8)}`);
+    const snoozeTxs =
+      snoozeRefs.length > 0 && this.prisma.coinTransaction?.findMany
+        ? ((await this.prisma.coinTransaction.findMany({
+            where: { reference: { in: snoozeRefs } },
+            select: { reference: true },
+          })) ?? [])
+        : [];
+    const snoozedSet = new Set(
+      snoozeTxs.map((t) => t.reference).filter(Boolean),
+    );
+
     const formattedQuests = quests.map((quest) => {
       const remainingSeconds = Math.max(
         0,
@@ -209,6 +301,7 @@ export class QuestsService {
         status: quest.status,
         deadline: quest.deadline,
         remainingSeconds,
+        snoozed: snoozedSet.has(`SNOOZE-${quest.id.substring(0, 8)}`),
         squad: quest.squad,
         creator: quest.creator,
         targetUser: quest.targetUser,
@@ -225,6 +318,8 @@ export class QuestsService {
 
   /**
    * Menggunakan Shield Ticket untuk membatalkan penalti dari misi aktif.
+   * Jika misi masih berstatus PENDING saat di-shield, 50% koin taruhan dikembalikan (REFUND)
+   * ke pembuat tantangan agar tetap adil bagi kedua belah pihak.
    */
   async useShieldTicket(questId: string, userId: string) {
     const quest = await this.prisma.quest.findUnique({
@@ -271,7 +366,11 @@ export class QuestsService {
       );
     }
 
-    // Transaksi atomik pengurangan 1 shield ticket dan pembaruan status misi menjadi SHIELDED
+    const wasPending = quest.status === QuestStatus.PENDING;
+    const estWager = Math.max(5, Math.round((quest.stakesPoints ?? 40) / 2));
+    const senderRefundCoins = wasPending ? Math.floor(estWager / 2) : 0;
+
+    // Transaksi atomik pengurangan 1 shield ticket, status SHIELDED, dan refund 50% koin ke pengirim
     const updatedQuest = await this.prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({
         where: { id: userId },
@@ -287,20 +386,158 @@ export class QuestsService {
         );
       }
 
-      return tx.quest.update({
+      const q = await tx.quest.update({
         where: { id: questId },
         data: {
           status: QuestStatus.SHIELDED,
         },
       });
+
+      if (senderRefundCoins > 0 && quest.creatorId) {
+        await tx.user.update({
+          where: { id: quest.creatorId },
+          data: { coinBalance: { increment: senderRefundCoins } },
+        });
+
+        await tx.coinTransaction.create({
+          data: {
+            userId: quest.creatorId,
+            amount: senderRefundCoins,
+            type: CoinTxType.REFUND,
+            reference: `SHIELD-REFUND-${questId.substring(0, 8)}`,
+          },
+        });
+      }
+
+      return q;
     });
+
+    invalidateUserCache(userId);
+    if (quest.creatorId) {
+      invalidateUserCache(quest.creatorId);
+    }
+    if (quest.squadId) {
+      invalidateSquadCache(quest.squadId);
+    }
 
     return {
       message:
-        'Shield Ticket berhasil digunakan. Pinalti poin dan status misi telah dinetralkan.',
+        senderRefundCoins > 0
+          ? `Shield Ticket berhasil digunakan. Pinalti poin dinetralkan & ${senderRefundCoins} koin (50%) dikembalikan ke pengirim.`
+          : 'Shield Ticket berhasil digunakan. Pinalti poin dan status misi telah dinetralkan.',
       questId: updatedQuest.id,
       status: updatedQuest.status,
       shielded: true,
+      senderRefundCoins,
+    };
+  }
+
+  /**
+   * Memperpanjang tenggat waktu (Snooze) Bomb Mission sebesar +12 jam dengan biaya 10 koin.
+   * Hanya dapat digunakan 1x per misi agar pengguna yang sedang sibuk tetap bisa menyelesaikan olahraga nanti.
+   */
+  async snoozeQuest(questId: string, userId: string) {
+    const quest = await this.prisma.quest.findUnique({
+      where: { id: questId },
+    });
+
+    if (!quest) {
+      throw new NotFoundException('Misi tidak ditemukan');
+    }
+
+    if (quest.targetUserId !== userId) {
+      throw new ForbiddenException(
+        'Hanya penerima tantangan yang dapat memperpanjang tenggat waktu misi ini',
+      );
+    }
+
+    if (
+      quest.status !== QuestStatus.PENDING &&
+      quest.status !== QuestStatus.ACCEPTED
+    ) {
+      throw new BadRequestException(
+        `Tenggat waktu tidak dapat diperpanjang karena misi berstatus ${quest.status}`,
+      );
+    }
+
+    if (quest.deadline <= new Date()) {
+      throw new BadRequestException(
+        'Misi sudah melewati batas waktu dan tidak dapat diperpanjang',
+      );
+    }
+
+    const snoozeRef = `SNOOZE-${quest.id.substring(0, 8)}`;
+    const [existingSnooze, user] = await Promise.all([
+      this.prisma.coinTransaction?.findFirst
+        ? this.prisma.coinTransaction.findFirst({
+            where: { userId, reference: snoozeRef },
+            select: { id: true },
+          })
+        : Promise.resolve(null),
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, coinBalance: true },
+      }),
+    ]);
+
+    if (existingSnooze) {
+      throw new BadRequestException(
+        'Perpanjangan waktu (+12 jam) hanya dapat digunakan maksimal 1 kali untuk setiap Bomb Mission.',
+      );
+    }
+
+    if (!user || user.coinBalance < SNOOZE_MISSION_FEE) {
+      throw new BadRequestException(
+        `Saldo koin tidak mencukupi. Diperlukan ${SNOOZE_MISSION_FEE} koin untuk memperpanjang deadline +${SNOOZE_DURATION_HOURS} jam.`,
+      );
+    }
+
+    const newDeadline = new Date(
+      quest.deadline.getTime() + SNOOZE_DURATION_HOURS * 3600 * 1000,
+    );
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const updatedUser = await tx.user.update({
+        where: { id: userId },
+        data: { coinBalance: { decrement: SNOOZE_MISSION_FEE } },
+        select: { coinBalance: true },
+      });
+
+      if (updatedUser.coinBalance < 0) {
+        throw new BadRequestException('Saldo koin tidak mencukupi');
+      }
+
+      const updatedQuest = await tx.quest.update({
+        where: { id: quest.id },
+        data: { deadline: newDeadline },
+      });
+
+      await tx.coinTransaction.create({
+        data: {
+          userId,
+          amount: -SNOOZE_MISSION_FEE,
+          type: CoinTxType.BOMB_MISSION_FEE,
+          reference: snoozeRef,
+        },
+      });
+
+      return {
+        quest: updatedQuest,
+        remainingCoinBalance: updatedUser.coinBalance,
+      };
+    });
+
+    invalidateUserCache(userId);
+    if (quest.squadId) {
+      invalidateSquadCache(quest.squadId);
+    }
+
+    return {
+      message: `Deadline misi berhasil diperpanjang +${SNOOZE_DURATION_HOURS} jam (${SNOOZE_MISSION_FEE} koin)`,
+      cost: SNOOZE_MISSION_FEE,
+      remainingCoinBalance: result.remainingCoinBalance,
+      deadline: result.quest.deadline,
+      snoozed: true,
     };
   }
 
@@ -311,7 +548,9 @@ export class QuestsService {
     const quest = await this.prisma.quest.findUnique({
       where: { id: questId },
       include: {
-        targetUser: { select: { id: true, rankPoints: true, shieldTickets: true } },
+        targetUser: {
+          select: { id: true, rankPoints: true, shieldTickets: true },
+        },
       },
     });
 
@@ -382,6 +621,10 @@ export class QuestsService {
       return q;
     });
 
+    invalidateUserCache(quest.targetUserId);
+    invalidateUserCache(quest.creatorId);
+    invalidateSquadCache(quest.squadId);
+
     return {
       message: 'Misi ditolak',
       questId: updated.id,
@@ -425,6 +668,8 @@ export class QuestsService {
       where: { id: questId },
       data: { status: QuestStatus.ACCEPTED },
     });
+
+    invalidateSquadCache(quest.squadId);
 
     return {
       message: 'Misi berhasil diterima',
@@ -503,6 +748,7 @@ export class QuestsService {
         creator: { select: { id: true, rankPoints: true } },
         targetUser: { select: { id: true, rankPoints: true } },
       },
+      take: 100,
     });
 
     if (overdueQuests.length === 0) {
@@ -513,12 +759,25 @@ export class QuestsService {
 
     for (const quest of overdueQuests) {
       try {
-        await this.prisma.$transaction(async (tx) => {
-          // 1. Ubah status misi menjadi FAILED
-          await tx.quest.update({
-            where: { id: quest.id },
-            data: { status: QuestStatus.FAILED },
-          });
+        const didProcess = await this.prisma.$transaction(async (tx) => {
+          // 1. Optimistic concurrency check (Compare-And-Swap) agar aman dijalankan pada banyak instance server
+          if (tx.quest.updateMany) {
+            const claimed = await tx.quest.updateMany({
+              where: {
+                id: quest.id,
+                status: { in: [QuestStatus.PENDING, QuestStatus.ACCEPTED] },
+              },
+              data: { status: QuestStatus.FAILED },
+            });
+            if (claimed.count === 0) {
+              return false;
+            }
+          } else {
+            await tx.quest.update({
+              where: { id: quest.id },
+              data: { status: QuestStatus.FAILED },
+            });
+          }
 
           // 2. Potong poin penalti target pengguna
           const penaltyAmount = Math.min(
@@ -560,9 +819,16 @@ export class QuestsService {
               reference: `WIN-${quest.id.substring(0, 8)}`,
             },
           });
+
+          return true;
         });
 
-        processedCount++;
+        if (didProcess) {
+          processedCount++;
+          invalidateUserCache(quest.targetUserId);
+          invalidateUserCache(quest.creatorId);
+          invalidateSquadCache(quest.squadId);
+        }
       } catch (error) {
         this.logger.error(
           `Gagal memproses misi kedaluwarsa id ${quest.id}: ${error instanceof Error ? error.message : error}`,

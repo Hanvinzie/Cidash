@@ -15,14 +15,18 @@ interface CircleMembersSheetProps {
   onOpenCircle?: () => void;
 }
 
-/** Bottom sheet daftar anggota circle: role, status lari live, Rank Points, Kick (Captain), & Leave Circle. */
+/** Bottom sheet daftar anggota circle: role, status lari live, status Bomb Mission, kapasitas Free/Premium, Kick (Captain), & Leave Circle. */
 export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: CircleMembersSheetProps) {
-  const { membersOf, leaveCircle, kickMember } = useApp();
-  const members = membersOf(circle.id);
+  const { circles, membersOf, upgradeCircle, leaveCircle, kickMember } = useApp();
+  const liveCircle = circles.find((c) => c.id === circle.id) ?? circle;
+  const members = membersOf(liveCircle.id);
   const myMember = members.find((m) => m.isMe);
   const amCaptain = myMember?.role === 'captain';
 
-  const rooms = useLiveRooms(circle.id);
+  const isPremium = Boolean(liveCircle.isPremium);
+  const maxMembers = liveCircle.maxMembers ?? (isPremium ? 25 : 5);
+
+  const rooms = useLiveRooms(liveCircle.id);
   const runningNow = new Set(rooms.filter((r) => r.status === 'live').flatMap((r) => r.participants.map((p) => p.userId)));
   const [copied, setCopied] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
@@ -30,11 +34,11 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
   const [busy, setBusy] = useState(false);
 
   async function shareInvite() {
-    const text = `Join my circle "${circle.name}" on Cidash with code: ${circle.code}`;
+    const text = `Join my circle "${liveCircle.name}" on Cidash with code: ${liveCircle.code}`;
     try {
       if (navigator.share) await navigator.share({ title: 'Cidash Circle', text });
       else {
-        await navigator.clipboard.writeText(circle.code);
+        await navigator.clipboard.writeText(liveCircle.code);
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       }
@@ -43,10 +47,19 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
     }
   }
 
+  async function handleUpgrade() {
+    setBusy(true);
+    try {
+      await upgradeCircle(liveCircle.id);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleKick(userId: string) {
     setBusy(true);
     try {
-      await kickMember(circle.id, userId);
+      await kickMember(liveCircle.id, userId);
       setKickingUserId(null);
     } finally {
       setBusy(false);
@@ -56,7 +69,7 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
   async function handleLeave(close: (after?: () => void) => void) {
     setBusy(true);
     try {
-      await leaveCircle(circle.id);
+      await leaveCircle(liveCircle.id);
       close();
     } finally {
       setBusy(false);
@@ -64,13 +77,18 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
   }
 
   return (
-    <Modal title={circle.name} onClose={onClose}>
+    <Modal title={liveCircle.name} onClose={onClose}>
       {(close) => (
         <div>
-          <p className="-mt-3 mb-4 text-center text-sm text-subtle">
-            {members.length} {members.length === 1 ? 'member' : 'members'}
-            {runningNow.size > 0 && <span className="text-danger"> · {runningNow.size} running now</span>}
-          </p>
+          <div className="-mt-3 mb-4 flex flex-wrap items-center justify-center gap-2 text-center text-sm text-subtle">
+            <span>
+              {members.length}/{maxMembers} members
+            </span>
+            <Badge tone={isPremium ? 'primary' : 'neutral'}>
+              {isPremium ? `Premium · Max ${maxMembers}` : `Free Tier · Max ${maxMembers}`}
+            </Badge>
+            {runningNow.size > 0 && <span className="text-danger">· {runningNow.size} running now</span>}
+          </div>
 
           <ul className="-mx-2 mb-5">
             {members.map((m) => (
@@ -82,12 +100,14 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
+                  <span className="flex flex-wrap items-center gap-1.5">
                     <span className="truncate font-semibold">
                       @{m.username}
                       {m.isMe && <span className="font-medium text-subtle"> (you)</span>}
                     </span>
                     {m.role === 'captain' && <Badge tone="warning">Captain</Badge>}
+                    {m.availabilityStatus === 'RESTING' && <Badge tone="neutral">Resting</Badge>}
+                    {m.availabilityStatus === 'IN_MISSION' && <Badge tone="primary">In Mission</Badge>}
                   </span>
                   <span className="block text-xs text-subtle">
                     {runningNow.has(m.id) ? (
@@ -138,9 +158,16 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
           </ul>
 
           <div className="space-y-2">
+            {!isPremium && (
+              <Button fullWidth variant="secondary" disabled={busy} onClick={() => void handleUpgrade()}>
+                <Icon name="coin" size={15} />
+                Upgrade to Premium Circle (Max 25 · 100 coins)
+              </Button>
+            )}
+
             <Button fullWidth variant={onOpenCircle ? 'secondary' : 'primary'} onClick={shareInvite}>
               <Icon name={copied ? 'check' : 'plus'} size={16} />
-              {copied ? 'Code copied' : `Invite friends · ${circle.code}`}
+              {copied ? 'Code copied' : `Invite friends · ${liveCircle.code}`}
             </Button>
             {onOpenCircle && (
               <Button fullWidth onClick={() => close(onOpenCircle)}>
@@ -164,7 +191,7 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
                     ? 'Leave this circle? Captain role will transfer to the next longest-standing member.'
                     : amCaptain
                       ? 'Leave and delete this circle? You are the only member.'
-                      : `Are you sure you want to leave "${circle.name}"?`}
+                      : `Are you sure you want to leave "${liveCircle.name}"?`}
                 </p>
                 <div className="flex gap-2">
                   <Button
