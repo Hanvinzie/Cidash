@@ -13,6 +13,8 @@ export type MissionStatus =
 
 export type QuestDirection = 'incoming' | 'sent';
 
+export type AvailabilityStatus = 'AVAILABLE' | 'IN_MISSION' | 'RESTING';
+
 export interface User {
   id: string;
   username: string;
@@ -21,6 +23,15 @@ export interface User {
   rankPoints: number;
   coins: number;
   shieldTickets?: number;
+  availabilityStatus?: AvailabilityStatus;
+  restUntil?: string | null;
+  weeklyShieldsBought?: number;
+  maxWeeklyShields?: number;
+  maxShieldTickets?: number;
+  nextShieldCost?: number | null;
+  weeklyRestUsed?: number;
+  maxWeeklyRest?: number;
+  nextRestCost?: number | null;
 }
 
 export interface Circle {
@@ -28,6 +39,8 @@ export interface Circle {
   name: string;
   code: string; // kode unik 8 karakter
   memberCount: number;
+  maxMembers?: number; // 5 (Free) atau 25 (Premium)
+  isPremium?: boolean;
   captainId?: string; // pembuat circle (role CAPTAIN di backend)
 }
 
@@ -37,6 +50,8 @@ export interface CircleMember extends Pick<User, 'id' | 'username'> {
   rankPoints: number;
   totalDistanceKm: number;
   shieldTickets?: number;
+  availabilityStatus?: AvailabilityStatus;
+  restUntil?: string | null;
 }
 
 export interface LeaderboardEntry {
@@ -44,6 +59,8 @@ export interface LeaderboardEntry {
   user: Pick<User, 'id' | 'username' | 'avatarUrl'>;
   rankPoints: number;
   totalDistanceKm: number;
+  availabilityStatus?: AvailabilityStatus;
+  restUntil?: string | null;
 }
 
 export interface GroupMission {
@@ -70,6 +87,7 @@ export interface BombMission {
   rewardRankPoints: number;
   penaltyRankPoints: number;
   status: MissionStatus;
+  snoozed?: boolean;
 }
 
 export type RunMode = 'solo' | 'group';
@@ -98,6 +116,8 @@ export interface GeoPoint {
   lat: number;
   lng: number;
   timestamp: number; // ms
+  accuracy?: number; // radius akurasi GPS dalam meter
+  speed?: number | null; // m/s dari sensor GPS jika tersedia
 }
 
 export interface VerificationResult {
