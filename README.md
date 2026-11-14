@@ -14,7 +14,7 @@
 
 ## Ringkasan Proyek
 
-**Cidash** adalah aplikasi kebugaran interaktif yang dirancang khusus untuk mengatasi rasa canggung (*social anxiety*) berolahraga di platform sosial publik. Dengan Cidash, pengguna dapat berolahraga kasual bersama lingkaran pertemanan terpercaya menggunakan sistem **Circle Kode 8 Karakter**, berlari bersama secara *live* lewat **Group Run**, saling menantang dengan mekanisme **P2P Bomb Mission** berbayar koin, serta bersaing secara sportif dengan **Season Reset berkala (3 bulan)**.
+**Cidash** adalah aplikasi kebugaran interaktif yang dirancang khusus untuk mengatasi rasa canggung (*social anxiety*) berolahraga di platform sosial publik. Dengan Cidash, pengguna dapat berolahraga kasual bersama lingkaran pertemanan terpercaya menggunakan sistem **Circle Kode 8 Karakter**, berlari bersama secara *live* lewat **Group Run**, saling menantang dengan mekanisme **P2P Bomb Mission** berbayar koin yang dilengkapi **proteksi Anti-Spam & Non-Pay-to-Win Shield Economy**, serta bersaing secara sportif dengan **Season Reset berkala (3 bulan)**.
 
 Dokumentasi lengkap:
 * **[Spesifikasi Lengkap Proyek](docs/SPESIFIKASI_PROYEK_CIDASH.md)**
@@ -25,13 +25,58 @@ Dokumentasi lengkap:
 
 ## Fitur Utama
 
-1. **Private Circle (Invite-Only)** — buat/gabung grup eksklusif dengan kode unik 8 karakter, bebas dari penilaian publik, lengkap dengan manajemen anggota (Kick Member oleh Captain & Leave Circle).
-2. **P2P Custom Quest & Bomb Mission** — kirim misi dadakan ke teman satu circle dengan taruhan koin (5–100 koin) & *Rank Points*, lengkap dengan target jarak, durasi, dan tenggat waktu.
-3. **Perekaman GPS & Verifikasi Anti-Cheat Otomatis** — rute, jarak, *pace*, dan kalori secara *real-time*; verifikasi Haversine + deteksi anti-cheat server-side (kecepatan kendaraan bermotor, lompatan koordinat, & validasi rentang waktu).
-4. **Live Group Run (Synchronous Session)** — host membuat room, anggota circle bergabung, posisi dikirim tiap 5 detik untuk *live leaderboard* & *distance gap* ("Dika unggul 200 m dari kamu").
-5. **Share Social Track Map Card** — kartu PNG 1080×1920 bertema Neo-Brutalism berisi rute, metrik, status misi, serta QR & kode circle; dibagikan ke IG Story / WhatsApp via Web Share API.
-6. **Coin Economy & Shield Pass** — top-up koin virtual tercatat di ledger transaksi; *Shield Ticket* untuk membatalkan penalti misi tanpa kehilangan Rank Points.
+1. **Private Circle (Invite-Only · Free & Premium Capacity)** — buat/gabung grup eksklusif dengan kode unik 8 karakter, lengkap dengan batas kapasitas aman (**Free Tier: maks 5 anggota**, **Premium Tier: maks 25 anggota** demi menjaga performa *live* GPS & leaderboard), fitur upgrade Circle (`100 koin`), serta manajemen anggota (Kick Member oleh Captain & Leave Circle).
+2. **P2P Custom Quest & Bomb Mission (Anti-Spam)** — kirim misi dadakan ke teman satu circle yang berstatus `Ready` dengan taruhan koin (`5–100` koin) & *Rank Points*, lengkap dengan proteksi maksimal 1 misi aktif per target (`In Mission`) dan status istirahat (`Rest Mode`).
+3. **Balanced Coin Economy & Non-Pay-to-Win Shield Pass** — koin digunakan untuk mengirim tantangan, membeli *Shield Ticket* (dengan batas kepemilikan 2 tiket & harga mingguan bertingkat `25 → 50` koin), memperpanjang tenggat waktu misi **`+12 Jam (Snooze)`**, serta mengaktifkan kuota *Rest Mode* tambahan.
+4. **Perekaman GPS & Verifikasi Anti-Cheat Otomatis** — rute, jarak, *pace*, dan kalori secara *real-time*; verifikasi Haversine + deteksi anti-cheat server-side (kecepatan kendaraan bermotor, lompatan koordinat, & validasi rentang waktu).
+5. **Live Group Run (Synchronous Session)** — host membuat room, anggota circle bergabung, posisi dikirim tiap 5 detik untuk *live leaderboard* & *distance gap* ("Dika unggul 200 m dari kamu").
+6. **Share Social Track Map Card** — kartu PNG 1080×1920 bertema Neo-Brutalism berisi rute, metrik, status misi, serta QR & kode circle; dibagikan ke IG Story / WhatsApp via Web Share API.
 7. **Papan Peringkat & Season Reset (3 Bulan)** — reset peringkat per kuartal agar motivasi seluruh anggota tetap tinggi.
+
+---
+
+## Alur Bomb Mission, Status Ketersediaan & Ekonomi Koin Seimbang (Anti-Spam & Non-Pay-to-Win)
+
+Untuk memastikan **Bomb Mission** tetap seru, masuk akal dikerjakan di tengah kesibukan harian, tidak bisa di-*spam*, dan **tidak menjadi Pay-to-Win**, Cidash menerapkan mekanisme keseimbangan berikut:
+
+```mermaid
+flowchart TD
+    A["Pengirim (Spend 5–100 Coins)"] --> B{"Cek Status Target"}
+    B -->|"IN_MISSION (Sedang ada 1 misi aktif)"| C["Diblokir Otomatis (Anti-Spam)"]
+    B -->|"RESTING (Rest Mode 24 Jam)"| D["Diblokir (Target sedang istirahat)"]
+    B -->|"AVAILABLE (Ready)"| E["Bomb Mission Terkirim (Status Target -> IN_MISSION)"]
+    E --> F{"Pilihan Target"}
+    F -->|"1. Accept & Selesaikan Olahraga (Gratis)"| G["Target +RP Taruhan + RP Jarak"]
+    F -->|"2. Snooze +12 Jam (10 Koin, maks 1x/misi)"| H["Deadline +12 Jam (Tetap wajib olahraga)"]
+    F -->|"3. Gunakan Shield Ticket (Beli 25/50 Koin, maks 2/minggu)"| I["0 Penalti RP Target + Refund 50% Koin ke Pengirim"]
+    F -->|"4. Decline / Kedaluwarsa tanpa Shield"| J["Target -RP Penalti & Pengirim +RP Kemenangan"]
+```
+
+### 1. Status Ketersediaan Anggota (`AvailabilityStatus`)
+| Status | Cara Aktif | Aturan Keseimbangan (Anti-Spam & Anti-Camping) |
+| :--- | :--- | :--- |
+| **`AVAILABLE` (Ready)** | Default | Siap menerima tantangan Bomb Mission dari anggota satu Circle. |
+| **`IN_MISSION` (Busy)** | Otomatis saat memiliki **1 Bomb Mission aktif** (`PENDING` / `ACCEPTED`) | Mencegah *dogpiling* / *spam*: anggota lain tidak bisa menumpuk Bomb Mission baru sampai misi aktif selesai, ditolak, atau di-*shield*. |
+| **`RESTING` (Rest Mode 24h)** | Diaktifkan manual oleh pengguna (`POST /auth/status`) saat cedera, sibuk bekerja, atau istirahat | **Mencegah #1 Leaderboard Camping:**<br>• **1x Rest Mode pertama tiap minggu:** **Gratis (0 Koin)** selama 24 jam.<br>• **Rest Mode ke-2 di minggu yang sama:** **15 Koin** selama 24 jam.<br>• **Batas Mingguan:** Maksimal **2x Rest Mode per minggu**.<br>• **Freeze Rule:** Selama berada di `RESTING`, pengguna tidak bisa diserang **dan** tidak bisa mengirim Bomb Mission ke orang lain. |
+
+### 2. Sistem Koin & Shield Ticket (Non-Pay-to-Win)
+Koin tetap menjadi bahan bakar utama ekonomi aplikasi tanpa mengizinkan pemain kaya membeli kemenangan instan:
+* **Beli Shield Ticket dengan Harga Bertingkat & Kuota (`POST /auth/buy-shield`):**
+  * **Batas Tas (*Inventory Cap*):** Maksimal memegang **2 Shield Ticket** pada satu waktu (`2/2`).
+  * **Batas & Harga Mingguan (*Escalating Cost*):** Pembelian ke-1 minggu ini = **`25 Koin`**, pembelian ke-2 minggu ini = **`50 Koin`**, pembelian ke-3 dikunci hingga minggu berikutnya (maksimal 2 per minggu).
+  * **Zero RP Gain:** Shield hanya menahan pengurangan poin (`0 RP`), tidak pernah memberikan tambahan Rank Points. Untuk naik peringkat, pengguna tetap wajib berlari/bersepeda.
+* **50% Coin Refund ke Pengirim Saat Di-Shield (`POST /quests/:id/shield`):**
+  * Jika target menggunakan *Shield Ticket* saat misi masih `PENDING`, **50% koin taruhan otomatis dikembalikan (`REFUND`) ke pengirim** sehingga koin pengirim tidak hangus sia-sia.
+* **Perpanjangan Waktu / Snooze `+12 Jam` (`POST /quests/:id/snooze`):**
+  * Sedang hujan atau lembur? Target dapat membayar **`10 Koin`** (maksimal **1x per misi**) untuk memperpanjang *deadline* misi selama **+12 jam**—tetap wajib berolahraga penuh tanpa kehilangan poin.
+
+### 3. Kapasitas Anggota Circle: Free Tier vs. Premium Tier
+Untuk memastikan sistem *Live Group Run* (broadcast koordinat setiap 5 detik) dan kueri *Season Leaderboard* tetap ringan serta bebas beban berlebih (*server-safe*), kapasitas anggota per Circle dibatasi secara terukur:
+
+| Tier Circle | Kapasitas Maksimal | Cara Aktif / Upgrade | Alasan Teknis & Keseimbangan |
+| :--- | :---: | :--- | :--- |
+| **Free Circle** | **5 Anggota** | Default saat membuat Circle baru (`POST /squads`) | Ideal untuk geng pertemanan dekat; jika sudah `5/5`, kode undangan otomatis menolak anggota ke-6 hingga Circle di-*upgrade*. |
+| **Premium Circle** | **25 Anggota** | Upgrade seharga **`100 Koin`** (`POST /squads/:id/upgrade`) | Membuka kapasitas untuk komunitas/tim kantor hingga **25 orang** (batas aman *hard-cap* agar sinkronisasi *realtime* Group Run & perhitungan rute tetap cepat dan stabil). |
 
 ---
 
@@ -136,9 +181,9 @@ Cidash/
 │   └── package.json
 ├── backend/                           # NestJS REST API
 │   ├── src/
-│   │   ├── auth/                      # Register, login, top-up koin, JWT guard, /auth/me
-│   │   ├── squads/                    # Circle: buat, join kode, leaderboard (+km), leave, kick
-│   │   ├── quests/                    # Bomb Mission: buat, accept, reject, shield, cron expire
+│   │   ├── auth/                      # Register, login, top-up koin, buy-shield, status rest/ready, /auth/me
+│   │   ├── squads/                    # Circle: buat, join kode, leaderboard (+km & status), leave, kick
+│   │   ├── quests/                    # Bomb Mission: buat, accept, reject, shield (+50% refund), snooze (+12h), cron expire
 │   │   ├── activities/                # Rekam aktivitas + AntiCheatService, riwayat (+routeGeoJson), detail
 │   │   ├── common/guards/             # RateLimitGuard (proteksi brute-force & spam)
 │   │   ├── database/                  # PrismaService (auto-connect & graceful fallback)
@@ -279,12 +324,16 @@ Berikut adalah alur fitur yang siap Anda demonstrasikan secara *end-to-end*:
    * Buat Circle baru (otomatis mendapat kode unik 8 karakter & menjadi **Captain**) atau gabung ke Circle teman dengan kode `RUN8MORN`.
 2. **Manajemen Circle & Papan Peringkat (`/dashboard`)**
    * Ganti Circle aktif melalui *Circle Switcher* di bagian atas Dashboard.
-   * Klik jumlah anggota (`members`) untuk membuka **Circle Members Sheet**: lihat status teman yang sedang berlari *live*, salin/bagikan kode undangan, **Kick anggota** (jika login sebagai Captain), atau **Leave Circle**.
-3. **Top-Up Koin Demo & Kirim P2P Bomb Mission (`/profile` & `/custom-quest`)**
-   * Klik ikon koin di pojok kanan atas untuk membuka **Wallet Top-Up (Demo)** dan tambahkan koin secara instan.
-   * Buka tab **Quests** → klik **Send a Bomb Mission**: pilih teman satu Circle, pilih jenis olahraga (*Run* / *Ride*), target jarak, batas waktu, dan geser slider taruhan koin (`5–100` koin).
-4. **Terima Tantangan atau Gunakan Shield Ticket (`/custom-quest`)**
-   * Di tab **Received**, Anda dapat menekan **Accept & start** untuk langsung mengerjakan misi, atau menekan **Shield / Decline** untuk melihat konfirmasi penggunaan *Shield Ticket* (menolak misi dengan **0 penalti RP**) maupun penalti poin jika tidak memiliki tiket.
+   * Klik jumlah anggota (`members`) untuk membuka **Circle Members Sheet**: lihat status ketersediaan teman (`Ready`, `In Mission`, atau `Resting`), status lari *live*, salin/bagikan kode undangan, **Kick anggota** (jika login sebagai Captain), atau **Leave Circle**.
+3. **Status Ketersediaan (`Rest Mode`), Pembelian Shield Ticket & Kirim Bomb Mission (`/custom-quest`)**
+   * Di kartu bagian atas halaman **Quests**, demonstrasikan pengubahan **Bomb Mission Status** ke **Rest Mode 24h** (1x gratis/minggu, ke-2 seharga `15 koin`, maks 2x/minggu) untuk memproteksi diri saat sedang tidak bisa berolahraga.
+   * Klik **Buy Shield** untuk membeli *Shield Ticket* menggunakan koin dengan harga berjenjang (`25 koin` untuk tiket ke-1 minggu ini, `50 koin` untuk tiket ke-2, maksimal kepemilikan `2/2` tiket agar bebas *Pay-to-Win*).
+   * Klik **Send a Bomb Mission**: pilih teman satu Circle (sistem otomatis memberi label dan memblokir pengiriman ke anggota yang sedang `In Mission` atau `Resting`), atur olahraga (*Run* / *Ride*), jarak, waktu, dan geser slider taruhan koin (`5–100` koin).
+4. **Terima Tantangan, Snooze `+12 Jam`, atau Gunakan Shield Ticket (`/custom-quest`)**
+   * Di tab **Received**, Anda memiliki 3 opsi seimbang:
+     1. Tekan **Accept & start** untuk langsung mengerjakan misi.
+     2. Tekan **`+12h (10c)`** untuk memperpanjang tenggat waktu misi selama 12 jam dengan 10 koin (maks 1x per misi).
+     3. Tekan **Shield / Decline** untuk memblokir misi dengan *Shield Ticket* (**0 penalti RP** & otomatis mengembalikan **50% koin** ke pengirim) atau menolak dengan penalti poin jika tidak memiliki tiket.
 5. **Simulasi GPS Desktop & Verifikasi Anti-Cheat (`/activity`)**
    * Buka tab **Activity**, aktifkan saklar **Simulation mode (Demo)** agar peta bergerak otomatis tanpa perlu keluar ruangan.
    * Tekan **Start**, pantau peta Leaflet, jarak, durasi, pace, dan kalori secara *real-time* (coba pindah tab—indikator titik merah di navigasi bawah menunjukkan perekaman tetap berjalan, dan sesi aman meskipun browser di-*refresh*).
