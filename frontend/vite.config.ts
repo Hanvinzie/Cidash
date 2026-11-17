@@ -53,6 +53,8 @@ function devManifest(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
+  // MapLibre memuat web worker-nya sendiri; pre-bundling dev Vite memutus path worker itu (peta kosong).
+  optimizeDeps: { exclude: ['maplibre-gl'] },
   server: {
     port: 5173,
     host: true,

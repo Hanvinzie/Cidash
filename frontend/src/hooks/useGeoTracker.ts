@@ -25,6 +25,13 @@ const MIN_SAMPLE_INTERVAL_MS = 1000;
 const JITTER_DISTANCE_M = 3;
 /** Rule 1 — di bawah kecepatan ini (m/s) pengguna dianggap diam. */
 const STILL_SPEED_MPS = 0.5;
+/**
+ * Bila sensor tidak melaporkan kecepatan, kecepatan dihitung dari perpindahan BERSIH selama jendela ini.
+ * Goyangan GPS saat diam saling meniadakan (perpindahan bersih kecil), sedangkan berjalan/berlari tidak.
+ */
+const SPEED_WINDOW_MS = 6000;
+/** Jendela minimal sebelum kecepatan hasil hitung dipercaya; sebelum itu dianggap bergerak. */
+const SPEED_WINDOW_MIN_MS = 3000;
 /** Kecepatan maksimum lonjakan GPS (m/s) — di atas 35 m/s (126 km/jam) dianggap glitch/multipath spike. */
 const MAX_SPIKE_SPEED_MPS = 35;
 /** Parameter Kalman process noise (m/detik). */
@@ -44,6 +51,17 @@ interface KalmanState {
   lng: number;
   variance: number;
   timestamp: number;
+}
+
+/** Hasil akhir sesi rekam — dibaca saat Finish agar tidak bergantung pada state React yang mungkin basi. */
+export interface FinishedTrack {
+  points: GeoPoint[];
+  distanceKm: number;
+  elapsedSec: number;
+  elevationGain: number;
+  sessionId: string | null;
+  startedAt: number | null;
+  type: ActivityType;
 }
 
 type FlushReason = 'interval' | 'count' | 'pause' | 'online';
@@ -90,6 +108,8 @@ export function useGeoTracker() {
   /** Sampel terakhir yang dibuang filter jitter — dipaksa menjadi titik akhir saat Pause/Finish. */
   const tail = useRef<GeoPoint | null>(null);
   const lastSampleTs = useRef<number | null>(null);
+  /** Sampel (sudah dihaluskan) selama SPEED_WINDOW_MS terakhir, untuk menaksir kecepatan saat sensor tidak melaporkannya. */
+  const recent = useRef<GeoPoint[]>([]);
   const kalman = useRef<KalmanState | null>(null);
   const accumulatedMs = useRef<number>(0);
   const runSegmentStartMs = useRef<number | null>(null);
@@ -324,6 +344,7 @@ export function useGeoTracker() {
         rawPoint.timestamp - prev.timestamp <= 15_000
       ) {
         kalman.current = null;
+        recent.current = [];
         commitPoint(smoothPoint(rawPoint), true);
         return;
       }
@@ -342,10 +363,16 @@ export function useGeoTracker() {
 
       const p = isSimulation ? rawPoint : smoothPoint(rawPoint);
 
+      // Taksir kecepatan dari perpindahan bersih di jendela terakhir (dipakai bila sensor tidak melapor).
+      const recentWindow = recent.current;
+      recentWindow.push(p);
+      while (recentWindow.length > 1 && p.timestamp - recentWindow[0].timestamp > SPEED_WINDOW_MS) recentWindow.shift();
+      const spanMs = p.timestamp - recentWindow[0].timestamp;
+      const windowSpeed = spanMs >= SPEED_WINDOW_MIN_MS ? (haversineKm(recentWindow[0], p) * 1000) / (spanMs / 1000) : Infinity;
+
       if (prev) {
         const dMeters = haversineKm(prev, p) * 1000;
-        const dtSec = Math.max(0.5, (p.timestamp - prev.timestamp) / 1000);
-        const speed = rawPoint.speed != null && Number.isFinite(rawPoint.speed) ? rawPoint.speed : dMeters / dtSec;
+        const speed = rawPoint.speed != null && Number.isFinite(rawPoint.speed) ? rawPoint.speed : windowSpeed;
 
         // Rule 1 — jitter filter: buang bila perpindahan kecil DAN hampir tidak bergerak.
         // Ambang diperlebar mengikuti akurasi GPS agar goyangan sinyal lemah tidak menambah jarak.
@@ -533,6 +560,7 @@ export function useGeoTracker() {
     lastPoint.current = null;
     tail.current = null;
     lastSampleTs.current = null;
+    recent.current = [];
     kalman.current = null;
     simAngle.current = 0;
     accumulatedMs.current = 0;
@@ -580,6 +608,7 @@ export function useGeoTracker() {
     stopSources();
     lastPoint.current = null; // jangan hitung jarak "lompatan" selama jeda
     kalman.current = null;
+    recent.current = [];
     setStatus('paused');
     // Rule 2: flush segera saat Pause. Meta disimpan setelah stopwatch berhenti agar durasi akurat.
     queueMicrotask(persistMeta);
@@ -589,17 +618,33 @@ export function useGeoTracker() {
   const resume = useCallback(() => {
     setIssue(null);
     lastSampleTs.current = null;
+    recent.current = [];
     startSources(sessionRef.current?.simulated ?? simulated);
     setStatus('running');
   }, [simulated, setStatus, startSources]);
 
-  /** Akhiri rekaman. Rute lengkap dikirim sekali oleh Finish (POST /activities), bukan lewat batch. */
-  const stop = useCallback(() => {
+  /**
+   * Akhiri rekaman dan kembalikan hasil akhirnya. Rute lengkap dikirim sekali oleh Finish
+   * (POST /activities), bukan lewat batch. Gerbang geocoding dibuka di sini (bukan menunggu render)
+   * supaya reverse geocoding sekali-saat-Finish bisa langsung berjalan.
+   */
+  const stop = useCallback((): FinishedTrack => {
     flushTail();
     stopSources();
     setStatus('finished');
+    setGeocodeLocked(false);
     queueMicrotask(persistMeta);
-  }, [flushTail, persistMeta, setStatus, stopSources]);
+    const session = sessionRef.current;
+    return {
+      points: pointsRef.current.slice(),
+      distanceKm: distanceRef.current,
+      elapsedSec: currentElapsedSec(),
+      elevationGain: elevationRef.current.gain,
+      sessionId: session?.id ?? null,
+      startedAt: session?.startedAt ?? null,
+      type: session?.type ?? 'run',
+    };
+  }, [currentElapsedSec, flushTail, persistMeta, setStatus, stopSources]);
 
   /**
    * Bersihkan sesi (buffer lokal ikut dihapus). `discard: true` juga membuang draft di server —

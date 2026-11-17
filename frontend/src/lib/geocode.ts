@@ -71,13 +71,20 @@ interface NominatimAddress {
   state?: string;
 }
 
-/** Ambil dua tingkat yang paling bermakna, mis. "Senayan, Jakarta". */
+const MAX_LABEL_LENGTH = 40;
+
+/**
+ * Ambil label singkat, mis. "Senayan, Jakarta". Provinsi/negara bagian ("Special Capital Region of Jakarta")
+ * hanya dipakai bila tidak ada nama kota/kecamatan, karena terlalu panjang untuk judul aktivitas.
+ */
 function labelFromAddress(addr: NominatimAddress | undefined): string | null {
   if (!addr) return null;
   const local = addr.suburb ?? addr.neighbourhood ?? addr.quarter ?? addr.village ?? addr.city_district;
-  const area = addr.city ?? addr.town ?? addr.municipality ?? addr.county ?? addr.state;
+  const area = addr.city ?? addr.town ?? addr.municipality ?? addr.county;
   const parts = [local, area].filter((v): v is string => Boolean(v));
-  return parts.length ? parts.slice(0, 2).join(', ') : null;
+  const label = (parts.length ? parts.slice(0, 2).join(', ') : addr.state) ?? null;
+  if (!label) return null;
+  return label.length > MAX_LABEL_LENGTH ? `${label.slice(0, MAX_LABEL_LENGTH - 1).trimEnd()}…` : label;
 }
 
 async function fetchLabel(lat: number, lng: number): Promise<string | null> {
