@@ -87,30 +87,38 @@ Content-Type: application/json
 POST {{baseUrl}}/quests/{{sendBombMission.response.body.quest.id}}/shield
 Authorization: Bearer {{budiToken}}
 
-### 11. ACTIVITIES: Submit Log Olahraga GPS (Memenuhi Syarat Quest & Lolos Anti-Cheat)
+### 10b. ACTIVITIES: Batch sync saat merekam (±15 titik / 30 dtk). Idempoten: titik yang sudah diterima dilewati.
+# {{sessionId}} = UUID v4 buatan client. `polyline` hanya berisi titik BARU mulai `fromIndex`.
+PUT {{baseUrl}}/activities/sessions/3f1b8a0e-6a56-4d7c-9a3a-0c1d2e3f4a5b/sync
+Authorization: Bearer {{budiToken}}
+Content-Type: application/json
+
+{
+  "type": "RUNNING",
+  "startedAt": "2026-10-09T05:00:00.000Z",
+  "fromIndex": 0,
+  "polyline": "rp}d@ktzjSbGcGvGwGbGcGbGjHgJnK{TbB",
+  "distanceMeters": 1800,
+  "durationSeconds": 600,
+  "elevationGain": 2
+}
+
+### 11. ACTIVITIES: Finish. Menyelesaikan draft sesi yang sama (kirim `id` yang sama), rute lengkap = 1 encoded polyline.
 POST {{baseUrl}}/activities
 Authorization: Bearer {{budiToken}}
 Content-Type: application/json
 
 {
+  "id": "3f1b8a0e-6a56-4d7c-9a3a-0c1d2e3f4a5b",
   "type": "RUNNING",
   "distanceMeters": 5200,
   "durationSeconds": 1800,
   "averagePace": 5.76,
   "startedAt": "2026-10-09T05:00:00.000Z",
   "endedAt": "2026-10-09T05:30:00.000Z",
-  "routeGeoJson": {
-    "type": "LineString",
-    "coordinates": [
-      [106.8015, -6.2185],
-      [106.8028, -6.2198],
-      [106.8042, -6.2212],
-      [106.8055, -6.2225],
-      [106.8040, -6.2238],
-      [106.8020, -6.2220],
-      [106.8015, -6.2185]
-    ]
-  }
+  "encodedPolyline": "rp}d@ktzjSbGcGvGwGbGcGbGjHgJnK{TbB",
+  "elevationGain": 4,
+  "locationLabel": "Senayan, Jakarta"
 }
 
 ### 12. ACTIVITIES: Riwayat Olahraga Pengguna

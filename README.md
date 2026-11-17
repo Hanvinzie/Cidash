@@ -4,7 +4,7 @@
 [![React PWA](https://img.shields.io/badge/Frontend-React%20PWA-61DAFB?logo=react&logoColor=black)](https://react.dev/)
 [![Vite](https://img.shields.io/badge/Build-Vite%205-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![Tailwind](https://img.shields.io/badge/UI-Tailwind%20CSS-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
-[![Leaflet](https://img.shields.io/badge/Map-Leaflet-199900?logo=leaflet&logoColor=white)](https://leafletjs.com/)
+[![MapLibre](https://img.shields.io/badge/Map-MapLibre%20GL-396CB2?logo=maplibre&logoColor=white)](https://maplibre.org/)
 [![NestJS](https://img.shields.io/badge/Backend-NestJS%2012-ea2845?logo=nestjs&logoColor=white)](https://nestjs.com/)
 [![Prisma](https://img.shields.io/badge/ORM-Prisma%205-2D3748?logo=prisma&logoColor=white)](https://prisma.io/)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%20%2F%20Supabase-336791?logo=postgresql&logoColor=white)](https://supabase.com/)
@@ -137,7 +137,8 @@ Badge/latar lembut memakai opacity: `bg-success/15 text-success`, `bg-cidash-pri
 | Lapisan | Teknologi |
 | :--- | :--- |
 | **Frontend (PWA)** | React 18, TypeScript, Vite 5, Tailwind CSS 3 (light/dark token), Plus Jakarta Sans, React Router 6, `vite-plugin-pwa` (manifest + service worker) |
-| **Peta & GPS** | Geolocation API + Mode Simulasi Desktop, Leaflet + React-Leaflet (OpenStreetMap), Haversine di `lib/geo.ts` |
+| **Peta & GPS** | Geolocation API + Mode Simulasi Desktop, MapLibre GL (tile vector OpenFreeMap), Screen Wake Lock, kompas DeviceOrientation, buffer IndexedDB, Haversine di `lib/geo.ts`, Encoded Polyline (`lib/polyline.ts`) |
+| **Live circle** | Supabase Realtime *Broadcast* (`@supabase/supabase-js`, opsional) |
 | **Share Card** | `html-to-image`, `qrcode.react`, Web Share API |
 | **Backend** | NestJS 12, Passport JWT, `@nestjs/schedule` (cron kedaluwarsa quest), `class-validator`, `RateLimitGuard`, Security Headers & CORS |
 | **Database** | PostgreSQL / Supabase via Prisma 5 (dengan mode *graceful fallback* jika DB offline) |
@@ -165,7 +166,7 @@ Cidash/
 │   │   │   ├── ui/                    # Button, Card, Badge, Field, Modal, CoinBalance, dll
 │   │   │   ├── layout/                # AppLayout + bottom navigation
 │   │   │   ├── routing/               # ProtectedRoute (auth guard)
-│   │   │   ├── map/                   # RouteMap (Leaflet, lazy-loaded)
+│   │   │   ├── map/                   # RouteMap (MapLibre GL, lazy-loaded)
 │   │   │   ├── circle/                # CircleMembersSheet (daftar member, kick, leave)
 │   │   │   ├── activity/              # GroupRunPanel, VerificationModal, LocationPrompt
 │   │   │   └── share/                 # ShareCard, ShareCardModal, RouteSvg
@@ -184,7 +185,7 @@ Cidash/
 │   │   ├── auth/                      # Register, login, top-up koin, buy-shield, status rest/ready, /auth/me
 │   │   ├── squads/                    # Circle: buat, join kode, leaderboard (+km & status), leave, kick
 │   │   ├── quests/                    # Bomb Mission: buat, accept, reject, shield (+50% refund), snooze (+12h), cron expire
-│   │   ├── activities/                # Rekam aktivitas + AntiCheatService, riwayat (+routeGeoJson), detail
+│   │   ├── activities/                # Rekam aktivitas (batch sync + finish) + AntiCheatService, riwayat (+encodedPolyline), detail
 │   │   ├── common/guards/             # RateLimitGuard (proteksi brute-force & spam)
 │   │   ├── database/                  # PrismaService (auto-connect & graceful fallback)
 │   │   ├── app.module.ts
@@ -205,6 +206,20 @@ Cidash/
 ```
 
 ---
+
+## Pelacakan GPS (Arsitektur)
+
+Dirancang agar banyak pengguna aktif bersamaan tidak membebani database maupun layanan peta/geocoding pihak ketiga.
+
+| Aturan | Implementasi |
+| :--- | :--- |
+| **Buffer lokal & filter jitter** | `hooks/useGeoTracker.ts`: sampel GPS paling sering 1x/detik, filter akurasi, lonjakan, Kalman, dan **jitter Haversine** (perpindahan < 3 m **dan** kecepatan ≈ 0 dibuang; titik awal dan akhir selalu disimpan). Titik lolos disimpan ke memori dan **IndexedDB** (`lib/trackStore.ts`) sehingga pulih setelah crash/offline. |
+| **Batch sync** | `services/activitySync.ts`: delta titik dikirim sebagai **satu polyline** tiap **30 detik atau 15 titik** (yang lebih dulu) dan segera saat **Pause**. Gagal (sinyal buruk): titik tetap di buffer, dicoba lagi dengan *backoff*, dan otomatis digabung pada batch berikutnya. Server idempoten (`fromIndex`), jadi retry aman. |
+| **Live circle** | `hooks/useLiveCircleChannel.ts`: Supabase Realtime **Broadcast** (`location_update`), maksimal 1x per 4 detik per pengguna. Tanpa `INSERT` atau `postgres_changes`. Opt-in di Settings (Group run selalu berbagi). |
+| **1 baris per aktivitas** | `Activity.encodedPolyline` (Google Encoded Polyline, presisi 5, ±2 KB per 1.000 titik) + `startLat/Lng`, `endLat/Lng`, `elevationGain`, `locationLabel`. Batch pertama membuat baris draft (`status = RECORDING`), batch berikutnya meng-update baris yang sama, dan Finish menyelesaikannya (`COMPLETED`). Draft tidak masuk riwayat atau leaderboard. |
+| **Peta & geocoding aman rate-limit** | MapLibre GL + tile vector OpenFreeMap (bukan `tile.openstreetmap.org`). Reverse geocoding **hanya sekali saat Finish** (`lib/geocode.ts` terkunci selama merekam), koordinat dibulatkan 3 desimal, di-cache lokal, dan ada label cadangan bila gagal. |
+
+Endpoint: `PUT /activities/sessions/:id/sync`, `DELETE /activities/sessions/:id`, `POST /activities` (lihat `docs/api/api-test.http`).
 
 ## Panduan Setup Lengkap (Step-by-Step)
 
@@ -261,9 +276,16 @@ Salin dari `frontend/.env.example`:
 # Base URL REST API Backend NestJS
 VITE_API_BASE_URL="http://localhost:3000"
 
-# (Opsional) Supabase Realtime untuk Group Run
+# (Opsional) Live circle: Supabase Realtime Broadcast. Kosongkan untuk mematikan.
 VITE_SUPABASE_URL=""
 VITE_SUPABASE_ANON_KEY=""
+
+# (Opsional) Style peta vector. Default OpenFreeMap (tanpa API key).
+VITE_MAP_STYLE_URL=""
+VITE_MAP_STYLE_URL_DARK=""
+
+# (Opsional) Repo untuk daftar kontributor di About. Default N11ch/Cidash (upstream).
+VITE_GITHUB_REPO=""
 ```
 
 ### 4. Inisialisasi Database & Seed Data Demo (PostgreSQL / Supabase)
@@ -275,6 +297,9 @@ npm run prisma:generate
 
 # 2. Terapkan skema tabel ke database PostgreSQL
 npm run db:push
+#    (database yang sudah berjalan: terapkan migrasi aditif
+#     backend/prisma/migrations/20261117120000_activity_encoded_polyline/migration.sql,
+#     kolom routeGeoJson lama dipertahankan sehingga data lama tetap terbaca)
 
 # 3. Isi database dengan akun demo, circle RUN8MORN, aktivitas, dan misi awal
 npm run seed --workspace backend
@@ -335,9 +360,9 @@ Berikut adalah alur fitur yang siap Anda demonstrasikan secara *end-to-end*:
      2. Tekan **`+12h (10c)`** untuk memperpanjang tenggat waktu misi selama 12 jam dengan 10 koin (maks 1x per misi).
      3. Tekan **Shield / Decline** untuk memblokir misi dengan *Shield Ticket* (**0 penalti RP** & otomatis mengembalikan **50% koin** ke pengirim) atau menolak dengan penalti poin jika tidak memiliki tiket.
 5. **Simulasi GPS Desktop & Verifikasi Anti-Cheat (`/activity`)**
-   * Buka tab **Activity**, aktifkan saklar **Simulation mode (Demo)** agar peta bergerak otomatis tanpa perlu keluar ruangan.
-   * Tekan **Start**, pantau peta Leaflet, jarak, durasi, pace, dan kalori secara *real-time* (coba pindah tab—indikator titik merah di navigasi bawah menunjukkan perekaman tetap berjalan, dan sesi aman meskipun browser di-*refresh*).
-   * Tekan **Finish** → konfirmasi **Finish & verify** untuk melihat modal verifikasi Anti-Cheat dan perolehan Rank Points.
+   * Aktifkan **Demo mode** di **Profile → Settings → Activity & location** agar GPS bergerak otomatis tanpa perlu keluar ruangan.
+   * Buka tab **Activity**, tekan **Start**: peta vector tampil **layar penuh** (menutup navigasi), berputar mengikuti arah gerak dan layar tetap menyala. Hanya tombol **Pause** yang tampil; saat dijeda muncul **Resume** dan **Finish**. Sesi aman meskipun browser di-*refresh* (dipulihkan dari IndexedDB dalam status Paused).
+   * Tekan **Finish** → konfirmasi **Finish & verify** untuk melihat modal verifikasi Anti-Cheat dan perolehan Rank Points. Nama lokasi aktivitas dicari satu kali di langkah ini.
 6. **Live Group Run (`/activity?mode=group`)**
    * Pilih mode **Group run** untuk bergabung ke room *live* yang sedang berjalan atau membuat lobby baru bersama anggota Circle dan melihat *live leaderboard* antar peserta setiap 5 detik.
 7. **Ekspor & Bagikan Social Track Map Card (IG Story 1080×1920)**
