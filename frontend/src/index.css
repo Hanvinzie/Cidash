@@ -148,6 +148,13 @@
   .animate-rise {
     animation: rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
+  /* Bilah progres saat memasang update (selaras MIN_UPDATING_MS di lib/appUpdate.ts). */
+  .animate-update-bar {
+    animation: update-bar 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+  .animate-hop {
+    animation: hop 1.4s ease-in-out infinite;
+  }
 }
 
 /* --page-dir: 1 = tab di kanan, -1 = tab di kiri (diset AppLayout). */
@@ -203,6 +210,24 @@
   to {
     opacity: 1;
     transform: none;
+  }
+}
+
+@keyframes update-bar {
+  from {
+    width: 6%;
+  }
+  to {
+    width: 100%;
+  }
+}
+@keyframes hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
   }
 }
 
