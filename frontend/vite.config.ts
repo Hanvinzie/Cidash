@@ -14,10 +14,21 @@ const manifest: Partial<ManifestOptions> = {
   orientation: 'portrait',
   start_url: '/',
   scope: '/',
+  lang: 'en',
+  categories: ['health', 'fitness', 'sports', 'social'],
   icons: [
-    { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
-    { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-    { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+    { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+    { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+    // Ikon maskable memakai latar penuh + zona aman, jadi tidak terpotong di launcher Android.
+    { src: 'pwa-maskable-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+  ],
+  shortcuts: [
+    {
+      name: 'Start activity',
+      short_name: 'Activity',
+      url: '/activity',
+      icons: [{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }],
+    },
   ],
 };
 
@@ -58,7 +69,7 @@ export default defineConfig({
     devManifest(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'robots.txt'],
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'brand/*.svg', 'robots.txt'],
       manifest,
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
