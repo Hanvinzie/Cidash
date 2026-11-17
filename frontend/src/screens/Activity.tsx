@@ -1,55 +1,46 @@
-import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
 import Modal from '../components/ui/Modal';
-import { Segmented } from '../components/ui/Field';
-import Picker from '../components/ui/Picker';
-import type { IconName } from '../components/ui/Icon';
+import RunnerLoader from '../components/ui/RunnerLoader';
 import GroupRunPanel from '../components/activity/GroupRunPanel';
 import LocationPrompt from '../components/activity/LocationPrompt';
+import PlanSheet, { type PlanOption } from '../components/activity/PlanSheet';
+import RecordingScreen from '../components/activity/RecordingScreen';
 import VerificationModal from '../components/activity/VerificationModal';
 import { RouteMap, ShareCardModal } from '../lazyScreens';
 import { useApp } from '../store/AppContext';
 import { useRunSession } from '../store/RunSession';
 import { useToast } from '../store/ToastContext';
-import { detectSpeedViolation, estimateCalories, formatDuration, formatPace } from '../lib/geo';
+import { requestCompassPermission } from '../lib/compass';
+import { detectSpeedViolation, formatDuration } from '../lib/geo';
+import { fallbackLabel, resolveActivityLabel } from '../lib/geocode';
 import { LocationError, requestPosition, watchPermission, type LocationIssue } from '../lib/location';
+import { SETTING_KEYS, useBooleanSetting } from '../lib/settings';
 import { ROUTES } from '../routes';
 import type { ActivityLog, ActivityType, RunMode, VerificationResult } from '../types';
 
-const GENERAL = 'general';
-
-function MissionIcon({ name }: { name: IconName }) {
-  return (
-    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
-      <Icon name={name} size={18} />
-    </span>
-  );
-}
+const FREE_RUN = 'free:run';
+const FREE_RIDE = 'free:bike';
+const GROUP = 'group';
 const WEAK_SIGNAL = "Couldn't find your location. Make sure GPS is on and you're in an open area.";
+/** Aktivitas di bawah ini tidak mendapat poin, jadi tidak perlu memanggil geocoding. */
+const MIN_GEOCODE_KM = 0.05;
 
 type BlockingIssue = Exclude<LocationIssue, 'timeout'>;
 
 export default function Activity() {
   const { user, activeCircle, groupMissions, bombMissions, recordActivity } = useApp();
-  const { tracker, group } = useRunSession();
+  const { tracker, group, live } = useRunSession();
   const toast = useToast();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
-  const {
-    status,
-    distanceKm,
-    elapsedSec,
-    accuracyMeters,
-    points,
-    start: startTracking,
-    resume: resumeTracking,
-  } = tracker;
+  const { status, accuracyMeters, points, start: startTracking, resume: resumeTracking } = tracker;
   const tracking = status === 'running' || status === 'paused';
 
-  /** Patch some query params (?mode, ?mission, ?room) without dropping the others. */
+  /** Patch some query params (?mode, ?mission, ?room, ?type) without dropping the others. */
   const patchParams = (patch: Record<string, string | null>) =>
     setParams(
       (prev) => {
@@ -60,20 +51,60 @@ export default function Activity() {
       { replace: true },
     );
 
-  // ---- Mode (Solo / Group) — stored in the URL for deep-linking ----
+  // ---- Rencana: jenis aktivitas + mode + misi digabung jadi SATU pilihan, disimpan di URL (deep-link) ----
   const mode: RunMode = params.get('mode') === 'group' || group.room ? 'group' : 'solo';
-
-  // ---- Mission selection ----
   const openGroup = groupMissions.filter((m) => m.status !== 'completed');
   const openBombs = bombMissions.filter((b) => b.direction === 'incoming' && b.status === 'in_progress');
   const requested = params.get('mission');
-  const missionId = requested && [...openGroup, ...openBombs].some((m) => m.id === requested) ? requested : GENERAL;
-  const mission = openBombs.find((b) => b.id === missionId) ?? openGroup.find((g) => g.id === missionId);
-
-  const [freeType, setFreeType] = useState<ActivityType>('run');
+  const mission =
+    openBombs.find((b) => b.id === requested) ?? openGroup.find((g) => g.id === requested) ?? undefined;
+  const freeType: ActivityType = params.get('type') === 'bike' ? 'bike' : 'run';
   const activityType = mission?.type ?? freeType;
-  const [simulate, setSimulate] = useState(false);
+  const planId = mission ? mission.id : mode === 'group' ? GROUP : freeType === 'bike' ? FREE_RIDE : FREE_RUN;
+
+  const planOptions = useMemo<PlanOption[]>(
+    () => [
+      { id: FREE_RUN, label: 'Free run', description: 'No goal, just move', icon: 'activity', group: 'Quick start' },
+      { id: FREE_RIDE, label: 'Free ride', description: 'No goal, just move', icon: 'activity', group: 'Quick start' },
+      ...(activeCircle
+        ? [{ id: GROUP, label: 'Group run', description: 'Run together, live with your circle', icon: 'users' as const, group: 'Together' }]
+        : []),
+      ...openGroup.map((m) => ({
+        id: m.id,
+        label: m.title,
+        description: `${m.progressKm} / ${m.targetKm} km · due ${m.deadline}`,
+        icon: 'target' as const,
+        group: 'Circle missions',
+      })),
+      ...openBombs.map((b) => ({
+        id: b.id,
+        label: `From @${b.counterpart.username}`,
+        description: `${b.targetKm} km in ${b.durationMin} min · ${b.wagerCoins} coins`,
+        icon: 'quest' as const,
+        group: 'Bomb Missions',
+      })),
+    ],
+    [activeCircle, openGroup, openBombs],
+  );
+  const plan = planOptions.find((o) => o.id === planId) ?? planOptions[0];
+
+  function selectPlan(id: string) {
+    // Meninggalkan Group run → keluar dari room agar tidak tertinggal di lobby.
+    if (id !== GROUP && group.room) void group.leave();
+    if (id === FREE_RUN) patchParams({ mission: null, mode: null, room: null, type: null });
+    else if (id === FREE_RIDE) patchParams({ mission: null, mode: null, room: null, type: 'bike' });
+    else if (id === GROUP) patchParams({ mission: null, mode: 'group', type: null });
+    else patchParams({ mission: id, mode: null, room: null, type: null });
+  }
+
+  // Mode simulasi diatur dari Profile → Settings. `forceSim` = user memilih simulasi dari panduan GPS.
+  const [simSetting] = useBooleanSetting(SETTING_KEYS.simulate, false);
+  const [forceSim, setForceSim] = useState(false);
+  const simulate = simSetting || forceSim;
+
+  const [planOpen, setPlanOpen] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [result, setResult] = useState<VerificationResult | null>(null);
   const [shareLog, setShareLog] = useState<ActivityLog | null>(null);
 
@@ -97,10 +128,13 @@ export default function Activity() {
           timestamp: pos.timestamp || Date.now(),
           accuracy: pos.coords.accuracy,
           speed: pos.coords.speed,
+          heading: pos.coords.heading,
+          altitude: pos.coords.altitude,
+          altitudeAccuracy: pos.coords.altitudeAccuracy,
         };
         setHere(point);
         setPrompt(null);
-        if (action === 'start') startTracking(false, point);
+        if (action === 'start') startTracking(false, point, activityType);
         else if (action === 'resume') resumeTracking();
       } catch (e) {
         const issue = e instanceof LocationError ? e.issue : 'unavailable';
@@ -110,7 +144,7 @@ export default function Activity() {
         setLocating(false);
       }
     },
-    [startTracking, resumeTracking, toast],
+    [startTracking, resumeTracking, toast, activityType],
   );
 
   // Setiap kali tab Activity dibuka: langsung minta izin lokasi (prompt native) / cek GPS,
@@ -151,7 +185,9 @@ export default function Activity() {
   const canStart = mode === 'solo' || group.isLive;
 
   function handleStart() {
-    if (simulate) tracker.start(true);
+    // iOS: izin kompas harus diminta langsung dari gestur tap, sebelum await apa pun.
+    void requestCompassPermission();
+    if (simulate) startTracking(true, undefined, activityType);
     else void withLocation('start');
   }
 
@@ -165,25 +201,41 @@ export default function Activity() {
     setConfirmFinish(true);
   }
 
-  function confirmStop() {
+  async function confirmStop() {
     setConfirmFinish(false);
-    tracker.stop();
-    setResult(
-      recordActivity({
-        missionId: mission?.id ?? null,
-        mode,
-        type: activityType,
-        distanceKm,
-        durationSec: elapsedSec,
-        route: points,
-        speedViolation: detectSpeedViolation(points, activityType),
-      }),
-    );
+    // Rekaman berhenti → layar peta penuh menutup. Hasil akhir dibaca langsung dari tracker.
+    const snap = tracker.stop();
+    const startedAt = snap.startedAt ?? Date.now();
+    setFinishing(true);
+    try {
+      // Reverse geocoding SEKALI per aktivitas, hanya di sini (Finish) dan hanya bila aktivitas layak dihitung.
+      const locationLabel =
+        snap.distanceKm >= MIN_GEOCODE_KM
+          ? await resolveActivityLabel(snap.points, snap.type, startedAt)
+          : fallbackLabel(snap.type, startedAt);
+      setResult(
+        recordActivity({
+          missionId: mission?.id ?? null,
+          mode,
+          type: snap.type,
+          distanceKm: snap.distanceKm,
+          durationSec: snap.elapsedSec,
+          route: snap.points,
+          speedViolation: detectSpeedViolation(snap.points, snap.type),
+          sessionId: snap.sessionId,
+          startedAt,
+          elevationGain: snap.elevationGain,
+          locationLabel,
+        }),
+      );
+    } finally {
+      setFinishing(false);
+    }
   }
 
   function discardWorkout() {
     setConfirmFinish(false);
-    tracker.reset();
+    tracker.reset({ discard: true });
     toast('Workout discarded', 'info');
   }
 
@@ -195,52 +247,60 @@ export default function Activity() {
   }
 
   const liveAcc = accuracyMeters ?? (here?.accuracy ? Math.round(here.accuracy) : null);
+  const friends = useMemo(
+    () => live.members.map((m) => ({ id: m.userId, name: m.username, lat: m.lat, lng: m.lng, heading: m.heading })),
+    [live.members],
+  );
 
   const statusText = locating
     ? 'Locking high-accuracy GPS…'
-    : status === 'running'
-      ? tracker.simulated
-        ? 'Simulation · ±4m GPS'
-        : liveAcc !== null
-          ? `Recording · ±${liveAcc}m GPS`
-          : 'Recording'
-      : status === 'paused'
-        ? 'Paused'
-        : !canStart
-          ? 'Waiting for the session to go LIVE'
-          : here
-            ? liveAcc !== null
-              ? `GPS ready (±${liveAcc}m)`
-              : 'GPS ready'
-            : simulate
-              ? 'Simulation'
-              : 'Location needed to start';
+    : !canStart
+      ? 'Waiting for the session to go LIVE'
+      : simulate
+        ? 'Demo mode · simulated GPS'
+        : here
+          ? liveAcc !== null
+            ? `GPS ready (±${liveAcc}m)`
+            : 'GPS ready'
+          : 'Location needed to start';
+
+  const planSubtitle = mission
+    ? `Goal ${mission.targetKm} km · ${activityType === 'run' ? 'Run' : 'Ride'}`
+    : mode === 'group'
+      ? 'Live with your circle'
+      : 'Solo · no goal';
 
   return (
-    <div className="space-y-5">
-      <Segmented
-        ariaLabel="Activity mode"
-        value={mode}
-        onChange={(m) => !tracking && !group.room && patchParams({ mode: m === 'group' ? 'group' : null, room: null })}
-        options={[
-          {
-            value: 'solo',
-            label: (
-              <>
-                <Icon name="user" size={16} /> Solo / Quest
-              </>
-            ),
-          },
-          {
-            value: 'group',
-            label: (
-              <>
-                <Icon name="users" size={16} /> Group run
-              </>
-            ),
-          },
-        ]}
-      />
+    <div className="space-y-4">
+      {/* Peta ringkas: layar penuh baru muncul setelah Start */}
+      <div className="relative isolate h-[46dvh] min-h-[280px] overflow-hidden rounded-3xl bg-inset shadow-card">
+        <Suspense fallback={null}>
+          <RouteMap points={[]} here={here} mode="preview" />
+        </Suspense>
+        <span
+          className="absolute left-3 top-3 z-[5] flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-[11px] font-semibold text-muted shadow-sm"
+          aria-live="polite"
+        >
+          {locating && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />}
+          {statusText}
+        </span>
+      </div>
+
+      {/* Satu baris rencana: tap untuk mengubah (jenis, grup, atau misi) */}
+      <button type="button" onClick={() => setPlanOpen(true)} className="block w-full text-left" aria-haspopup="dialog">
+        <Card className="flex items-center gap-3 p-3.5 transition active:scale-[0.99]">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
+            <Icon name={plan.icon} size={22} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-bold">{plan.label}</span>
+            <span className="block truncate text-xs text-subtle">{planSubtitle}</span>
+          </span>
+          <span className="flex items-center gap-0.5 text-xs font-semibold text-cidash-primary">
+            Change <Icon name="chevronRight" size={14} />
+          </span>
+        </Card>
+      </button>
 
       {mode === 'group' &&
         (activeCircle ? (
@@ -249,157 +309,54 @@ export default function Activity() {
           <Card className="text-center text-sm text-muted">Join a circle first to start a group run.</Card>
         ))}
 
-      {/* Mission selection */}
-      <Card className="space-y-3">
-        <Picker
-          label="What are you working on?"
-          sheetTitle="Choose a mission"
-          value={missionId}
-          disabled={tracking}
-          onChange={(v) => patchParams({ mission: v === GENERAL ? null : v })}
-          options={[
-            {
-              value: GENERAL,
-              label: 'Free workout',
-              description: 'No mission — just move',
-              leading: <MissionIcon name="activity" />,
-            },
-            ...openGroup.map((m) => ({
-              value: m.id,
-              label: m.title,
-              description: `${m.progressKm} / ${m.targetKm} km · due ${m.deadline}`,
-              group: 'Circle missions',
-              leading: <MissionIcon name="target" />,
-            })),
-            ...openBombs.map((b) => ({
-              value: b.id,
-              label: `From @${b.counterpart.username}`,
-              description: `${b.targetKm} km in ${b.durationMin} min · ${b.wagerCoins} coins`,
-              group: 'Bomb Missions',
-              leading: <MissionIcon name="quest" />,
-            })),
-          ]}
-        />
-
-        {mission ? (
-          <p className="flex items-center gap-1.5 rounded-xl bg-inset px-3 py-2 text-xs text-ink">
-            <Icon name="target" size={14} className="text-cidash-primary" />
-            Goal: <b>{mission.targetKm} km</b>
-            {'durationMin' in mission && (
-              <>
-                {' '}
-                in <b>{mission.durationMin} min</b>
-              </>
-            )}{' '}
-            · {activityType === 'run' ? 'Run' : 'Ride'}
-          </p>
-        ) : (
-          !tracking && (
-            <Segmented
-              ariaLabel="Activity type"
-              value={freeType}
-              onChange={setFreeType}
-              options={[
-                { value: 'run', label: 'Run' },
-                { value: 'bike', label: 'Ride' },
-              ]}
-            />
-          )
-        )}
-        {status === 'idle' && (
-          <label className="flex items-center justify-between border-t border-line/70 pt-3 text-sm">
-            <span>
-              <span className="block font-semibold">Simulation mode (Demo)</span>
-              <span className="text-xs text-subtle">Test GPS movement on desktop</span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              checked={simulate}
-              onChange={(e) => setSimulate(e.target.checked)}
-              className="peer sr-only"
-            />
-            <span
-              aria-hidden
-              className="relative h-7 w-12 shrink-0 rounded-full bg-line transition-colors after:absolute after:left-1 after:top-1 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:bg-cidash-primary peer-checked:after:translate-x-5"
-            />
-          </label>
-        )}
-      </Card>
-
-      {/* Map + live metrics */}
-      <Card className="overflow-hidden p-0">
-        <div className="relative isolate h-56 bg-inset">
-          <Suspense fallback={null}>
-            <RouteMap points={points} here={here} accuracyMeters={liveAcc} />
-          </Suspense>
-          <span
-            className={`absolute left-3 top-3 z-[500] flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold shadow-sm ${
-              status === 'running' ? 'bg-cidash-primary text-cidash-on-primary' : 'bg-surface text-muted'
-            }`}
-            aria-live="polite"
-          >
-            {(status === 'running' || locating) && (
-              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-            )}
-            {statusText}
-          </span>
-        </div>
-
-        <dl className="grid grid-cols-2 gap-px bg-line/70">
-          {[
-            { label: 'Distance (km)', value: distanceKm.toFixed(2), big: true },
-            { label: 'Duration', value: formatDuration(elapsedSec), big: true },
-            { label: 'Pace (min/km)', value: formatPace(elapsedSec, distanceKm) },
-            { label: 'Est. calories', value: estimateCalories(distanceKm, activityType) },
-          ].map((m) => (
-            <div key={m.label} className="flex flex-col-reverse items-center bg-surface py-3">
-              <dt className="text-[11px] font-medium text-subtle">{m.label}</dt>
-              <dd className={`tabular-nums ${m.big ? 'text-3xl font-extrabold' : 'text-xl font-bold'}`}>{m.value}</dd>
-            </div>
-          ))}
-        </dl>
-      </Card>
-
-      {/* Controls: tetap terlihat di bawah layar saat scroll */}
-      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-10 flex gap-3">
-        {status === 'idle' && (
-          <Button fullWidth size="lg" disabled={!canStart || locating} onClick={handleStart} className="shadow-lg">
-            <Icon name={locating ? 'locate' : 'play'} size={18} className={locating ? 'animate-spin' : ''} />
-            {locating ? 'Finding you…' : 'Start'}
-          </Button>
-        )}
-        {status === 'running' && (
-          <Button fullWidth size="lg" variant="secondary" onClick={tracker.pause} className="shadow-lg">
-            <Icon name="pause" size={18} /> Pause
-          </Button>
-        )}
-        {status === 'paused' && (
-          <Button fullWidth size="lg" disabled={locating} onClick={handleResume} className="shadow-lg">
-            <Icon name="play" size={18} /> {locating ? 'Finding you…' : 'Resume'}
-          </Button>
-        )}
-        {tracking && (
-          <Button fullWidth size="lg" variant="danger" onClick={requestStop} className="bg-surface shadow-lg">
-            <Icon name="stop" size={18} /> Finish
-          </Button>
-        )}
+      {/* Satu aksi utama, tetap terlihat di bawah layar saat scroll */}
+      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-10">
+        <Button fullWidth size="lg" disabled={!canStart || locating || tracking} onClick={handleStart} className="shadow-lg">
+          <Icon name={locating ? 'locate' : 'play'} size={18} className={locating ? 'animate-spin' : ''} />
+          {locating ? 'Finding you…' : 'Start'}
+        </Button>
       </div>
+
+      {tracking && (
+        <RecordingScreen
+          status={status as 'running' | 'paused'}
+          type={activityType}
+          points={points}
+          distanceKm={tracker.distanceKm}
+          elapsedSec={tracker.elapsedSec}
+          elevationGain={tracker.elevationGain}
+          accuracyMeters={liveAcc}
+          simulated={tracker.simulated}
+          syncState={tracker.syncState}
+          unsynced={tracker.unsynced}
+          goalKm={mission?.targetKm}
+          gapMessage={group.room ? group.gapMessage : null}
+          friends={friends}
+          resuming={locating}
+          onPause={tracker.pause}
+          onResume={handleResume}
+          onFinish={requestStop}
+        />
+      )}
+
+      {planOpen && (
+        <PlanSheet value={planId} options={planOptions} onSelect={selectPlan} onClose={() => setPlanOpen(false)} />
+      )}
 
       {confirmFinish && (
         <Modal title="Finish workout?" onClose={() => setConfirmFinish(false)}>
           {(close) => (
             <div className="space-y-4 text-center">
               <p className="text-sm text-muted">
-                You've recorded <b>{distanceKm.toFixed(2)} km</b> in <b>{formatDuration(elapsedSec)}</b>.
-                {distanceKm < 0.05 && (
+                You've recorded <b>{tracker.distanceKm.toFixed(2)} km</b> in <b>{formatDuration(tracker.elapsedSec)}</b>.
+                {tracker.distanceKm < 0.05 && (
                   <span className="mt-1 block text-xs font-semibold text-warning">
                     Note: Activities under 50 meters are too short to earn Rank Points.
                   </span>
                 )}
               </p>
               <div className="space-y-2">
-                <Button fullWidth onClick={() => close(confirmStop)}>
+                <Button fullWidth onClick={() => close(() => void confirmStop())}>
                   <Icon name="check" size={16} /> Finish & verify
                 </Button>
                 <Button
@@ -428,6 +385,17 @@ export default function Activity() {
         </Modal>
       )}
 
+      {finishing && (
+        <div
+          className="fixed inset-0 z-[1000] flex flex-col items-center justify-center gap-3 bg-canvas/90 backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <RunnerLoader />
+          <p className="text-sm font-semibold text-muted">Saving your workout…</p>
+        </div>
+      )}
+
       {prompt && (
         <LocationPrompt
           issue={prompt}
@@ -435,8 +403,8 @@ export default function Activity() {
           onRetry={() => void withLocation(pendingAction.current)}
           onSimulate={() => {
             setPrompt(null);
-            setSimulate(true);
-            if (status === 'idle' && pendingAction.current === 'start') tracker.start(true);
+            setForceSim(true);
+            if (status === 'idle' && pendingAction.current === 'start') startTracking(true, undefined, activityType);
           }}
           onClose={() => setPrompt(null)}
         />

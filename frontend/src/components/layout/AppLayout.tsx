@@ -1,6 +1,6 @@
-import { Suspense, useLayoutEffect, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { profileTopUp, ROUTES } from '../../routes';
 import { useApp } from '../../store/AppContext';
 import { RunSessionProvider, useIsRecording } from '../../store/RunSession';
@@ -26,6 +26,20 @@ function RecordingDot() {
       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cidash-primary ring-2 ring-surface" />
     </span>
   );
+}
+
+/**
+ * Selama merekam, layar peta penuh hidup di halaman Activity. Bila rekaman aktif (mis. pulih setelah
+ * app dibuka ulang) tetapi user ada di tab lain, arahkan kembali ke Activity.
+ */
+function RecordingGuard() {
+  const recording = useIsRecording();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (recording && !pathname.startsWith(ROUTES.activity)) navigate(ROUTES.activity, { replace: true });
+  }, [recording, pathname, navigate]);
+  return null;
 }
 
 const tabIndex = (path: string) => navItems.findIndex((n) => path.startsWith(n.to));
@@ -62,6 +76,7 @@ export default function AppLayout() {
 
   return (
     <RunSessionProvider>
+      <RecordingGuard />
       <div className="min-h-[100dvh] bg-canvas">
         {/* Top app bar */}
         <header className="pt-safe fixed inset-x-0 top-0 z-20 border-b border-line/70 bg-canvas [transform:translateZ(0)]">
