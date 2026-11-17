@@ -35,6 +35,13 @@ const PATHS = {
   map: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Zm0 0v14m6-12v14',
   clock: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-13v4l3 2',
   flame: 'M12 21a7 7 0 0 0 7-7c0-4-3-6-4-10-2 2-3 4-3 6-1-1-2-2-2-4-2 2-5 5-5 8a7 7 0 0 0 7 7Z',
+  refresh: 'M20 11A8 8 0 0 0 5.6 6.6L4 8m0-4v4h4M4 13a8 8 0 0 0 14.4 4.4L20 16m0 4v-4h-4',
+  external: 'M14 3h7v7m0-7L10 14M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5',
+  settings: 'M4 7h9m4 0h3M4 17h3m4 0h9M15 4v6M9 14v6',
+  chevronLeft: 'm15 6-6 6 6 6',
+  info: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-10v6m0-9h.01',
+  history: 'M3 12a9 9 0 1 0 3-6.7L3 8m0-4v4h4m5-1v5l3 2',
+  sparkle: 'M12 3v4m0 10v4M3 12h4m10 0h4M6 6l2.5 2.5m7 7L18 18M18 6l-2.5 2.5m-7 7L6 18',
 } as const;
 
 export type IconName = keyof typeof PATHS;

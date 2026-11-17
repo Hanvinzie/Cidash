@@ -1,15 +1,17 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
 import { ActivitiesService } from './activities.service';
-import { CreateActivityDto } from './dto';
+import { CreateActivityDto, SyncActivityBatchDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { RateLimit } from '../common/guards/rate-limit.guard';
@@ -30,6 +32,31 @@ export class ActivitiesController {
     @Body() createActivityDto: CreateActivityDto,
   ) {
     return this.activitiesService.createActivity(userId, createActivityDto);
+  }
+
+  /**
+   * Batch sync GPS saat merekam (±15 titik / 30 detik, dan saat Pause).
+   * `:id` = UUID v4 sesi buatan client. Batch pertama membuat baris draft, batch berikutnya
+   * meng-update baris yang sama (1 baris per aktivitas). Idempoten, aman di-retry.
+   */
+  @RateLimit(30, 60_000)
+  @Put('sessions/:id/sync')
+  async syncBatch(
+    @CurrentUser('id') userId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) activityId: string,
+    @Body() dto: SyncActivityBatchDto,
+  ) {
+    return this.activitiesService.syncBatch(userId, activityId, dto);
+  }
+
+  /** Membuang draft sesi yang di-discard user (hanya yang belum selesai). */
+  @RateLimit(30, 60_000)
+  @Delete('sessions/:id')
+  async discardDraft(
+    @CurrentUser('id') userId: string,
+    @Param('id', new ParseUUIDPipe({ version: '4' })) activityId: string,
+  ) {
+    return this.activitiesService.discardDraft(userId, activityId);
   }
 
   /**
@@ -58,7 +85,7 @@ export class ActivitiesController {
   }
 
   /**
-   * Mengambil rincian spesifik dari satu aktivitas olahraga (termasuk rute peta GeoJSON).
+   * Mengambil rincian spesifik dari satu aktivitas olahraga (termasuk rute peta sebagai encoded polyline).
    */
   @RateLimit(60, 60_000)
   @Get(':id')

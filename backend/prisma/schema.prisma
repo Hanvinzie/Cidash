@@ -20,6 +20,12 @@ enum ActivityType {
   CYCLING
 }
 
+// RECORDING = draft yang di-update client tiap batch GPS; COMPLETED = sudah di-finish & diverifikasi.
+enum ActivityStatus {
+  RECORDING
+  COMPLETED
+}
+
 enum QuestStatus {
   PENDING
   ACCEPTED
@@ -92,21 +98,34 @@ model SquadMember {
 }
 
 model Activity {
-  id              String       @id @default(uuid())
+  id              String         @id @default(uuid())
   userId          String
   type            ActivityType
+  status          ActivityStatus @default(COMPLETED)
   distanceMeters  Float
   durationSeconds Int
   averagePace     Float
-  routeGeoJson    Json
+  // Rute disimpan sebagai SATU string Google Encoded Polyline (presisi 5). Tidak ada baris per titik.
+  encodedPolyline String?        @db.Text
+  // Ringkasan titik awal/akhir agar daftar & peta ringkas tidak perlu mendekode polyline.
+  startLat        Float?
+  startLng        Float?
+  endLat          Float?
+  endLng          Float?
+  elevationGain   Float          @default(0)
+  // Label lokasi hasil reverse geocoding yang dijalankan sekali saat Finish (di-cache di sini).
+  locationLabel   String?
+  // Deprecated: format lama sebelum encodedPolyline. Baris lama tetap terbaca (di-encode saat dibaca).
+  routeGeoJson    Json?
   startedAt       DateTime
   endedAt         DateTime
 
-  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user            User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   questMatches    Quest[]
 
   @@index([userId, startedAt(sort: Desc)])
   @@index([userId, endedAt(sort: Desc)])
+  @@index([userId, status, startedAt(sort: Desc)])
 }
 
 model Quest {

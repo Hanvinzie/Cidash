@@ -1,16 +1,31 @@
-/**
- * Logo Cidash — sama dengan ikon app di Home Screen (public/pwa-512x512.png):
- * kotak merah dengan kotak putih di tengah (50% sisi).
- */
-export default function Logo({ size = 32, className = '' }: { size?: number; className?: string }) {
+import { useTheme } from '../../store/ThemeContext';
+
+export const LOGO_PRIMARY = '/brand/logo-cidash-primary.svg'; // tile terang, mark merah → untuk latar gelap / merah
+export const LOGO_SECONDARY = '/brand/logo-cidash-secondary.svg'; // tile merah, mark terang → untuk latar terang
+
+interface LogoProps {
+  size?: number;
+  className?: string;
+  /**
+   * Warna latar tempat logo diletakkan. Default mengikuti tema aplikasi:
+   * latar gelap/merah memakai logo primary, latar terang memakai logo secondary.
+   */
+  on?: 'light' | 'dark';
+}
+
+/** Logo Cidash (SVG resmi di /public/brand). Memilih varian otomatis agar kontras dengan latar. */
+export default function Logo({ size = 32, className = '', on }: LogoProps) {
+  const { resolved } = useTheme();
+  const background = on ?? (resolved === 'dark' ? 'dark' : 'light');
   return (
-    <span
-      role="img"
-      aria-label="Cidash"
-      className={`inline-flex shrink-0 items-center justify-center bg-cidash-primary ${className}`}
-      style={{ width: size, height: size, borderRadius: size * 0.24 }}
-    >
-      <span className="block bg-white" style={{ width: size / 2, height: size / 2, borderRadius: size * 0.03 }} />
-    </span>
+    <img
+      src={background === 'dark' ? LOGO_PRIMARY : LOGO_SECONDARY}
+      alt="Cidash"
+      width={size}
+      height={size}
+      draggable={false}
+      className={`inline-block shrink-0 select-none ${className}`}
+      style={{ width: size, height: size, borderRadius: size * 0.14 }}
+    />
   );
 }
