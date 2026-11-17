@@ -2,16 +2,27 @@ import {
   IsEnum,
   IsISO8601,
   IsInt,
-  IsNotEmpty,
   IsNumber,
   IsObject,
+  IsOptional,
   IsPositive,
+  IsString,
+  IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 import { ActivityType } from '@prisma/client';
 
 export class CreateActivityDto {
+  /**
+   * ID sesi yang dibuat client saat mulai merekam (UUID v4). Bila ada, baris draft yang
+   * sudah di-update oleh batch sync diselesaikan, bukan membuat baris baru.
+   */
+  @IsOptional()
+  @IsUUID('4', { message: 'id harus berupa UUID v4' })
+  id?: string;
+
   @IsEnum(ActivityType, { message: 'type harus berupa RUNNING atau CYCLING' })
   type: ActivityType;
 
@@ -30,9 +41,28 @@ export class CreateActivityDto {
   @IsPositive({ message: 'averagePace harus bernilai positif' })
   averagePace: number;
 
-  @IsNotEmpty({ message: 'routeGeoJson tidak boleh kosong' })
+  /** Rute lengkap sebagai Google Encoded Polyline (presisi 5). Wajib kecuali memakai routeGeoJson lama. */
+  @IsOptional()
+  @IsString({ message: 'encodedPolyline harus berupa string' })
+  @MaxLength(100_000, { message: 'encodedPolyline terlalu panjang' })
+  encodedPolyline?: string;
+
+  /** @deprecated Format lama, tetap diterima agar client lama tidak rusak. Gunakan encodedPolyline. */
+  @IsOptional()
   @IsObject({ message: 'routeGeoJson harus berupa objek GeoJSON yang valid' })
-  routeGeoJson: Record<string, any>;
+  routeGeoJson?: Record<string, any>;
+
+  @IsOptional()
+  @IsNumber({}, { message: 'elevationGain harus berupa angka dalam meter' })
+  @Min(0)
+  @Max(20000)
+  elevationGain?: number;
+
+  /** Label lokasi hasil reverse geocoding (sekali saat Finish). */
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  locationLabel?: string;
 
   @IsISO8601({}, { message: 'startedAt harus berupa format ISO 8601 date string' })
   startedAt: string;
