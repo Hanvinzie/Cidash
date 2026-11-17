@@ -1,13 +1,13 @@
-import { Suspense, useLayoutEffect, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef } from 'react';
 import type { CSSProperties } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { profileTopUp, ROUTES } from '../../routes';
 import { useApp } from '../../store/AppContext';
+import { useAppUpdate } from '../../lib/appUpdate';
 import { RunSessionProvider, useIsRecording } from '../../store/RunSession';
 import HideBoot from '../routing/HideBoot';
 import Icon, { type IconName } from '../ui/Icon';
 import RunnerLoader from '../ui/RunnerLoader';
-import ThemeToggle from '../ui/ThemeToggle';
 
 const navItems: { to: string; label: string; icon: IconName; title: string }[] = [
   { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'Cidash' },
@@ -26,6 +26,32 @@ function RecordingDot() {
       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cidash-primary ring-2 ring-surface" />
     </span>
   );
+}
+
+/** Titik merah di tab Profile bila ada versi aplikasi baru (detail & tombol Update di Settings → About). */
+function UpdateDot() {
+  const { updateAvailable } = useAppUpdate();
+  if (!updateAvailable) return null;
+  return (
+    <span className="absolute -right-1 -top-0.5 flex h-2.5 w-2.5" aria-label="Update available">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cidash-primary opacity-60" />
+      <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cidash-primary ring-2 ring-surface" />
+    </span>
+  );
+}
+
+/**
+ * Selama merekam, layar peta penuh hidup di halaman Activity. Bila rekaman aktif (mis. pulih setelah
+ * app dibuka ulang) tetapi user ada di tab lain, arahkan kembali ke Activity.
+ */
+function RecordingGuard() {
+  const recording = useIsRecording();
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (recording && !pathname.startsWith(ROUTES.activity)) navigate(ROUTES.activity, { replace: true });
+  }, [recording, pathname, navigate]);
+  return null;
 }
 
 const tabIndex = (path: string) => navItems.findIndex((n) => path.startsWith(n.to));
@@ -62,6 +88,7 @@ export default function AppLayout() {
 
   return (
     <RunSessionProvider>
+      <RecordingGuard />
       <div className="min-h-[100dvh] bg-canvas">
         {/* Top app bar */}
         <header className="pt-safe fixed inset-x-0 top-0 z-20 border-b border-line/70 bg-canvas [transform:translateZ(0)]">
@@ -84,12 +111,12 @@ export default function AppLayout() {
                 <Icon name="coin" size={16} />
                 {user.coins}
               </NavLink>
-              <ThemeToggle />
             </div>
           </div>
         </header>
 
-        <main className="min-h-[100dvh] pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[calc(3.5rem+env(safe-area-inset-top))]">
+        {/* overflow-x-clip: animasi geser antar-tab (translateX 16px) tidak boleh melebarkan dokumen — di ponsel itu memperbesar viewport & mendorong nav keluar layar. */}
+        <main className="min-h-[100dvh] overflow-x-clip pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[calc(3.5rem+env(safe-area-inset-top))]">
           <div
             key={pathname}
             className="animate-page mx-auto w-full max-w-md px-4 pb-8 pt-5"
@@ -127,6 +154,7 @@ export default function AppLayout() {
                       <span className="relative">
                         <Icon name={item.icon} size={24} strokeWidth={isActive ? 2.4 : 1.9} />
                         {item.to === ROUTES.activity && <RecordingDot />}
+                        {item.to === ROUTES.profile && <UpdateDot />}
                       </span>
                       <span>{item.label}</span>
                     </>

@@ -3,20 +3,36 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#F6F6F8" />
     <meta
       name="description"
       content="Cidash — a social, gamified fitness tracker for private, invite-only circles."
     />
+    <meta name="application-name" content="Cidash" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- Open Graph / Twitter: pratinjau saat tautan dibagikan -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Cidash" />
+    <meta property="og:title" content="Cidash — Social Gamified Fitness" />
+    <meta
+      property="og:description"
+      content="Run and ride with your circle. Take on Bomb Missions, climb the leaderboard, and share your routes."
+    />
+    <meta property="og:image" content="/pwa-512x512.png" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Cidash — Social Gamified Fitness" />
+    <meta name="twitter:image" content="/pwa-512x512.png" />
     <!-- Mode standalone (tanpa address bar / toolbar browser) saat dipasang di Home Screen -->
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Cidash" />
     <meta name="format-detection" content="telephone=no" />
-    <link rel="apple-touch-icon" href="/pwa-192x192.png" />
-    <title>Cidash</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <title>Cidash — Social Gamified Fitness</title>
 
     <!-- Terapkan tema sebelum render agar tidak berkedip (lihat store/ThemeContext.tsx). -->
     <script>
@@ -53,19 +69,13 @@
       /* Logo: tile "C" pop-in + kilau, wordmark naik perlahan */
       .boot-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
       .boot-logo {
-        position: relative; overflow: hidden;
-        width: 52px; height: 52px; border-radius: 15px;
-        display: flex; align-items: center; justify-content: center;
-        background: #ea2845;
-        box-shadow: 0 10px 24px rgba(234, 40, 69, 0.3);
+        width: 56px; height: 56px; border-radius: 8px;
         animation: boot-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both, boot-breathe 2s ease-in-out 0.8s infinite;
       }
-      .boot-logo span { width: 26px; height: 26px; background: #fff; border-radius: 2px; }
-      .boot-logo::after {
-        content: ''; position: absolute; inset: -40%;
-        background: linear-gradient(110deg, transparent 40%, rgba(255, 255, 255, 0.45) 50%, transparent 60%);
-        animation: boot-shine 2.4s ease-in-out 0.7s infinite;
-      }
+      /* Logo secondary (tile merah) untuk latar terang, primary (tile terang) untuk latar gelap. */
+      .boot-logo.on-dark { display: none; }
+      html.dark .boot-logo.on-light { display: none; }
+      html.dark .boot-logo.on-dark { display: block; }
       .boot-word {
         font-size: 30px; font-weight: 800; letter-spacing: -0.5px; color: #111827;
         animation: boot-rise 0.5s ease-out 0.25s both;
@@ -73,9 +83,8 @@
       html.dark .boot-word { color: #f8fafc; }
       @keyframes boot-pop { from { transform: scale(0.4) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
       @keyframes boot-breathe { 50% { transform: scale(1.06); } }
-      @keyframes boot-shine { from { transform: translateX(-100%); } 60%, to { transform: translateX(100%); } }
-      @keyframes boot-rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
-      @media (prefers-reduced-motion: reduce) { .boot-logo, .boot-logo::after, .boot-word { animation: none !important; } }
+            @keyframes boot-rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+      @media (prefers-reduced-motion: reduce) { .boot-logo, .boot-word { animation: none !important; } }
 
       .runner { width: 88px; height: 88px; overflow: visible; }
       .runner .body { animation: runner-bob 0.3s ease-in-out infinite alternate; }
@@ -93,7 +102,8 @@
   <body>
     <div id="boot" role="status" aria-live="polite">
       <div class="boot-brand" aria-label="Cidash">
-        <div class="boot-logo" aria-hidden="true"><span></span></div>
+        <img class="boot-logo on-light" src="/brand/logo-cidash-secondary.svg" width="56" height="56" alt="" />
+        <img class="boot-logo on-dark" src="/brand/logo-cidash-primary.svg" width="56" height="56" alt="" />
         <span class="boot-word">Cidash</span>
       </div>
       <svg class="runner" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
