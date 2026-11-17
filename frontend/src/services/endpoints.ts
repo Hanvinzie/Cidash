@@ -27,8 +27,10 @@ export const ENDPOINTS = {
     reject: 'POST /quests/:id/reject', // [ADA] pakai shield jika ada atau failed
   },
   activities: {
-    create: 'POST /activities', // [ADA] backend memverifikasi Haversine + anti-cheat
-    history: 'GET /activities/history', // [ADA] menyertakan routeGeoJson untuk Share Card
+    create: 'POST /activities', // [ADA] menyelesaikan draft sesi; backend memverifikasi Haversine + anti-cheat
+    syncBatch: 'PUT /activities/sessions/:id/sync', // [ADA] batch ±15 titik / 30 dtk (delta encoded polyline), idempoten
+    discard: 'DELETE /activities/sessions/:id', // [ADA] buang draft yang di-discard
+    history: 'GET /activities/history', // [ADA] menyertakan encodedPolyline untuk Share Card
     detail: 'GET /activities/:id', // [ADA]
   },
   groupRun: {

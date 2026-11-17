@@ -10,6 +10,7 @@ import {
   leaderboardByCircle,
 } from '../data/mock';
 import { del, http, post, tokenStore } from '../services/http';
+import { decodePolyline, encodePolyline } from '../lib/polyline';
 import { useToast } from './ToastContext';
 import type {
   ActivityLog,
@@ -61,6 +62,13 @@ export interface RecordActivityInput {
   durationSec: number;
   route: GeoPoint[];
   speedViolation: boolean;
+  /** Id sesi rekam (UUID) — server menyelesaikan draft hasil batch sync, bukan membuat baris baru. */
+  sessionId?: string | null;
+  /** Waktu mulai rekam (ms). Default: sekarang dikurangi durasi. */
+  startedAt?: number | null;
+  elevationGain?: number;
+  /** Label hasil reverse geocoding (dijalankan sekali saat Finish). */
+  locationLabel?: string | null;
 }
 
 interface BackendUser {
@@ -123,26 +131,15 @@ interface AppState {
 
 const AppContext = createContext<AppState | null>(null);
 
-function parseGeoJsonRoute(routeGeoJson: unknown): GeoPoint[] {
-  if (!routeGeoJson || typeof routeGeoJson !== 'object') return [];
-  const geo = routeGeoJson as {
-    coordinates?: unknown;
-    features?: { geometry?: { coordinates?: unknown } }[];
-  };
-  const rawCoords = Array.isArray(geo.coordinates)
-    ? geo.coordinates
-    : Array.isArray(geo.features?.[0]?.geometry?.coordinates)
-      ? geo.features![0].geometry!.coordinates!
-      : [];
-
-  const now = Date.now();
-  return rawCoords
-    .filter((c): c is [number, number] => Array.isArray(c) && c.length >= 2)
-    .map(([lng, lat], idx) => ({
-      lat: Number(lat),
-      lng: Number(lng),
-      timestamp: now + idx * 1000,
-    }));
+/** Decode rute encoded polyline dari server. Timestamp sintetis (hanya urutan yang dipakai untuk render). */
+function parsePolylineRoute(encoded: string | null | undefined): GeoPoint[] {
+  if (!encoded) return [];
+  try {
+    const now = Date.now();
+    return decodePolyline(encoded).map(([lat, lng], idx) => ({ lat, lng, timestamp: now + idx * 1000 }));
+  } catch {
+    return [];
+  }
 }
 
 /** Build a valid multi-point coordinate path matching distanceMeters when few GPS points exist. */
@@ -354,7 +351,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
           type: 'RUNNING' | 'CYCLING';
           distanceKilometers: number;
           durationSeconds: number;
-          routeGeoJson?: unknown;
+          encodedPolyline?: string | null;
+          locationLabel?: string | null;
+          elevationGain?: number;
           startedAt: string;
           completedQuest?: { rewardTitle: string } | null;
         }[];
@@ -371,7 +370,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         date: new Date(a.startedAt).toLocaleDateString('en-US', { dateStyle: 'medium' }),
         routeLabel: a.completedQuest?.rewardTitle ?? 'Recorded workout',
         missionStatus: 'completed',
-        route: parseGeoJsonRoute(a.routeGeoJson),
+        route: parsePolylineRoute(a.encodedPolyline),
+        locationLabel: a.locationLabel ?? null,
+        elevationGain: a.elevationGain ?? 0,
         circle: currentCircle ? { name: currentCircle.name, code: currentCircle.code } : null,
       }));
       setActivityHistory(logs);
@@ -1210,6 +1211,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : (group?.title ?? (input.mode === 'group' ? 'Group Run' : 'Free workout')),
         missionStatus: missionStatus ?? 'completed',
         route: input.route,
+        locationLabel: input.locationLabel ?? null,
+        elevationGain: input.elevationGain ?? 0,
         circle: activeCircle ? { name: activeCircle.name, code: activeCircle.code } : null,
       };
       setActivityHistory((h) => [log, ...h]);
@@ -1219,20 +1222,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const distanceMeters = Math.max(50, Math.round(input.distanceKm * 1000));
         const averagePace = +(durationSeconds / 60 / (distanceMeters / 1000)).toFixed(2);
         const endedAt = new Date();
-        const startedAt = new Date(endedAt.getTime() - durationSeconds * 1000);
-        const coordinates = buildConsistentCoordinates(input.route, distanceMeters);
+        // Waktu mulai asli sesi (termasuk jeda); fallback ke durasi bersih untuk alur lama.
+        const startedAt = new Date(input.startedAt ?? endedAt.getTime() - durationSeconds * 1000);
+        // Rute lengkap = SATU encoded polyline (presisi 5), bukan array koordinat/GeoJSON.
+        const encodedPolyline = encodePolyline(
+          buildConsistentCoordinates(input.route, distanceMeters).map(([lng, lat]) => [lat, lng]),
+        );
 
         void post<{
           rewards?: { currentRankPoints: number; totalPointsGained: number };
         }>('/activities', {
+          ...(input.sessionId ? { id: input.sessionId } : {}),
           type: input.type === 'run' ? 'RUNNING' : 'CYCLING',
           distanceMeters,
           durationSeconds,
           averagePace,
-          routeGeoJson: {
-            type: 'LineString',
-            coordinates,
-          },
+          encodedPolyline,
+          elevationGain: Math.round(input.elevationGain ?? 0),
+          ...(input.locationLabel ? { locationLabel: input.locationLabel } : {}),
           startedAt: startedAt.toISOString(),
           endedAt: endedAt.toISOString(),
         })

@@ -102,6 +102,8 @@ export interface ActivityLog {
   routeLabel: string; // label rute / misi
   missionStatus: MissionStatus;
   route: GeoPoint[]; // untuk render ulang Social Track Map Card
+  locationLabel?: string | null; // hasil reverse geocoding sekali saat Finish (mis. "Senayan, Jakarta")
+  elevationGain?: number; // meter
   circle: Pick<Circle, 'name' | 'code'> | null; // snapshot saat aktivitas direkam
 }
 
@@ -118,6 +120,9 @@ export interface GeoPoint {
   timestamp: number; // ms
   accuracy?: number; // radius akurasi GPS dalam meter
   speed?: number | null; // m/s dari sensor GPS jika tersedia
+  heading?: number | null; // arah gerak (derajat dari utara) dari sensor GPS jika tersedia
+  altitude?: number | null; // meter di atas permukaan laut jika tersedia
+  altitudeAccuracy?: number | null;
 }
 
 export interface VerificationResult {
