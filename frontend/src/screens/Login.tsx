@@ -5,7 +5,6 @@ import Card from '../components/ui/Card';
 import Icon from '../components/ui/Icon';
 import Logo from '../components/ui/Logo';
 import InstallBanner from '../components/ui/InstallBanner';
-import ThemeToggle from '../components/ui/ThemeToggle';
 import { Input, Segmented } from '../components/ui/Field';
 import { useApp } from '../store/AppContext';
 import { ROUTES } from '../routes';
@@ -106,10 +105,6 @@ export default function Login() {
       />
 
       <div className="relative mx-auto w-full max-w-md px-5 pb-[calc(env(safe-area-inset-bottom)+2.5rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)]">
-        <div className="mb-6 flex justify-end">
-          <ThemeToggle />
-        </div>
-
         <InstallBanner className="mb-6" />
 
         <div className="mb-8 text-center">
