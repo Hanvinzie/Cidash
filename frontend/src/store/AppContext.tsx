@@ -368,7 +368,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         durationSeconds: a.durationSeconds,
         durationSec: a.durationSeconds,
         date: new Date(a.startedAt).toLocaleDateString('en-US', { dateStyle: 'medium' }),
-        routeLabel: a.completedQuest?.rewardTitle ?? 'Recorded workout',
+        routeLabel: a.completedQuest?.rewardTitle ?? a.locationLabel ?? 'Recorded workout',
         missionStatus: 'completed',
         route: parsePolylineRoute(a.encodedPolyline),
         locationLabel: a.locationLabel ?? null,
@@ -1208,7 +1208,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         date: new Date().toLocaleDateString('en-US', { dateStyle: 'medium' }),
         routeLabel: bomb
           ? `Bomb from ${bomb.counterpart.username}`
-          : (group?.title ?? (input.mode === 'group' ? 'Group Run' : 'Free workout')),
+          : (group?.title ?? input.locationLabel ?? (input.mode === 'group' ? 'Group Run' : 'Free workout')),
         missionStatus: missionStatus ?? 'completed',
         route: input.route,
         locationLabel: input.locationLabel ?? null,

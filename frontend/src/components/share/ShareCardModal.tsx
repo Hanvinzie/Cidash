@@ -3,7 +3,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import ShareCard from './ShareCard';
-import { downloadBlob, nodeToPng, sharePng } from '../../lib/shareCard';
+import { downloadBlob, nodeToPng, shareText, sharePng, socialLinks } from '../../lib/shareCard';
 import type { ActivityLog } from '../../types';
 
 interface ShareCardModalProps {
@@ -19,6 +19,8 @@ export default function ShareCardModal({ log, username, onClose }: ShareCardModa
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const filename = `cidash-${log.id}.png`;
+  const text = shareText(log);
+  const links = socialLinks(text, window.location.origin);
 
   async function handle(action: 'share' | 'download') {
     if (!cardRef.current) return;
@@ -30,9 +32,6 @@ export default function ShareCardModal({ log, username, onClose }: ShareCardModa
         downloadBlob(blob, filename);
         setMessage('Image saved');
       } else {
-        const text = log.circle
-          ? `Join the ${log.circle.name} circle on Cidash! Code: ${log.circle.code}`
-          : 'Come run with me on Cidash!';
         const res = await sharePng(blob, filename, text);
         setMessage(res === 'shared' ? 'Shared' : "Sharing isn't supported here, so the image was downloaded.");
       }
@@ -65,9 +64,26 @@ export default function ShareCardModal({ log, username, onClose }: ShareCardModa
           <Icon name="download" size={18} />
         </Button>
         <Button fullWidth disabled={busy} onClick={() => handle('share')}>
-          <Icon name="share" size={16} /> {busy ? 'Preparing…' : 'Share'}
+          <Icon name="share" size={16} /> {busy ? 'Preparing…' : 'Share image'}
         </Button>
       </div>
+
+      {/* Bagikan teks + tautan langsung ke platform (Instagram: pakai "Share image" lalu pilih Instagram). */}
+      <ul className="mt-3 grid grid-cols-4 gap-2" aria-label="Share to">
+        {links.map((l) => (
+          <li key={l.id}>
+            <a
+              href={l.href}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{ backgroundColor: l.color }}
+              className="flex h-11 items-center justify-center rounded-xl px-1 text-[11px] font-bold text-white transition active:scale-95"
+            >
+              {l.label}
+            </a>
+          </li>
+        ))}
+      </ul>
     </Modal>
   );
 }
