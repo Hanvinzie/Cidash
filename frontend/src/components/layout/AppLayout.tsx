@@ -116,7 +116,7 @@ export default function AppLayout() {
         </header>
 
         {/* overflow-x-clip: animasi geser antar-tab (translateX 16px) tidak boleh melebarkan dokumen — di ponsel itu memperbesar viewport & mendorong nav keluar layar. */}
-        <main className="min-h-[100dvh] pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[calc(3.5rem+env(safe-area-inset-top))]">
+        <main className="min-h-[100dvh] overflow-x-clip pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[calc(3.5rem+env(safe-area-inset-top))]">
           <div
             key={pathname}
             className="animate-page mx-auto w-full max-w-md px-4 pb-8 pt-5"
