@@ -13,6 +13,8 @@ export default {
     extend: {
       fontFamily: {
         sans: ['"Plus Jakarta Sans Variable"', '"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        // Wordmark merek "Cidash" (Rubik One), hanya untuk logo/judul merek.
+        brand: ['"Rubik One"', 'system-ui', 'sans-serif'],
       },
       colors: {
         cidash: {
