@@ -4,6 +4,7 @@ import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Icon from '../components/ui/Icon';
 import Logo from '../components/ui/Logo';
+import Wordmark from '../components/ui/Wordmark';
 import InstallBanner from '../components/ui/InstallBanner';
 import { Input, Segmented } from '../components/ui/Field';
 import { useApp } from '../store/AppContext';
@@ -120,7 +121,7 @@ export default function Login() {
 
         <div className="mb-8 text-center">
           <Logo size={64} className="mx-auto mb-4 shadow-lg shadow-cidash-primary/30" />
-          <h1 className="text-3xl font-extrabold tracking-tight">Cidash</h1>
+          <Wordmark as="h1" className="text-4xl text-cidash-primary" />
           <p className="mt-1 text-sm text-muted">Work out with the people you trust.</p>
         </div>
 

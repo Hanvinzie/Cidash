@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import Logo from '../ui/Logo';
+import Wordmark from '../ui/Wordmark';
 import { useAppUpdate } from '../../lib/appUpdate';
 import { fetchContributors, GITHUB_REPO, GITHUB_URL, type Contributor } from '../../lib/github';
 
@@ -159,7 +160,7 @@ export default function AboutPanel() {
     <div className="max-h-[66dvh] space-y-5 overflow-y-auto pb-1">
       <div className="flex flex-col items-center text-center">
         <Logo size={72} className="shadow-lg shadow-cidash-primary/25" />
-        <h3 className="mt-3 text-xl font-extrabold tracking-tight">Cidash</h3>
+        <Wordmark as="h3" className="mt-3 text-2xl" />
         <p className="text-xs text-subtle">
           Version {currentVersion}
           <span className="mx-1.5">·</span>
