@@ -8,6 +8,7 @@ import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
 import HistoryModal from '../components/activity/HistoryModal';
 import SettingsModal from '../components/settings/SettingsModal';
+import ProfileOverviewModal from '../components/profile/ProfileOverviewModal';
 import TopUpModal from '../components/profile/TopUpModal';
 import { ShareCardModal } from '../lazyScreens';
 import { useAppUpdate } from '../lib/appUpdate';
@@ -25,6 +26,7 @@ export default function Profile() {
   const [membersCircle, setMembersCircle] = useState<Circle | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const showTopUp = params.get('topup') === '1';
 
   const totalKm = activityHistory.reduce((sum, a) => sum + a.distanceKm, 0);
@@ -46,8 +48,15 @@ export default function Profile() {
 
   return (
     <div className="space-y-7">
-      {/* Identity */}
-      <Card className="p-5">
+      {/* Identity: tekan kartu untuk ringkasan lengkap */}
+      <Card className="relative p-5">
+        <button
+          type="button"
+          onClick={() => setOverviewOpen(true)}
+          aria-haspopup="dialog"
+          aria-label="Open profile overview"
+          className="absolute inset-0 z-10 rounded-[inherit] transition active:bg-ink/5"
+        />
         <div className="flex items-center gap-4">
           <div
             className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-cidash-primary text-2xl font-extrabold uppercase text-cidash-on-primary ring-4 ring-cidash-primary/15"
@@ -62,6 +71,7 @@ export default function Profile() {
           <Badge tone="primary">
             <Icon name="shield" size={13} /> {shieldCount} {shieldCount === 1 ? 'Shield' : 'Shields'}
           </Badge>
+          <Icon name="chevronRight" size={18} className="shrink-0 text-subtle" />
         </div>
         <dl className="mt-4 grid grid-cols-3 divide-x divide-line rounded-xl bg-inset py-3 text-center">
           {[
@@ -178,6 +188,8 @@ export default function Profile() {
           }}
         />
       )}
+
+      {overviewOpen && <ProfileOverviewModal onClose={() => setOverviewOpen(false)} />}
 
       {showTopUp && <TopUpModal balance={user.coins} onClose={closeTopUp} onBuy={topUp} />}
 
