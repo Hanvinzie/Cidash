@@ -75,6 +75,27 @@ export function decodePolyline(encoded: string): LatLng[] {
   return points;
 }
 
+/**
+ * Rute dengan jeda terputus (mis. pengguna melanjutkan jauh dari tempat berhenti) disimpan sebagai
+ * beberapa segmen yang dipisah ';' di dalam SATU string. ';' (ASCII 59) berada di luar rentang
+ * karakter polyline (63–126), jadi tidak pernah ambigu dengan data koordinat.
+ */
+export const SEGMENT_SEPARATOR = ';';
+
+export function encodeSegments(segments: ReadonlyArray<ReadonlyArray<LatLng>>): string {
+  return segments
+    .filter((s) => s.length > 0)
+    .map((s) => encodePolyline(s))
+    .join(SEGMENT_SEPARATOR);
+}
+
+export function decodeSegments(encoded: string): LatLng[][] {
+  return encoded
+    .split(SEGMENT_SEPARATOR)
+    .filter((part) => part.length > 0)
+    .map((part) => decodePolyline(part));
+}
+
 export function isValidLatLng([lat, lng]: LatLng): boolean {
   return (
     Number.isFinite(lat) &&

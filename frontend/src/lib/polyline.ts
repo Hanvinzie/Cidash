@@ -86,7 +86,49 @@ export function isValidLatLng([lat, lng]: LatLng): boolean {
   );
 }
 
-/** Bantu: titik GPS → polyline (membuang timestamp/akurasi). */
-export function encodeGeoPoints(points: ReadonlyArray<{ lat: number; lng: number }>): string {
+/**
+ * Rute dengan jeda terputus disimpan sebagai beberapa segmen yang dipisah ';' di dalam SATU string.
+ * ';' (ASCII 59) di luar rentang karakter polyline (63–126), jadi tidak ambigu dengan data koordinat.
+ */
+export const SEGMENT_SEPARATOR = ';';
+
+export function encodeSegments(segments: ReadonlyArray<ReadonlyArray<LatLng>>): string {
+  return segments
+    .filter((s) => s.length > 0)
+    .map((s) => encodePolyline(s))
+    .join(SEGMENT_SEPARATOR);
+}
+
+export function decodeSegments(encoded: string): LatLng[][] {
+  return encoded
+    .split(SEGMENT_SEPARATOR)
+    .filter((part) => part.length > 0)
+    .map((part) => decodePolyline(part));
+}
+
+interface RoutePoint {
+  lat: number;
+  lng: number;
+  /** Titik ini memulai segmen baru (rute terputus dari titik sebelumnya). */
+  gap?: boolean;
+}
+
+/** Titik GPS → polyline DATAR (tanpa pemisah segmen). Dipakai batch sync, yang hanya cadangan draft. */
+export function encodeGeoPoints(points: ReadonlyArray<RoutePoint>): string {
   return encodePolyline(points.map((p) => [p.lat, p.lng] as LatLng));
+}
+
+/** Pecah titik menjadi segmen pada setiap titik bertanda `gap`. */
+export function splitRoute<T extends RoutePoint>(points: ReadonlyArray<T>): T[][] {
+  const segments: T[][] = [];
+  for (const p of points) {
+    if (p.gap || segments.length === 0) segments.push([p]);
+    else segments[segments.length - 1].push(p);
+  }
+  return segments;
+}
+
+/** Titik GPS → polyline final dengan segmen terputus (dikirim saat Finish). */
+export function encodeRoute(points: ReadonlyArray<RoutePoint>): string {
+  return encodeSegments(splitRoute(points).map((seg) => seg.map((p) => [p.lat, p.lng] as LatLng)));
 }

@@ -10,7 +10,7 @@ import {
   leaderboardByCircle,
 } from '../data/mock';
 import { del, http, post, tokenStore } from '../services/http';
-import { decodePolyline, encodePolyline } from '../lib/polyline';
+import { decodeSegments, encodePolyline, encodeRoute } from '../lib/polyline';
 import { useToast } from './ToastContext';
 import type {
   ActivityLog,
@@ -136,7 +136,11 @@ function parsePolylineRoute(encoded: string | null | undefined): GeoPoint[] {
   if (!encoded) return [];
   try {
     const now = Date.now();
-    return decodePolyline(encoded).map(([lat, lng], idx) => ({ lat, lng, timestamp: now + idx * 1000 }));
+    let idx = 0;
+    // Segmen ke-2 dan seterusnya diawali titik `gap` agar tidak digambar tersambung.
+    return decodeSegments(encoded).flatMap((segment, si) =>
+      segment.map(([lat, lng], pi) => ({ lat, lng, timestamp: now + idx++ * 1000, ...(si > 0 && pi === 0 ? { gap: true } : {}) })),
+    );
   } catch {
     return [];
   }
@@ -1225,9 +1229,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // Waktu mulai asli sesi (termasuk jeda); fallback ke durasi bersih untuk alur lama.
         const startedAt = new Date(input.startedAt ?? endedAt.getTime() - durationSeconds * 1000);
         // Rute lengkap = SATU encoded polyline (presisi 5), bukan array koordinat/GeoJSON.
-        const encodedPolyline = encodePolyline(
-          buildConsistentCoordinates(input.route, distanceMeters).map(([lng, lat]) => [lat, lng]),
-        );
+        const encodedPolyline =
+          input.route.length >= 2
+            ? encodeRoute(input.route)
+            : encodePolyline(buildConsistentCoordinates(input.route, distanceMeters).map(([lng, lat]) => [lat, lng]));
 
         void post<{
           rewards?: { currentRankPoints: number; totalPointsGained: number };
