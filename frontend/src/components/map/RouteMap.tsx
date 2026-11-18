@@ -3,6 +3,7 @@ import { LngLatBounds, Map as MapLibreMap, Marker, type GeoJSONSource } from 'ma
 import 'maplibre-gl/dist/maplibre-gl.css';
 import Icon from '../ui/Icon';
 import { angleDelta } from '../../lib/compass';
+import { splitRoute } from '../../lib/polyline';
 import { useHeading } from '../../hooks/useHeading';
 import { useTheme } from '../../store/ThemeContext';
 import type { GeoPoint } from '../../types';
@@ -42,17 +43,21 @@ interface RouteMapProps {
 interface LineFeature {
   type: 'Feature';
   properties: Record<string, never>;
-  geometry: { type: 'LineString'; coordinates: [number, number][] };
+  /** MultiLineString: jeda yang terputus (gap) menjadi garis terpisah, tidak disambung lurus. */
+  geometry: { type: 'MultiLineString'; coordinates: [number, number][][] };
 }
 
 const EMPTY_LINE: LineFeature = {
   type: 'Feature',
   properties: {},
-  geometry: { type: 'LineString', coordinates: [] },
+  geometry: { type: 'MultiLineString', coordinates: [] },
 };
 
 function routeFeature(points: GeoPoint[]): LineFeature {
-  return { ...EMPTY_LINE, geometry: { type: 'LineString', coordinates: points.map((p) => [p.lng, p.lat]) } };
+  return {
+    ...EMPTY_LINE,
+    geometry: { type: 'MultiLineString', coordinates: splitRoute(points).map((seg) => seg.map((p) => [p.lng, p.lat] as [number, number])) },
+  };
 }
 
 /** Penanda posisi pengguna: panah arah + denyut. Tanpa arah → titik biasa. */

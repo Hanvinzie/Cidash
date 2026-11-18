@@ -54,6 +54,7 @@ export function estimateCalories(distanceKm: number, type: ActivityType): number
  */
 export function detectSpeedViolation(points: GeoPoint[], type: ActivityType): boolean {
   for (let i = 1; i < points.length; i++) {
+    if (points[i].gap) continue; // celah setelah jeda bukan lonjakan kecepatan
     const dtHours = (points[i].timestamp - points[i - 1].timestamp) / 3_600_000;
     if (dtHours <= 0) continue;
     const speed = haversineKm(points[i - 1], points[i]) / dtHours;
