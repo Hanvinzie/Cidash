@@ -14,6 +14,7 @@ import { decodeSegments, encodePolyline, encodeRoute } from '../lib/polyline';
 import { useToast } from './ToastContext';
 import type {
   ActivityLog,
+  ActivitySummary,
   ActivityType,
   AvailabilityStatus,
   BombMission,
@@ -75,6 +76,7 @@ interface BackendUser {
   id: string;
   email: string;
   name: string;
+  createdAt?: string;
   coinBalance: number;
   rankPoints: number;
   shieldTickets: number;
@@ -108,6 +110,8 @@ interface AppState {
   groupMissions: GroupMission[];
   bombMissions: BombMission[];
   activityHistory: ActivityLog[];
+  /** Total sepanjang masa dari server; null bila belum dimuat (mode demo memakai riwayat lokal). */
+  activitySummary: ActivitySummary | null;
 
   login: (credentials?: AuthCredentials) => Promise<{ circleCount: number }>;
   logout: () => void;
@@ -183,6 +187,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     nextRestCost: REST_WEEKLY_COSTS[0],
   });
   const [seasonDistanceKm, setSeasonDistanceKm] = useState(hasToken ? 0 : 61.1);
+  const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [circles, setCircles] = useState<Circle[]>(hasToken ? [] : initialCircles);
   const [activeCircleId, setActiveCircleId] = useState<string | null>(
     hasToken ? null : (initialCircles[0]?.id ?? null),
@@ -202,6 +207,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: u.id,
       username: u.name,
       email: u.email,
+      createdAt: u.createdAt,
       rankPoints: u.rankPoints,
       coins: u.coinBalance,
       shieldTickets: u.shieldTickets ?? 0,
@@ -349,7 +355,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncActivities = useCallback(async (currentCircle: Circle | null) => {
     try {
       const res = await http<{
-        summary: { totalDistanceKilometers: number };
+        summary: { totalWorkouts?: number; totalDistanceKilometers: number; totalDurationMinutes?: number };
         activities: {
           id: string;
           type: 'RUNNING' | 'CYCLING';
@@ -364,6 +370,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }>('/activities/history?limit=25');
 
       setSeasonDistanceKm(res.summary.totalDistanceKilometers);
+      setActivitySummary({
+        workouts: res.summary.totalWorkouts ?? res.activities.length,
+        distanceKm: res.summary.totalDistanceKilometers,
+        durationMinutes: res.summary.totalDurationMinutes ?? 0,
+      });
       const logs: ActivityLog[] = res.activities.map((a) => ({
         id: a.id,
         type: a.type === 'RUNNING' ? 'run' : 'bike',
@@ -1299,6 +1310,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     groupMissions: groupMissions.filter((g) => g.circleId === activeCircle?.id),
     bombMissions,
     activityHistory,
+    activitySummary,
     login,
     logout,
     updateProfileName,

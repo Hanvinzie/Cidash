@@ -15,6 +15,7 @@ import type {
 // ============================================================
 
 export const initialUser: User = {
+  createdAt: '2026-01-12T07:00:00.000Z',
   id: 'usr_001',
   username: 'rivaldo',
   rankPoints: 1240,
