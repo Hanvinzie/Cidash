@@ -11,9 +11,11 @@ import {
 } from '../data/mock';
 import { del, http, post, tokenStore } from '../services/http';
 import { decodeSegments, encodePolyline, encodeRoute } from '../lib/polyline';
+import { priceQuest, type Difficulty } from '../lib/questPricing';
 import { useToast } from './ToastContext';
 import type {
   ActivityLog,
+  ActivitySummary,
   ActivityType,
   AvailabilityStatus,
   BombMission,
@@ -48,10 +50,11 @@ export interface AuthCredentials {
 export interface SendBombInput {
   targetUserId: string;
   type: ActivityType;
+  /** Jarak resmi (km). Batas waktu, koin, dan taruhan dihitung dari jarak + kesulitan + tenggat. */
   targetKm: number;
-  durationMin: number;
-  deadline: string;
-  wagerCoins: number;
+  difficulty: Difficulty;
+  /** Tenggat 1–7 hari. */
+  deadlineDays: number;
 }
 
 export interface RecordActivityInput {
@@ -75,6 +78,7 @@ interface BackendUser {
   id: string;
   email: string;
   name: string;
+  createdAt?: string;
   coinBalance: number;
   rankPoints: number;
   shieldTickets: number;
@@ -108,6 +112,8 @@ interface AppState {
   groupMissions: GroupMission[];
   bombMissions: BombMission[];
   activityHistory: ActivityLog[];
+  /** Total sepanjang masa dari server; null bila belum dimuat (mode demo memakai riwayat lokal). */
+  activitySummary: ActivitySummary | null;
 
   login: (credentials?: AuthCredentials) => Promise<{ circleCount: number }>;
   logout: () => void;
@@ -183,6 +189,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     nextRestCost: REST_WEEKLY_COSTS[0],
   });
   const [seasonDistanceKm, setSeasonDistanceKm] = useState(hasToken ? 0 : 61.1);
+  const [activitySummary, setActivitySummary] = useState<ActivitySummary | null>(null);
   const [circles, setCircles] = useState<Circle[]>(hasToken ? [] : initialCircles);
   const [activeCircleId, setActiveCircleId] = useState<string | null>(
     hasToken ? null : (initialCircles[0]?.id ?? null),
@@ -202,6 +209,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       id: u.id,
       username: u.name,
       email: u.email,
+      createdAt: u.createdAt,
       rankPoints: u.rankPoints,
       coins: u.coinBalance,
       shieldTickets: u.shieldTickets ?? 0,
@@ -290,24 +298,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncQuests = useCallback(async (circleId?: string) => {
     try {
       const query = circleId ? `?squadId=${encodeURIComponent(circleId)}` : '';
-      const res = await http<{
-        quests: {
-          id: string;
-          rewardTitle: string;
-          activityType: 'RUNNING' | 'CYCLING';
-          targetDistance: number;
-          targetMaxPace?: number | null;
-          stakesPoints: number;
-          status: 'PENDING' | 'ACCEPTED' | 'COMPLETED' | 'FAILED' | 'SHIELDED';
-          deadline: string;
-          snoozed?: boolean;
-          creator: { id: string; name: string };
-          targetUser: { id: string; name: string };
-          isTargetUser: boolean;
-        }[];
-      }>(`/quests/active${query}`);
+      type ApiQuest = {
+        id: string;
+        rewardTitle: string;
+        activityType: 'RUNNING' | 'CYCLING';
+        targetDistance: number;
+        targetMaxPace?: number | null;
+        stakesPoints: number;
+        wagerCoins?: number | null;
+        difficulty?: Difficulty | null;
+        status: 'PENDING' | 'ACCEPTED' | 'COMPLETED' | 'FAILED' | 'SHIELDED';
+        deadline: string;
+        snoozed?: boolean;
+        creator: { id: string; name: string };
+        targetUser: { id: string; name: string };
+        isTargetUser: boolean;
+      };
+      // Riwayat (selesai/gagal/Shield) opsional: bila gagal, misi aktif tetap tampil.
+      const [active, history] = await Promise.all([
+        http<{ quests: ApiQuest[] }>(`/quests/active${query}`),
+        http<{ quests: ApiQuest[] }>(`/quests/history${query}`).catch(() => ({ quests: [] as ApiQuest[] })),
+      ]);
 
-      const mapped: BombMission[] = res.quests.map((q) => {
+      const mapped: BombMission[] = [...active.quests, ...history.quests].map((q) => {
         const targetKm = +(q.targetDistance / 1000).toFixed(2);
         const pace = q.targetMaxPace && q.targetMaxPace > 0 ? q.targetMaxPace : 7;
         const durationMin = Math.max(5, Math.round(targetKm * pace));
@@ -324,10 +337,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             dateStyle: 'medium',
             timeStyle: 'short',
           }),
-          wagerCoins: Math.max(5, Math.round(q.stakesPoints / 2)),
+          // Koin yang benar-benar dibayar; quest lama (sebelum kolom ada) memakai perkiraan lama.
+          wagerCoins: q.wagerCoins ?? Math.max(5, Math.round(q.stakesPoints / 2)),
           rewardRankPoints: q.stakesPoints,
           penaltyRankPoints: q.stakesPoints,
           snoozed: Boolean(q.snoozed),
+          difficulty: q.difficulty ?? undefined,
           status:
             q.status === 'ACCEPTED'
               ? 'in_progress'
@@ -349,7 +364,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const syncActivities = useCallback(async (currentCircle: Circle | null) => {
     try {
       const res = await http<{
-        summary: { totalDistanceKilometers: number };
+        summary: { totalWorkouts?: number; totalDistanceKilometers: number; totalDurationMinutes?: number };
         activities: {
           id: string;
           type: 'RUNNING' | 'CYCLING';
@@ -364,6 +379,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }>('/activities/history?limit=25');
 
       setSeasonDistanceKm(res.summary.totalDistanceKilometers);
+      setActivitySummary({
+        workouts: res.summary.totalWorkouts ?? res.activities.length,
+        distanceKm: res.summary.totalDistanceKilometers,
+        durationMinutes: res.summary.totalDurationMinutes ?? 0,
+      });
       const logs: ActivityLog[] = res.activities.map((a) => ({
         id: a.id,
         type: a.type === 'RUNNING' ? 'run' : 'bike',
@@ -950,8 +970,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      // Harga & batas waktu: pratinjau yang sama dengan server (server menghitung ulang dan menjadi acuan).
+      const price = priceQuest({
+        type: input.type,
+        distanceKm: input.targetKm,
+        difficulty: input.difficulty,
+        deadlineDays: input.deadlineDays,
+      });
+
       const target = members.find((m) => m.id === input.targetUserId);
-      if (!target || input.wagerCoins > user.coins) {
+      if (!target || price.coins > user.coins) {
         toast('Not enough coins or invalid target member', 'error');
         return;
       }
@@ -966,8 +994,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      const deadlineDate = new Date(Date.now() + input.deadlineDays * 86_400_000);
       const prevCoins = user.coins;
-      setUser((u) => ({ ...u, coins: Math.max(0, u.coins - input.wagerCoins) }));
+      setUser((u) => ({ ...u, coins: Math.max(0, u.coins - price.coins) }));
       const tempId = newId('bm');
       const optimisticMission: BombMission = {
         id: tempId,
@@ -975,27 +1004,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
         counterpart: { id: target.id, username: target.username },
         type: input.type,
         targetKm: input.targetKm,
-        durationMin: input.durationMin,
-        deadline: new Date(input.deadline).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
-        wagerCoins: input.wagerCoins,
-        rewardRankPoints: input.wagerCoins * 2,
-        penaltyRankPoints: input.wagerCoins * 2,
+        durationMin: price.timeLimitMin,
+        deadline: deadlineDate.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }),
+        wagerCoins: price.coins,
+        rewardRankPoints: price.stakesPoints,
+        penaltyRankPoints: price.stakesPoints,
+        difficulty: input.difficulty,
         status: 'pending',
       };
       setBombMissions((bs) => [optimisticMission, ...bs]);
 
       if (tokenStore.get() && activeCircle) {
-        const maxPace = +(input.durationMin / Math.max(0.5, input.targetKm)).toFixed(2);
         void post<{ remainingCoinBalance: number }>('/quests', {
           squadId: activeCircle.id,
           targetUserId: input.targetUserId,
           activityType: input.type === 'run' ? 'RUNNING' : 'CYCLING',
           targetDistance: Math.round(input.targetKm * 1000),
-          targetMaxPace: maxPace,
-          stakesPoints: input.wagerCoins * 2,
-          wagerCoins: input.wagerCoins,
+          difficulty: input.difficulty,
           rewardTitle: 'P2P Bomb Mission',
-          deadline: new Date(input.deadline).toISOString(),
+          deadline: deadlineDate.toISOString(),
         })
           .then((res) => {
             setUser((u) => ({ ...u, coins: res.remainingCoinBalance }));
@@ -1046,7 +1073,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const targetQuest = bombMissions.find((b) => b.id === id);
       const refundPreview = targetQuest?.status === 'pending' ? Math.floor(targetQuest.wagerCoins / 2) : 0;
 
-      setBombMissions((bs) => bs.filter((b) => b.id !== id));
+      // Tetap tampil di riwayat dengan status akhir (pengirim juga bisa melihatnya), bukan dihapus.
+      setBombMissions((bs) => bs.map((b) => (b.id === id ? { ...b, status: 'shielded' } : b)));
       setUser((u) => {
         const nextTickets = Math.max(0, (u.shieldTickets ?? 1) - 1);
         const bought = u.weeklyShieldsBought ?? 0;
@@ -1131,7 +1159,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const rejectBomb = useCallback(
     (id: string) => {
       const quest = bombMissions.find((b) => b.id === id);
-      setBombMissions((bs) => bs.filter((b) => b.id !== id));
+      // Tetap tampil di riwayat: Shield otomatis bila punya tiket, selain itu dianggap gagal (penalti RP).
+      const autoShield = (user.shieldTickets ?? 0) >= 1;
+      setBombMissions((bs) => bs.map((b) => (b.id === id ? { ...b, status: autoShield ? 'shielded' : 'failed' } : b)));
       if (tokenStore.get()) {
         void post<{ message?: string; shielded?: boolean; penaltyPoints?: number }>(`/quests/${id}/reject`)
           .then((res) => {
@@ -1299,6 +1329,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     groupMissions: groupMissions.filter((g) => g.circleId === activeCircle?.id),
     bombMissions,
     activityHistory,
+    activitySummary,
     login,
     logout,
     updateProfileName,

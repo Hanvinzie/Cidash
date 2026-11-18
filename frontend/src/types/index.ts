@@ -20,6 +20,8 @@ export interface User {
   username: string;
   email?: string;
   avatarUrl?: string;
+  /** Tanggal daftar (ISO). */
+  createdAt?: string;
   rankPoints: number;
   coins: number;
   shieldTickets?: number;
@@ -32,6 +34,13 @@ export interface User {
   weeklyRestUsed?: number;
   maxWeeklyRest?: number;
   nextRestCost?: number | null;
+}
+
+/** Total sepanjang masa dari server (bukan hanya 25 aktivitas terakhir yang dimuat). */
+export interface ActivitySummary {
+  workouts: number;
+  distanceKm: number;
+  durationMinutes: number;
 }
 
 export interface Circle {
@@ -88,6 +97,8 @@ export interface BombMission {
   penaltyRankPoints: number;
   status: MissionStatus;
   snoozed?: boolean;
+  /** Tingkat kesulitan yang dipilih pengirim (menentukan batas waktu, koin, dan taruhan). */
+  difficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'HELL';
 }
 
 export type RunMode = 'solo' | 'group';

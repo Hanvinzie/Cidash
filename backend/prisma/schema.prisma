@@ -26,6 +26,14 @@ enum ActivityStatus {
   COMPLETED
 }
 
+// Tingkat kesulitan Bomb Mission: menentukan batas waktu (pace), biaya koin, dan taruhan RP.
+enum QuestDifficulty {
+  EASY
+  MEDIUM
+  HARD
+  HELL
+}
+
 enum QuestStatus {
   PENDING
   ACCEPTED
@@ -137,6 +145,9 @@ model Quest {
   targetDistance Float
   targetMaxPace  Float?
   stakesPoints   Int
+  // Koin yang dibayar pengirim (dasar refund Shield). Null pada quest lama sebelum kolom ini ada.
+  wagerCoins     Int?
+  difficulty     QuestDifficulty?
   rewardTitle    String?
   deadline       DateTime
   status         QuestStatus  @default(PENDING)

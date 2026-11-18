@@ -14,6 +14,9 @@ interface ModalProps {
   showTitle?: boolean;
 }
 
+/** Modal yang sedang terbuka, urutan buka. Hanya yang paling atas yang merespons tombol Esc. */
+const openModals: symbol[] = [];
+
 const EXIT_MS = 200;
 const DISMISS_PX = 110;
 
@@ -23,6 +26,7 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
   const [closing, setClosing] = useState(false);
   const [dragY, setDragY] = useState(0);
   const drag = useRef<{ startY: number; id: number } | null>(null);
+  const stackId = useRef(Symbol('modal'));
 
   const close = useCallback<CloseFn>(
     (after = onClose) => {
@@ -42,8 +46,20 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
     };
   }, []);
 
+  // Daftarkan ke tumpukan: Esc hanya menutup modal paling atas (mis. pilihan di dalam wizard), bukan semuanya.
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && close();
+    const id = stackId.current;
+    openModals.push(id);
+    return () => {
+      const at = openModals.indexOf(id);
+      if (at >= 0) openModals.splice(at, 1);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && openModals[openModals.length - 1] === stackId.current) close();
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [close]);
