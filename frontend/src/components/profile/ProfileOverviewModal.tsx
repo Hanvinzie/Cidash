@@ -58,7 +58,9 @@ export default function ProfileOverviewModal({ onClose }: { onClose: () => void 
 
   return (
     <Modal title="Profile overview" onClose={onClose} showTitle={false}>
-      <div className="max-h-[72dvh] space-y-5 overflow-y-auto pb-1">
+      {/* pt-3: ring avatar (ring-4) keluar dari kotaknya dan akan terpotong overflow bila tidak diberi ruang.
+          Tinggi dihitung dari batas sheet (92dvh) dikurangi handle, padding bawah, dan safe area. */}
+      <div className="-mx-1 max-h-[calc(92dvh-6.5rem)] space-y-5 overflow-y-auto px-1 pb-2 pt-3">
         <div className="flex flex-col items-center text-center">
           <span
             className="flex h-20 w-20 items-center justify-center rounded-full bg-cidash-primary text-3xl font-extrabold uppercase text-cidash-on-primary ring-4 ring-cidash-primary/15"
