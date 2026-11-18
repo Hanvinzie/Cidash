@@ -8,6 +8,7 @@ import { RunSessionProvider, useIsRecording } from '../../store/RunSession';
 import HideBoot from '../routing/HideBoot';
 import Icon, { type IconName } from '../ui/Icon';
 import RunnerLoader from '../ui/RunnerLoader';
+import Wordmark from '../ui/Wordmark';
 
 const navItems: { to: string; label: string; icon: IconName; title: string }[] = [
   { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'CIDASH' },
@@ -95,14 +96,13 @@ export default function AppLayout() {
         <header className="pt-safe fixed inset-x-0 top-0 z-20 border-b border-line/70 bg-canvas [transform:translateZ(0)]">
           <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
             {/* Home: wordmark "Cidash"; tab lain: judul halaman */}
-            <p
-              key={current.to}
-              className={`animate-fade-in font-extrabold tracking-tight ${
-                current.to === ROUTES.dashboard ? 'font-brand text-2xl text-cidash-primary' : 'text-xl'
-              }`}
-            >
-              {current.title}
-            </p>
+            {current.to === ROUTES.dashboard ? (
+              <Wordmark key={current.to} as="p" className="animate-fade-in text-2xl text-cidash-primary" />
+            ) : (
+              <p key={current.to} className="animate-fade-in text-xl font-extrabold tracking-tight">
+                {current.title}
+              </p>
+            )}
             <div className="flex items-center gap-1">
               <NavLink
                 to={profileTopUp}
