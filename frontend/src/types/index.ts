@@ -97,6 +97,8 @@ export interface BombMission {
   penaltyRankPoints: number;
   status: MissionStatus;
   snoozed?: boolean;
+  /** Tingkat kesulitan yang dipilih pengirim (menentukan batas waktu, koin, dan taruhan). */
+  difficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'HELL';
 }
 
 export type RunMode = 'solo' | 'group';
