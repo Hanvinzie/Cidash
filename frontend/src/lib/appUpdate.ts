@@ -25,9 +25,18 @@ interface UpdateState {
   checking: boolean;
   updating: boolean;
   lastCheckedAt: number | null;
+  /** Pesan singkat bila pemasangan belum bisa dilakukan (mis. versi baru belum selesai diunduh). */
+  notice: string | null;
 }
 
-let state: UpdateState = { needRefresh: false, latestVersion: null, checking: false, updating: false, lastCheckedAt: null };
+let state: UpdateState = {
+  needRefresh: false,
+  latestVersion: null,
+  checking: false,
+  updating: false,
+  lastCheckedAt: null,
+  notice: null,
+};
 const listeners = new Set<() => void>();
 const set = (patch: Partial<UpdateState>) => {
   state = { ...state, ...patch };
@@ -91,23 +100,34 @@ export function initAppUpdate(): void {
   });
 }
 
-/** Pasang versi baru: tampilkan animasi, aktifkan service worker baru, lalu muat ulang. */
+/**
+ * Pasang versi baru. Versi baru hanya aktif bila service worker baru sudah selesai diunduh dan menunggu
+ * (`needRefresh`). Reload tanpa itu hanya memuat ulang bundle lama dari cache, sehingga versi di layar
+ * tidak berubah. Maka tanpa service worker baru, kita tidak reload dan menampilkan pesan.
+ */
 export async function applyUpdate(): Promise<void> {
   if (state.updating) return;
-  set({ updating: true });
+  set({ updating: true, notice: null });
   const minimum = new Promise((r) => setTimeout(r, MIN_UPDATING_MS));
   try {
     await registration?.update().catch(() => {});
-    // Beri waktu service worker baru selesai mengunduh bila baru diketahui lewat version.json.
     const deadline = Date.now() + WAIT_FOR_WORKER_MS;
     while (!state.needRefresh && registration && Date.now() < deadline) {
       await new Promise((r) => setTimeout(r, 200));
     }
     await minimum;
-    if (updateSW && state.needRefresh) await updateSW(true); // skipWaiting + reload
-    else window.location.reload();
+    if (updateSW && state.needRefresh) {
+      await updateSW(true); // skipWaiting + reload ke bundle baru
+      return;
+    }
+    set({
+      updating: false,
+      notice: import.meta.env.DEV
+        ? 'Pemasangan hanya tersedia di build produksi.'
+        : 'Versi baru belum siap diunduh. Coba lagi beberapa saat.',
+    });
   } catch {
-    set({ updating: false });
+    set({ updating: false, notice: 'Pemasangan gagal. Coba lagi.' });
   }
 }
 
