@@ -1,8 +1,8 @@
 @import '@fontsource-variable/plus-jakarta-sans';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@config '../tailwind.config.js';
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
  * Cidash color tokens (R G B). Panduan lengkap: README.md → "Color Guide".
