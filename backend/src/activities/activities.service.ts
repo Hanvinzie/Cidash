@@ -13,7 +13,9 @@ import { ActivityStatus, PointTxType, QuestStatus } from '@prisma/client';
 import { SyncActivityBatchDto } from './dto';
 import {
   decodePolyline,
+  decodeSegments,
   encodePolyline,
+  encodeSegments,
   isValidLatLng,
   type LatLng,
 } from '../common/utils/polyline';
@@ -26,36 +28,46 @@ const MAX_BATCH_POINTS = 1_000;
 const STALE_DRAFT_MS = 24 * 60 * 60 * 1000;
 
 interface ResolvedRoute {
-  /** Polyline kanonik (presisi 5) yang disimpan di database. */
+  /** Polyline kanonik (presisi 5, segmen dipisah ';') yang disimpan di database. */
   encoded: string;
-  /** Koordinat GeoJSON [lng, lat] untuk AntiCheatService. */
-  coordinates: [number, number][];
+  /** Segmen GeoJSON [lng, lat] untuk AntiCheatService (celah antar-segmen = jeda, bukan lonjakan). */
+  segments: [number, number][][];
   start: LatLng | null;
   end: LatLng | null;
 }
 
-function toRoute(points: LatLng[]): ResolvedRoute {
-  if (points.length > MAX_ROUTE_POINTS) {
+function toRoute(segments: LatLng[][]): ResolvedRoute {
+  const total = segments.reduce((n, s) => n + s.length, 0);
+  if (total > MAX_ROUTE_POINTS) {
     throw new BadRequestException(
       `Aktivitas ditolak: Jumlah titik koordinat melebihi batas maksimum (${MAX_ROUTE_POINTS} titik).`,
     );
   }
-  if (!points.every(isValidLatLng)) {
+  if (!segments.every((s) => s.every(isValidLatLng))) {
     throw new BadRequestException(
       'Aktivitas ditolak: Format koordinat GPS tidak valid.',
     );
   }
+  const nonEmpty = segments.filter((s) => s.length > 0);
   return {
-    encoded: encodePolyline(points),
-    coordinates: points.map(([lat, lng]) => [lng, lat]),
-    start: points[0] ?? null,
-    end: points[points.length - 1] ?? null,
+    encoded: encodeSegments(nonEmpty),
+    segments: nonEmpty.map((s) => s.map(([lat, lng]) => [lng, lat] as [number, number])),
+    start: nonEmpty[0]?.[0] ?? null,
+    end: nonEmpty[nonEmpty.length - 1]?.[nonEmpty[nonEmpty.length - 1].length - 1] ?? null,
   };
 }
 
 function safeDecode(encoded: string): LatLng[] {
   try {
     return decodePolyline(encoded);
+  } catch {
+    throw new BadRequestException('encodedPolyline tidak valid atau terpotong');
+  }
+}
+
+function safeDecodeSegments(encoded: string): LatLng[][] {
+  try {
+    return decodeSegments(encoded);
   } catch {
     throw new BadRequestException('encodedPolyline tidak valid atau terpotong');
   }
@@ -136,7 +148,7 @@ export class ActivitiesService {
       createActivityDto.distanceMeters,
       createActivityDto.durationSeconds,
       serverAveragePace,
-      { type: 'LineString', coordinates: route.coordinates },
+      { type: 'MultiLineString', coordinates: route.segments },
       true,
     );
 
@@ -305,11 +317,11 @@ export class ActivitiesService {
   /** Ubah body create menjadi satu rute kanonik (polyline baru atau GeoJSON lama). */
   private resolveRoute(dto: CreateActivityDto): ResolvedRoute {
     if (dto.encodedPolyline) {
-      return toRoute(safeDecode(dto.encodedPolyline));
+      return toRoute(safeDecodeSegments(dto.encodedPolyline));
     }
     if (dto.routeGeoJson) {
-      const lngLat = this.antiCheatService.extractCoordinates(dto.routeGeoJson);
-      return toRoute(lngLat.map(([lng, lat]) => [lat, lng] as LatLng));
+      const segments = this.antiCheatService.extractSegments(dto.routeGeoJson);
+      return toRoute(segments.map((seg) => seg.map(([lng, lat]) => [lat, lng] as LatLng)));
     }
     throw new BadRequestException(
       'Aktivitas ditolak: encodedPolyline (rute GPS) wajib diisi.',

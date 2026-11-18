@@ -123,6 +123,8 @@ export interface GeoPoint {
   heading?: number | null; // arah gerak (derajat dari utara) dari sensor GPS jika tersedia
   altitude?: number | null; // meter di atas permukaan laut jika tersedia
   altitudeAccuracy?: number | null;
+  /** true = titik pertama setelah jeda yang terlalu jauh: garis TIDAK ditarik dari titik sebelumnya. */
+  gap?: boolean;
 }
 
 export interface VerificationResult {
