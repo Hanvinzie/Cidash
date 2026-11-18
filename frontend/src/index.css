@@ -1,4 +1,5 @@
 @import '@fontsource-variable/plus-jakarta-sans';
+@import '@fontsource/rubik-one';
 
 @import 'tailwindcss';
 @config '../tailwind.config.js';

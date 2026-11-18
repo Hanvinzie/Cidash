@@ -97,7 +97,7 @@ export default function AppLayout() {
             <p
               key={current.to}
               className={`animate-fade-in font-extrabold tracking-tight ${
-                current.to === ROUTES.dashboard ? 'text-xl text-cidash-primary' : 'text-xl'
+                current.to === ROUTES.dashboard ? 'font-brand text-2xl text-cidash-primary' : 'text-xl'
               }`}
             >
               {current.title}
