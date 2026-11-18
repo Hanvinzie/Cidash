@@ -12,6 +12,14 @@ import {
   invalidateUserCache,
 } from '../common/cache/memory-cache';
 import { CreateQuestDto } from './dto';
+import {
+  DEADLINE_OPTIONS_DAYS,
+  DISTANCE_OPTIONS_KM,
+  MAX_DEADLINE_DAYS,
+  MIN_DEADLINE_DAYS,
+  isAllowedDistance,
+  priceQuest,
+} from './quest-pricing';
 import { CoinTxType, PointTxType, QuestStatus } from '@prisma/client';
 
 export const BOMB_MISSION_FEE = 20;
@@ -77,7 +85,31 @@ export class QuestsService {
       );
     }
 
-    const missionFee = createQuestDto.wagerCoins ?? BOMB_MISSION_FEE;
+    // Aturan misi: jarak dari pilihan resmi, tenggat 1–7 hari. Harga & batas waktu SELALU dihitung server.
+    const distanceKm = createQuestDto.targetDistance / 1000;
+    if (!isAllowedDistance(createQuestDto.activityType, distanceKm)) {
+      throw new BadRequestException(
+        `Jarak misi harus salah satu dari: ${DISTANCE_OPTIONS_KM[createQuestDto.activityType].join(', ')} km.`,
+      );
+    }
+    const HOUR_MS = 3_600_000;
+    const deadlineDays = (deadlineDate.getTime() - now.getTime()) / (24 * HOUR_MS);
+    // Toleransi 1 jam untuk selisih jam antara perangkat dan server.
+    if (
+      deadlineDays < MIN_DEADLINE_DAYS - 1 / 24 ||
+      deadlineDays > MAX_DEADLINE_DAYS + 1 / 24
+    ) {
+      throw new BadRequestException(
+        `Deadline misi harus antara ${MIN_DEADLINE_DAYS} sampai ${MAX_DEADLINE_DAYS} hari dari sekarang (pilihan: ${DEADLINE_OPTIONS_DAYS.join(', ')} hari).`,
+      );
+    }
+    const price = priceQuest({
+      type: createQuestDto.activityType,
+      distanceKm,
+      difficulty: createQuestDto.difficulty,
+      deadlineDays,
+    });
+    const missionFee = price.coins;
 
     // Verifikasi bahwa pembuat dan target sama-sama merupakan anggota circle yang dituju
     const [creatorMember, targetMember] = await Promise.all([
@@ -183,8 +215,10 @@ export class QuestsService {
           targetUserId: createQuestDto.targetUserId,
           activityType: createQuestDto.activityType,
           targetDistance: createQuestDto.targetDistance,
-          targetMaxPace: createQuestDto.targetMaxPace,
-          stakesPoints: createQuestDto.stakesPoints,
+          targetMaxPace: price.maxPace,
+          stakesPoints: price.stakesPoints,
+          wagerCoins: price.coins,
+          difficulty: createQuestDto.difficulty,
           rewardTitle: createQuestDto.rewardTitle ?? 'P2P Bomb Mission',
           deadline: deadlineDate,
           status: QuestStatus.PENDING,
@@ -215,6 +249,13 @@ export class QuestsService {
     return {
       message: 'Bomb Mission berhasil dikirimkan ke teman satu Circle',
       cost: missionFee,
+      pricing: {
+        coins: price.coins,
+        stakesTier: price.stakesTier,
+        stakesPoints: price.stakesPoints,
+        timeLimitMin: price.timeLimitMin,
+        maxPace: price.maxPace,
+      },
       remainingCoinBalance: result.remainingCoinBalance,
       quest: result.quest,
     };
@@ -298,6 +339,8 @@ export class QuestsService {
         targetDistance: quest.targetDistance,
         targetMaxPace: quest.targetMaxPace,
         stakesPoints: quest.stakesPoints,
+        wagerCoins: quest.wagerCoins,
+        difficulty: quest.difficulty,
         status: quest.status,
         deadline: quest.deadline,
         remainingSeconds,
@@ -367,7 +410,8 @@ export class QuestsService {
     }
 
     const wasPending = quest.status === QuestStatus.PENDING;
-    const estWager = Math.max(5, Math.round((quest.stakesPoints ?? 40) / 2));
+    // Koin yang benar-benar dibayar pengirim; quest lama (sebelum kolom ada) memakai perkiraan lama.
+    const estWager = quest.wagerCoins ?? Math.max(5, Math.round((quest.stakesPoints ?? 40) / 2));
     const senderRefundCoins = wasPending ? Math.floor(estWager / 2) : 0;
 
     // Transaksi atomik pengurangan 1 shield ticket, status SHIELDED, dan refund 50% koin ke pengirim
