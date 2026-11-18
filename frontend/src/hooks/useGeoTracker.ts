@@ -38,6 +38,12 @@ const MAX_SPIKE_SPEED_MPS = 35;
 const KALMAN_Q_MPS = 3.2;
 /** Naik/turun minimal (m) agar dihitung sebagai elevation gain — meredam noise altimeter. */
 const ELEVATION_STEP_M = 3;
+/**
+ * Setelah Pause→Resume, bila posisi pertama lebih jauh dari ini dari titik terakhir sebelum jeda,
+ * rute DIPUTUS (segmen baru, tanpa garis penghubung dan tanpa jarak). Di bawah ini dianggap
+ * melanjutkan di tempat yang sama, jadi garisnya disambung.
+ */
+const RESUME_GAP_M = 50;
 /** Seberapa sering ringkasan sesi disimpan ke IndexedDB saat merekam. */
 const META_SAVE_INTERVAL_MS = 5000;
 
@@ -108,6 +114,8 @@ export function useGeoTracker() {
   /** Sampel terakhir yang dibuang filter jitter — dipaksa menjadi titik akhir saat Pause/Finish. */
   const tail = useRef<GeoPoint | null>(null);
   const lastSampleTs = useRef<number | null>(null);
+  /** Titik terakhir sebelum jeda; pembanding untuk menentukan apakah rute setelah resume harus diputus. */
+  const resumeAnchor = useRef<GeoPoint | null>(null);
   /** Sampel (sudah dihaluskan) selama SPEED_WINDOW_MS terakhir, untuk menaksir kecepatan saat sensor tidak melaporkannya. */
   const recent = useRef<GeoPoint[]>([]);
   const kalman = useRef<KalmanState | null>(null);
@@ -166,6 +174,7 @@ export function useGeoTracker() {
       sync.current = { acked: Math.min(meta.ackedCount, saved.length), inFlight: false, failures: 0, retryAt: 0, disabled: false };
       sessionRef.current = { id: meta.sessionId, type: meta.activityType, startedAt: meta.startedAt, simulated: meta.simulated };
       lastPoint.current = null; // jangan menghitung "lompatan" selama aplikasi mati
+      resumeAnchor.current = saved[saved.length - 1] ?? null;
       setPoints(saved);
       setDistanceKm(meta.distanceKm);
       setElapsedSec(meta.elapsedSec);
@@ -345,7 +354,8 @@ export function useGeoTracker() {
       ) {
         kalman.current = null;
         recent.current = [];
-        commitPoint(smoothPoint(rawPoint), true);
+        const refined = smoothPoint(rawPoint);
+        commitPoint(prev.gap ? { ...refined, gap: true } : refined, true);
         return;
       }
 
@@ -386,8 +396,15 @@ export function useGeoTracker() {
         setDistanceKm(distanceRef.current);
       }
 
+      // Titik pertama setelah Resume: sambung bila masih di sekitar tempat berhenti, putus bila terlalu jauh.
+      let toCommit = p;
+      if (!prev && resumeAnchor.current) {
+        if (haversineKm(resumeAnchor.current, p) * 1000 > RESUME_GAP_M) toCommit = { ...p, gap: true };
+        resumeAnchor.current = null;
+      }
+
       trackElevation(rawPoint);
-      commitPoint(p);
+      commitPoint(toCommit);
     },
     [commitPoint, smoothPoint, trackElevation],
   );
@@ -432,7 +449,9 @@ export function useGeoTracker() {
   const startSources = useCallback(
     (simulate: boolean) => {
       if (simulate) {
-        if (!lastPoint.current) {
+        // Titik awal HANYA untuk sesi baru. Saat Resume, simulasi melanjutkan dari sudut terakhir;
+        // kalau tidak, posisi melompat ke titik awal dan "lompatan" itu terekam sebagai gerakan.
+        if (pointsRef.current.length === 0) {
           simAngle.current = 0;
           addPoint(
             {
@@ -495,6 +514,7 @@ export function useGeoTracker() {
           if (next !== 'timeout') {
             flushTail();
             stopSources();
+            resumeAnchor.current = lastPoint.current ?? resumeAnchor.current;
             lastPoint.current = null;
             setStatus('paused');
             persistMeta();
@@ -558,6 +578,7 @@ export function useGeoTracker() {
 
   const resetSessionData = useCallback(() => {
     lastPoint.current = null;
+    resumeAnchor.current = null;
     tail.current = null;
     lastSampleTs.current = null;
     recent.current = [];
@@ -606,6 +627,7 @@ export function useGeoTracker() {
   const pause = useCallback(() => {
     flushTail();
     stopSources();
+    resumeAnchor.current = lastPoint.current ?? resumeAnchor.current;
     lastPoint.current = null; // jangan hitung jarak "lompatan" selama jeda
     kalman.current = null;
     recent.current = [];
