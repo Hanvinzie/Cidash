@@ -1073,7 +1073,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const targetQuest = bombMissions.find((b) => b.id === id);
       const refundPreview = targetQuest?.status === 'pending' ? Math.floor(targetQuest.wagerCoins / 2) : 0;
 
-      setBombMissions((bs) => bs.filter((b) => b.id !== id));
+      // Tetap tampil di riwayat dengan status akhir (pengirim juga bisa melihatnya), bukan dihapus.
+      setBombMissions((bs) => bs.map((b) => (b.id === id ? { ...b, status: 'shielded' } : b)));
       setUser((u) => {
         const nextTickets = Math.max(0, (u.shieldTickets ?? 1) - 1);
         const bought = u.weeklyShieldsBought ?? 0;
@@ -1158,7 +1159,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const rejectBomb = useCallback(
     (id: string) => {
       const quest = bombMissions.find((b) => b.id === id);
-      setBombMissions((bs) => bs.filter((b) => b.id !== id));
+      // Tetap tampil di riwayat: Shield otomatis bila punya tiket, selain itu dianggap gagal (penalti RP).
+      const autoShield = (user.shieldTickets ?? 0) >= 1;
+      setBombMissions((bs) => bs.map((b) => (b.id === id ? { ...b, status: autoShield ? 'shielded' : 'failed' } : b)));
       if (tokenStore.get()) {
         void post<{ message?: string; shielded?: boolean; penaltyPoints?: number }>(`/quests/${id}/reject`)
           .then((res) => {
