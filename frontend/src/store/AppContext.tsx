@@ -11,7 +11,7 @@ import {
 } from '../data/mock';
 import { del, http, post, tokenStore } from '../services/http';
 import { decodeSegments, encodePolyline, encodeRoute } from '../lib/polyline';
-import { priceQuest, type Difficulty } from '../lib/questPricing';
+import { priceQuest, type Difficulty, type StakesTier } from '../lib/questPricing';
 import { useToast } from './ToastContext';
 import type {
   ActivityLog,
@@ -55,6 +55,8 @@ export interface SendBombInput {
   difficulty: Difficulty;
   /** Tenggat 1–7 hari. */
   deadlineDays: number;
+  /** Tingkat taruhan RP (default Medium). */
+  stakes?: StakesTier;
 }
 
 export interface RecordActivityInput {
@@ -1043,6 +1045,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         distanceKm: input.targetKm,
         difficulty: input.difficulty,
         deadlineDays: input.deadlineDays,
+        stakes: input.stakes,
       });
 
       const target = members.find((m) => m.id === input.targetUserId);
@@ -1088,6 +1091,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           activityType: input.type === 'run' ? 'RUNNING' : 'CYCLING',
           targetDistance: Math.round(input.targetKm * 1000),
           difficulty: input.difficulty,
+          stakes: input.stakes ?? 'MEDIUM',
           rewardTitle: 'P2P Bomb Mission',
           deadline: deadlineDate.toISOString(),
         })
