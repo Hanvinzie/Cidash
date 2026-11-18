@@ -8,8 +8,8 @@ import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
 import HistoryModal from '../components/activity/HistoryModal';
 import SettingsModal from '../components/settings/SettingsModal';
+import TopUpModal from '../components/profile/TopUpModal';
 import { ShareCardModal } from '../lazyScreens';
-import { coinPackages } from '../data/mock';
 import { useAppUpdate } from '../lib/appUpdate';
 import { useApp } from '../store/AppContext';
 import { circleOnboarding, ROUTES } from '../routes';
@@ -30,13 +30,9 @@ export default function Profile() {
   const totalKm = activityHistory.reduce((sum, a) => sum + a.distanceKm, 0);
   const shieldCount = user.shieldTickets ?? 0;
 
-  // Top-up panel state lives in the URL so other screens can deep-link to it.
-  const toggleTopUp = () => setParams(showTopUp ? {} : { topup: '1' }, { replace: true });
-
-  function handleBuy(coins: number) {
-    topUp(coins); // Demo mode top-up
-    setParams({}, { replace: true });
-  }
+  // Status modal top up ada di URL agar layar lain (mis. koin di header) bisa membukanya langsung.
+  const openTopUp = () => setParams({ topup: '1' }, { replace: true });
+  const closeTopUp = () => setParams({}, { replace: true });
 
   function handleOpenCircle(id: string) {
     setActiveCircle(id);
@@ -84,27 +80,7 @@ export default function Profile() {
       {/* Wallet */}
       <section>
         <SectionTitle>Wallet</SectionTitle>
-        <CoinBalance coins={user.coins} onTopUp={toggleTopUp} topUpLabel={showTopUp ? 'Close' : 'Top up'} />
-        {showTopUp && (
-          <Card className="mt-3 space-y-2">
-            <p className="text-xs font-semibold text-muted">Choose a package (Demo instant top-up)</p>
-            {coinPackages.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handleBuy(p.coins + (p.bonusCoins ?? 0))}
-                className="flex w-full items-center justify-between rounded-xl border border-line bg-inset px-4 py-3 text-left transition hover:border-cidash-primary active:scale-[0.98]"
-              >
-                <span className="flex items-center gap-2">
-                  <Icon name="coin" size={18} className="text-warning" />
-                  <span className="font-bold">{p.coins} coins</span>
-                  {p.bonusCoins && <Badge tone="success">+{p.bonusCoins} bonus</Badge>}
-                </span>
-                <span className="text-sm font-bold text-cidash-primary">{p.priceLabel}</span>
-              </button>
-            ))}
-          </Card>
-        )}
+        <CoinBalance coins={user.coins} onTopUp={openTopUp} />
       </section>
 
       {/* Riwayat: daftar lengkap ada di dalam modal agar halaman tidak memanjang */}
@@ -202,6 +178,8 @@ export default function Profile() {
           }}
         />
       )}
+
+      {showTopUp && <TopUpModal balance={user.coins} onClose={closeTopUp} onBuy={topUp} />}
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
