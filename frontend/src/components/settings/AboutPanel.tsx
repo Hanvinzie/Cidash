@@ -45,6 +45,11 @@ function UpdateCard() {
         <Button fullWidth className="mt-3" onClick={() => void u.apply()}>
           <Icon name="refresh" size={16} /> Update now
         </Button>
+        {u.notice && (
+          <p className="mt-2 text-center text-xs font-semibold text-muted" role="status" aria-live="polite">
+            {u.notice}
+          </p>
+        )}
       </div>
     );
   }
