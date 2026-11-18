@@ -82,6 +82,17 @@ export class AntiCheatService {
   }
 
   /**
+   * Rute sebagai daftar segmen. `MultiLineString` = beberapa segmen terputus (jeda lalu lanjut jauh);
+   * format lain dianggap satu segmen.
+   */
+  extractSegments(geoJson: any): [number, number][][] {
+    if (geoJson?.type === 'MultiLineString' && Array.isArray(geoJson.coordinates)) {
+      return geoJson.coordinates.filter((s: unknown) => Array.isArray(s)) as [number, number][][];
+    }
+    return [this.extractCoordinates(geoJson)];
+  }
+
+  /**
    * Memvalidasi integritas data perekaman GPS:
    * 1. Pemeriksaan anomali kecepatan (indikasi berkendara sepeda motor/mobil).
    * 2. Pemeriksaan lonjakan koordinat / teleportasi spasial (indikasi fake GPS spoofing).
@@ -124,8 +135,9 @@ export class AntiCheatService {
       }
     }
 
-    // 2. Pemeriksaan Kontinuitas Titik Koordinat GPS
-    const coordinates = this.extractCoordinates(routeGeoJson);
+    // 2. Pemeriksaan Kontinuitas Titik Koordinat GPS (per segmen: celah antar-segmen adalah jeda, bukan teleportasi)
+    const segments = this.extractSegments(routeGeoJson);
+    const coordinates = segments.flat();
 
     if (requireRoutePoints && coordinates.length < 2) {
       throw new BadRequestException(
@@ -162,24 +174,26 @@ export class AntiCheatService {
         }
       }
 
-      for (let i = 0; i < coordinates.length - 1; i++) {
-        const [lon1, lat1] = coordinates[i];
-        const [lon2, lat2] = coordinates[i + 1];
+      for (const segment of segments) {
+        for (let i = 0; i < segment.length - 1; i++) {
+          const [lon1, lat1] = segment[i];
+          const [lon2, lat2] = segment[i + 1];
 
-        const stepDistance = this.calculateHaversineDistance(
-          lat1,
-          lon1,
-          lat2,
-          lon2,
-        );
-
-        if (stepDistance > maxAllowedPointJumpMeters) {
-          throw new BadRequestException(
-            'Aktivitas ditolak: Terdeteksi anomali lonjakan jarak koordinat GPS (indikasi teleportasi / manipulasi fake GPS).',
+          const stepDistance = this.calculateHaversineDistance(
+            lat1,
+            lon1,
+            lat2,
+            lon2,
           );
-        }
 
-        cumulativeDistance += stepDistance;
+          if (stepDistance > maxAllowedPointJumpMeters) {
+            throw new BadRequestException(
+              'Aktivitas ditolak: Terdeteksi anomali lonjakan jarak koordinat GPS (indikasi teleportasi / manipulasi fake GPS).',
+            );
+          }
+
+          cumulativeDistance += stepDistance;
+        }
       }
 
       // 3. Verifikasi Konsistensi Jarak yang Dilaporkan dengan Jalur Koordinat
