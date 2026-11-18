@@ -360,6 +360,67 @@ export class QuestsService {
   }
 
   /**
+   * Riwayat misi yang sudah berakhir (COMPLETED, FAILED, SHIELDED) di circle milik pengguna, sebagai pengirim
+   * maupun penerima. Pengirim tetap bisa melihat hasil akhir misi yang dikirimnya (mis. penerima memakai Shield).
+   * Dibatasi 30 terbaru; pengguna dapat menyembunyikan item di perangkatnya.
+   */
+  async getQuestHistory(userId: string, squadId?: string) {
+    const memberships = await this.prisma.squadMember.findMany({
+      where: { userId },
+      select: { squadId: true },
+    });
+    const userSquadIds = memberships.map((m) => m.squadId);
+    if (userSquadIds.length === 0) {
+      return { total: 0, quests: [] };
+    }
+    if (squadId && !userSquadIds.includes(squadId)) {
+      throw new ForbiddenException(
+        'Akses ditolak. Anda bukan anggota dari Circle yang dipilih',
+      );
+    }
+
+    const quests = await this.prisma.quest.findMany({
+      where: {
+        squadId: { in: squadId ? [squadId] : userSquadIds },
+        status: {
+          in: [QuestStatus.COMPLETED, QuestStatus.FAILED, QuestStatus.SHIELDED],
+        },
+        OR: [{ creatorId: userId }, { targetUserId: userId }],
+      },
+      include: {
+        creator: { select: { id: true, name: true } },
+        targetUser: { select: { id: true, name: true } },
+        squad: { select: { id: true, name: true, inviteCode: true } },
+      },
+      orderBy: { deadline: 'desc' },
+      take: 30,
+    });
+
+    return {
+      total: quests.length,
+      quests: quests.map((quest) => ({
+        id: quest.id,
+        rewardTitle: quest.rewardTitle,
+        activityType: quest.activityType,
+        targetDistance: quest.targetDistance,
+        targetMaxPace: quest.targetMaxPace,
+        stakesPoints: quest.stakesPoints,
+        wagerCoins: quest.wagerCoins,
+        difficulty: quest.difficulty,
+        status: quest.status,
+        deadline: quest.deadline,
+        remainingSeconds: 0,
+        snoozed: false,
+        squad: quest.squad,
+        creator: quest.creator,
+        targetUser: quest.targetUser,
+        isTargetUser: quest.targetUserId === userId,
+        isCreator: quest.creatorId === userId,
+      })),
+    };
+  }
+
+  /**
    * Menggunakan Shield Ticket untuk membatalkan penalti dari misi aktif.
    * Jika misi masih berstatus PENDING saat di-shield, 50% koin taruhan dikembalikan (REFUND)
    * ke pembuat tantangan agar tetap adil bagi kedua belah pihak.

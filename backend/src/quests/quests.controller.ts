@@ -49,6 +49,19 @@ export class QuestsController {
   }
 
   /**
+   * Riwayat misi yang sudah berakhir (selesai, gagal, atau di-shield), baik yang dikirim maupun diterima.
+   * Harus didaftarkan sebelum `:id` agar "history" tidak dianggap sebagai ID misi.
+   */
+  @RateLimit(60, 60_000)
+  @Get('history')
+  async getQuestHistory(
+    @CurrentUser('id') userId: string,
+    @Query('squadId') squadId?: string,
+  ) {
+    return this.questsService.getQuestHistory(userId, squadId);
+  }
+
+  /**
    * Menggunakan Shield Ticket untuk membatalkan penalti dari misi aktif.
    */
   @RateLimit(15, 60_000)
