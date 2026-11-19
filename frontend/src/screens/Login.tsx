@@ -195,41 +195,6 @@ export default function Login() {
                   {loading ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
                 </Button>
               </form>
-
-              <div className="my-4 flex items-center gap-3 text-xs text-subtle">
-                <span className="h-px flex-1 bg-line" />
-                or
-                <span className="h-px flex-1 bg-line" />
-              </div>
-
-              <Button
-                variant="secondary"
-                fullWidth
-                disabled={loading}
-                onClick={async () => {
-                  setError(null);
-                  setLoading(true);
-                  try {
-                    const { circleCount } = await login({
-                      mode: 'login',
-                      email: 'budi@cidash.id',
-                      password: 'password123',
-                    });
-                    if (circleCount > 0 && !joinCode) {
-                      navigate(redirectTo, { replace: true });
-                    } else {
-                      setFirstTime(circleCount === 0);
-                      setStep('circle');
-                    }
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Demo login failed');
-                  } finally {
-                    setLoading(false);
-                  }
-                }}
-              >
-                Continue with Demo Account (Budi)
-              </Button>
             </Card>
           </>
         ) : (

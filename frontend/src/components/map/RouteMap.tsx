@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LngLatBounds, Map as MapLibreMap, Marker, type GeoJSONSource } from 'maplibre-gl';
+import { LngLatBounds, Map as MapLibreMap, Marker, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import Icon from '../ui/Icon';
 import { angleDelta } from '../../lib/compass';
@@ -8,11 +9,15 @@ import { useHeading } from '../../hooks/useHeading';
 import { useTheme } from '../../store/ThemeContext';
 import type { GeoPoint } from '../../types';
 
+// Pastikan Web Worker MapLibre v6 ikut di-bundle oleh Vite sehingga peta tetap tampil di produksi (Vercel).
+setWorkerUrl(maplibreWorkerUrl);
+
 // Peta vector (MapLibre GL) — tidak memakai raster tile.openstreetmap.org yang melarang pemakaian
 // aplikasi berskala besar. Default: OpenFreeMap (gratis, tanpa API key, tanpa batas request).
+// Dark mode memakai gaya `fiord` (slate-navy kontras tinggi) agar jalan & label tetap jelas terbaca.
 // Ganti ke MapTiler/PMTiles lewat VITE_MAP_STYLE_URL (dan _DARK untuk tema gelap).
 const STYLE_LIGHT = import.meta.env.VITE_MAP_STYLE_URL || 'https://tiles.openfreemap.org/styles/positron';
-const STYLE_DARK = import.meta.env.VITE_MAP_STYLE_URL_DARK || 'https://tiles.openfreemap.org/styles/dark';
+const STYLE_DARK = import.meta.env.VITE_MAP_STYLE_URL_DARK || 'https://tiles.openfreemap.org/styles/fiord';
 
 const DEFAULT_CENTER: [number, number] = [106.8022, -6.2183]; // [lng, lat] Gelora Bung Karno
 const PRIMARY = '#ea2845';
@@ -103,14 +108,14 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
   /** Tambahkan layer rute (dipanggil tiap style selesai dimuat, termasuk setelah ganti tema). */
   const ensureRouteLayers = useCallback((map: MapLibreMap) => {
     if (!map.getSource('route')) map.addSource('route', { type: 'geojson', data: routeRef.current });
-    const casing = themeRef.current === 'dark' ? '#0b0f17' : '#ffffff';
+    const casing = themeRef.current === 'dark' ? '#f8fafc' : '#ffffff';
     if (!map.getLayer('route-casing')) {
       map.addLayer({
         id: 'route-casing',
         type: 'line',
         source: 'route',
         layout: { 'line-cap': 'round', 'line-join': 'round' },
-        paint: { 'line-color': casing, 'line-width': 9, 'line-opacity': 0.9 },
+        paint: { 'line-color': casing, 'line-width': 9, 'line-opacity': 0.92 },
       });
     }
     if (!map.getLayer('route-line')) {
