@@ -25,6 +25,7 @@ frontend/node_modules/
 dist/
 build/
 .next/
+.vercel/
 backend/dist/
 backend/build/
 frontend/dist/

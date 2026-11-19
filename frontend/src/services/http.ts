@@ -1,6 +1,17 @@
 // ============================================================
-// HTTP client untuk REST API NestJS (mendukung Ngrok & Proxy).
+// HTTP client untuk REST API NestJS (mendukung Vercel Serverless, Ngrok & Vite Proxy).
 // ============================================================
+
+const DEFAULT_API_PREFIX = '/api';
+
+function normalizeBaseUrl(raw: string): string {
+  const cleaned = raw.trim().replace(/\/+$/, '');
+  if (!cleaned) return DEFAULT_API_PREFIX;
+  if (cleaned === DEFAULT_API_PREFIX || cleaned.endsWith(DEFAULT_API_PREFIX)) {
+    return cleaned;
+  }
+  return `${cleaned}${DEFAULT_API_PREFIX}`;
+}
 
 function resolveBaseUrl(): string {
   const configured = (
@@ -11,23 +22,28 @@ function resolveBaseUrl(): string {
     .trim()
     .replace(/\/+$/, '');
 
+  if (!configured) {
+    return DEFAULT_API_PREFIX;
+  }
+
+  const pointsToLocal =
+    configured.includes('localhost') || configured.includes('127.0.0.1');
+
+  // Di production build (Vercel) atau saat diakses via tunnel/IP jaringan,
+  // abaikan fallback localhost dan gunakan relative /api pada origin yang sama.
+  if (import.meta.env.PROD && pointsToLocal) {
+    return DEFAULT_API_PREFIX;
+  }
+
   if (typeof window !== 'undefined') {
     const host = window.location.hostname;
     const isLocalBrowser = host === 'localhost' || host === '127.0.0.1';
-    const pointsToLocal =
-      !configured ||
-      configured.includes('localhost') ||
-      configured.includes('127.0.0.1');
-
-    // Jika dibuka melalui tunnel (ngrok) atau IP jaringan di perangkat lain,
-    // dan env masih mengarah ke localhost, gunakan relative URL ('') agar
-    // otomatis diteruskan oleh Vite proxy (:5173 -> :3000).
     if (!isLocalBrowser && pointsToLocal) {
-      return '';
+      return DEFAULT_API_PREFIX;
     }
   }
 
-  return configured || 'http://localhost:3000';
+  return normalizeBaseUrl(configured);
 }
 
 const BASE_URL = resolveBaseUrl();
@@ -50,7 +66,14 @@ export class ApiError extends Error {
 
 export async function http<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = tokenStore.get();
-  const res = await fetch(`${BASE_URL}${path}`, {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const requestPath =
+    BASE_URL.endsWith(DEFAULT_API_PREFIX) &&
+    (normalizedPath === DEFAULT_API_PREFIX ||
+      normalizedPath.startsWith(`${DEFAULT_API_PREFIX}/`))
+      ? normalizedPath.slice(DEFAULT_API_PREFIX.length) || ''
+      : normalizedPath;
+  const res = await fetch(`${BASE_URL}${requestPath}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
@@ -70,7 +93,7 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<T> 
         ? rawMsg
         : res.statusText || 'Request failed';
 
-    if (res.status === 401 && token && !path.startsWith('/auth/login')) {
+    if (res.status === 401 && token && !requestPath.startsWith('/auth/login')) {
       tokenStore.clear();
       window.dispatchEvent(new CustomEvent('cidash:unauthorized'));
     }

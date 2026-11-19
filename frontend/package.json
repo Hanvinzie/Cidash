@@ -13,8 +13,6 @@
   "dependencies": {
     "@fontsource-variable/plus-jakarta-sans": "5.3.0",
     "@fontsource/rubik-one": "^5.3.0",
-    "@nestjs/mau": "0.0.6",
-    "@nestjs/schematics": "10.0.2",
     "@supabase/supabase-js": "^2.119.0",
     "html-to-image": "1.11.13",
     "maplibre-gl": "^6.19.0",

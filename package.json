@@ -8,14 +8,17 @@
     "backend"
   ],
   "scripts": {
-    "predev": "node -e \"const fs=require('fs');if(!fs.existsSync('backend/.env')&&fs.existsSync('backend/.env.example'))fs.copyFileSync('backend/.env.example','backend/.env');if(!fs.existsSync('frontend/.env')&&fs.existsSync('frontend/.env.example'))fs.copyFileSync('frontend/.env.example','frontend/.env');console.log('\\n======================================================\\n  CIDASH DEV SERVER (Ctrl + Klik link di bawah):\\n  -> Frontend (Web App) : http://localhost:5173\\n  -> Backend  (REST API): http://localhost:3000\\n======================================================\\n');\"",
+    "predev": "node -e \"const fs=require('fs');if(!fs.existsSync('backend/.env')&&fs.existsSync('backend/.env.example'))fs.copyFileSync('backend/.env.example','backend/.env');if(!fs.existsSync('frontend/.env')&&fs.existsSync('frontend/.env.example'))fs.copyFileSync('frontend/.env.example','frontend/.env');console.log('\\n======================================================\\n  CIDASH DEV SERVER (Ctrl + Klik link di bawah):\\n  -> Frontend (Web App) : http://localhost:5173\\n  -> Backend  (REST API): http://localhost:3000/api\\n======================================================\\n');\"",
     "dev": "concurrently -n \"backend,frontend\" -c \"magenta,cyan\" \"npm:dev:backend\" \"npm:dev:frontend\"",
     "dev:frontend": "npm run dev --workspace frontend",
     "dev:backend": "npm run start:dev --workspace backend",
-    "build": "npm run build --workspace frontend && npm run build --workspace backend",
+    "dev:vercel": "npm run build:backend && npx vercel dev",
+    "build": "npm run prisma:generate && npm run build:backend && npm run build:frontend",
     "build:frontend": "npm run build --workspace frontend",
     "build:backend": "npm run build --workspace backend",
-    "typecheck": "npm run typecheck --workspace frontend",
+    "typecheck": "npm run typecheck --workspace frontend && npm run typecheck:backend && npm run typecheck:api",
+    "typecheck:backend": "npm exec --workspace backend -- tsc -p tsconfig.build.json --noEmit --incremental false",
+    "typecheck:api": "npm exec --workspace backend -- tsc -p ../tsconfig.json --noEmit",
     "prisma:generate": "prisma generate --schema backend/prisma/schema.prisma",
     "db:push": "npm run db:push --workspace backend",
     "db:harden": "npm run db:harden --workspace backend",
@@ -24,7 +27,8 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
     "@tailwindcss/vite": "^4.3.5",
-    "concurrently": "^9.0.1"
+    "concurrently": "^9.0.1",
+    "vite": "^8.3.8"
   },
   "engines": {
     "node": ">=20"

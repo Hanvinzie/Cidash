@@ -89,10 +89,7 @@ export default defineConfig({
     host: true,
     allowedHosts: true, // izinkan domain tunnel (ngrok) — hanya berlaku untuk dev server
     proxy: {
-      '/auth': { target: 'http://localhost:3000', changeOrigin: true },
-      '/squads': { target: 'http://localhost:3000', changeOrigin: true },
-      '/quests': { target: 'http://localhost:3000', changeOrigin: true },
-      '/activities': { target: 'http://localhost:3000', changeOrigin: true },
+      '/api': { target: 'http://localhost:3000', changeOrigin: true },
     },
   },
   plugins: [
@@ -107,6 +104,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api(?:\/|$)/],
       },
       // SW hanya aktif di build produksi agar cache tidak mengganggu HMR saat dev.
       devOptions: {

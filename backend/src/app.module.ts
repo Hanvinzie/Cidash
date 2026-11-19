@@ -17,7 +17,7 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
       isGlobal: true,
       envFilePath: ['.env', 'backend/.env'],
     }),
-    ScheduleModule.forRoot(),
+    ...(process.env.VERCEL ? [] : [ScheduleModule.forRoot()]),
     DatabaseModule,
     AuthModule,
     SquadsModule,

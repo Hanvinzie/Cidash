@@ -16,7 +16,10 @@ function ensurePoolingParams(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl);
     if (!parsed.searchParams.has('connection_limit')) {
-      parsed.searchParams.set('connection_limit', '15');
+      parsed.searchParams.set(
+        'connection_limit',
+        process.env.VERCEL ? '1' : '15',
+      );
     }
     if (!parsed.searchParams.has('pool_timeout')) {
       parsed.searchParams.set('pool_timeout', '15');
