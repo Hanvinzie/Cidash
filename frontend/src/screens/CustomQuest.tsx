@@ -9,6 +9,7 @@ import SwipeToDelete from '../components/ui/SwipeToDelete';
 import { Segmented } from '../components/ui/Field';
 import ProtectionModal from '../components/quest/ProtectionModal';
 import SendBombModal from '../components/quest/SendBombModal';
+import CircleRequiredGate from '../components/circle/CircleRequiredGate';
 import { statusLabel, useProtection } from '../components/quest/useProtection';
 import { useHiddenQuests } from '../lib/hiddenQuests';
 import { DIFFICULTY_LABEL } from '../lib/questPricing';
@@ -34,7 +35,7 @@ function outcomeText(q: BombMission): string {
 }
 
 export default function CustomQuest() {
-  const { user, bombMissions, acceptBomb, rejectBomb, useShield, snoozeBomb } = useApp();
+  const { user, activeCircle, bombMissions, acceptBomb, rejectBomb, useShield, snoozeBomb } = useApp();
   const { myStatus, shieldCount, maxShields } = useProtection();
   const { hidden, hide } = useHiddenQuests(user.id);
   const navigate = useNavigate();
@@ -45,8 +46,12 @@ export default function CustomQuest() {
   /** Quest yang panel "More" (Shield / Decline / +12h) sedang dibuka. Satu aksi utama per kartu, sisanya tersembunyi. */
   const [moreId, setMoreId] = useState<string | null>(null);
 
+  if (!activeCircle) {
+    return <CircleRequiredGate feature="quests" />;
+  }
+
   const status = statusLabel(myStatus);
-  const visible = bombMissions.filter((q) => !hidden.has(q.id));
+  const visible = bombMissions.filter((q) => !hidden.has(q.id) && q.type === activeCircle.activityType);
   const counts = {
     incoming: visible.filter((q) => q.direction === 'incoming').length,
     sent: visible.filter((q) => q.direction === 'sent').length,

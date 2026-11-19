@@ -119,7 +119,7 @@ interface AppState {
   logout: () => void;
   updateProfileName: (name: string) => void;
   setActiveCircle: (id: string) => void;
-  createCircle: (name: string) => Promise<Circle>;
+  createCircle: (name: string, activityType?: ActivityType) => Promise<Circle>;
   joinCircle: (code: string) => Promise<Circle>;
   upgradeCircle: (circleId: string) => Promise<void>;
   leaveCircle: (circleId: string) => Promise<void>;
@@ -472,6 +472,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: string;
             name: string;
             inviteCode: string;
+            activityType?: 'RUNNING' | 'CYCLING';
             isPremium?: boolean;
             totalMembers: number;
             maxMembers?: number;
@@ -491,6 +492,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: s.id,
           name: s.name,
           code: s.inviteCode,
+          activityType: s.activityType === 'CYCLING' ? 'bike' : 'run',
           isPremium: Boolean(s.isPremium),
           memberCount: s.totalMembers,
           maxMembers: s.maxMembers ?? (s.isPremium ? 25 : 5),
@@ -660,23 +662,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const createCircle = useCallback(
-    async (name: string): Promise<Circle> => {
+    async (name: string, activityType: ActivityType = 'run'): Promise<Circle> => {
       if (tokenStore.get()) {
         const res = await post<{
           squad: {
             id: string;
             name: string;
             inviteCode: string;
+            activityType?: 'RUNNING' | 'CYCLING';
             isPremium?: boolean;
             totalMembers?: number;
             maxMembers?: number;
           };
-        }>('/squads', { name: name.trim() });
+        }>('/squads', {
+          name: name.trim(),
+          activityType: activityType === 'bike' ? 'CYCLING' : 'RUNNING',
+        });
+
+        const resolvedType: ActivityType =
+          res.squad.activityType === 'CYCLING' ? 'bike' : res.squad.activityType === 'RUNNING' ? 'run' : activityType;
 
         const circle: Circle = {
           id: res.squad.id,
           name: res.squad.name,
           code: res.squad.inviteCode,
+          activityType: resolvedType,
           isPremium: Boolean(res.squad.isPremium),
           memberCount: res.squad.totalMembers ?? 1,
           maxMembers: res.squad.maxMembers ?? (res.squad.isPremium ? 25 : 5),
@@ -684,7 +694,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
         setCircles((cs) => [circle, ...cs.filter((c) => c.id !== circle.id)]);
         setActiveCircleId(circle.id);
-        toast(`Circle "${circle.name}" created (Free tier · max 5 members)!`, 'success');
+        toast(
+          `Circle "${circle.name}" (${resolvedType === 'bike' ? 'Cycling' : 'Running'}) created!`,
+          'success',
+        );
         return circle;
       }
 
@@ -692,6 +705,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: newId('cir'),
         name,
         code: generateCircleCode(),
+        activityType,
         isPremium: false,
         memberCount: 1,
         maxMembers: 5,
@@ -699,7 +713,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       };
       setCircles((cs) => [...cs, circle]);
       setActiveCircleId(circle.id);
-      toast(`Circle "${circle.name}" created (Free tier · max 5 members)!`, 'success');
+      toast(
+        `Circle "${circle.name}" (${activityType === 'bike' ? 'Cycling' : 'Running'}) created!`,
+        'success',
+      );
       return circle;
     },
     [toast, user.id],
@@ -714,6 +731,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             id: string;
             name: string;
             inviteCode: string;
+            activityType?: 'RUNNING' | 'CYCLING';
             isPremium?: boolean;
             totalMembers?: number;
             maxMembers?: number;
@@ -724,6 +742,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           id: res.squad.id,
           name: res.squad.name,
           code: res.squad.inviteCode,
+          activityType: res.squad.activityType === 'CYCLING' ? 'bike' : 'run',
           isPremium: Boolean(res.squad.isPremium),
           memberCount: res.squad.totalMembers ?? 2,
           maxMembers: res.squad.maxMembers ?? (res.squad.isPremium ? 25 : 5),
@@ -749,6 +768,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         id: newId('cir'),
         name: `Circle ${normalized}`,
         code: normalized,
+        activityType: 'run' as ActivityType,
         isPremium: false,
         memberCount: 2,
         maxMembers: 5,
@@ -1413,7 +1433,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     membersOf,
     leaderboard,
     myRank,
-    groupMissions: groupMissions.filter((g) => g.circleId === activeCircle?.id),
+    groupMissions: groupMissions.filter(
+      (g) => g.circleId === activeCircle?.id && (!activeCircle || g.type === activeCircle.activityType),
+    ),
     bombMissions,
     activityHistory,
     activitySummary,

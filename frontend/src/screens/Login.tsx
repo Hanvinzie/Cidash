@@ -8,6 +8,7 @@ import InstallBanner from '../components/ui/InstallBanner';
 import { Input, Segmented } from '../components/ui/Field';
 import { useApp } from '../store/AppContext';
 import { ROUTES } from '../routes';
+import type { ActivityType } from '../types';
 
 type AuthMode = 'login' | 'register';
 type Step = 'auth' | 'circle';
@@ -32,6 +33,7 @@ export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [circleName, setCircleName] = useState('');
+  const [circleType, setCircleType] = useState<ActivityType>('run');
   const [joinCode, setJoinCode] = useState(() =>
     (params.get('code') ?? '')
       .toUpperCase()
@@ -84,7 +86,7 @@ export default function Login() {
     setError(null);
     setLoading(true);
     try {
-      await createCircle(circleName.trim());
+      await createCircle(circleName.trim(), circleType);
       navigate(redirectTo, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create circle');
@@ -237,13 +239,28 @@ export default function Login() {
             <form onSubmit={handleCreate} className="space-y-3">
               <Input
                 label="New circle name"
-                placeholder="e.g. Sunset Run Squad"
+                placeholder={circleType === 'bike' ? 'e.g. Weekend Riders' : 'e.g. Sunset Run Squad'}
                 value={circleName}
                 onChange={(e) => setCircleName(e.target.value)}
                 required
                 minLength={3}
                 maxLength={40}
               />
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-muted">Circle activity type</p>
+                <Segmented<ActivityType>
+                  ariaLabel="Circle activity type"
+                  value={circleType}
+                  onChange={setCircleType}
+                  options={[
+                    { value: 'run', label: 'Running' },
+                    { value: 'bike', label: 'Cycling' },
+                  ]}
+                />
+                <p className="mt-1.5 text-[11px] text-subtle">
+                  All missions and activities in this circle will be {circleType === 'bike' ? 'cycling' : 'running'}-only.
+                </p>
+              </div>
               <Button type="submit" variant="outline" fullWidth disabled={loading || circleName.trim().length < 3}>
                 <Icon name="plus" size={16} /> Create circle
               </Button>

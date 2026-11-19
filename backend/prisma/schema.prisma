@@ -79,16 +79,17 @@ model User {
 }
 
 model Squad {
-  id          String        @id @default(uuid())
-  name        String
-  inviteCode  String        @unique // Kode unik 8 karakter (invite-only)
-  isPremium   Boolean       @default(false)
-  createdById String?
-  createdAt   DateTime      @default(now())
+  id           String        @id @default(uuid())
+  name         String
+  inviteCode   String        @unique // Kode unik 8 karakter (invite-only)
+  activityType ActivityType  @default(RUNNING) // Tipe aktivitas Circle: RUNNING (lari) atau CYCLING (sepeda)
+  isPremium    Boolean       @default(false)
+  createdById  String?
+  createdAt    DateTime      @default(now())
 
-  createdBy   User?         @relation("SquadCreator", fields: [createdById], references: [id])
-  members     SquadMember[]
-  quests      Quest[]
+  createdBy    User?         @relation("SquadCreator", fields: [createdById], references: [id])
+  members      SquadMember[]
+  quests       Quest[]
 }
 
 model SquadMember {

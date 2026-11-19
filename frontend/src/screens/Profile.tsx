@@ -146,7 +146,9 @@ export default function Profile() {
                         <span className="truncate">{c.name}</span>
                         {c.id === activeCircle?.id && <Badge tone="primary">Active</Badge>}
                       </span>
-                      <span className="text-xs text-subtle">{c.memberCount} members</span>
+                      <span className="text-xs text-subtle">
+                        {c.activityType === 'bike' ? 'Cycling' : 'Running'} · {c.memberCount} members
+                      </span>
                     </span>
                     <span className="font-mono text-xs font-bold tracking-widest text-muted">{c.code}</span>
                   </button>

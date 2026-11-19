@@ -10,6 +10,7 @@ import LocationPrompt from '../components/activity/LocationPrompt';
 import PlanSheet, { type PlanOption } from '../components/activity/PlanSheet';
 import RecordingScreen from '../components/activity/RecordingScreen';
 import VerificationModal from '../components/activity/VerificationModal';
+import CircleRequiredGate from '../components/circle/CircleRequiredGate';
 import { RouteMap, ShareCardModal } from '../lazyScreens';
 import { useApp } from '../store/AppContext';
 import { useRunSession } from '../store/RunSession';
@@ -51,23 +52,35 @@ export default function Activity() {
       { replace: true },
     );
 
-  // ---- Rencana: jenis aktivitas + mode + misi digabung jadi SATU pilihan, disimpan di URL (deep-link) ----
+  // ---- Rencana: jenis aktivitas terkunci mengikuti Circle aktif (lari / sepeda) ----
+  const circleType: ActivityType = activeCircle?.activityType ?? 'run';
   const mode: RunMode = params.get('mode') === 'group' || group.room ? 'group' : 'solo';
-  const openGroup = groupMissions.filter((m) => m.status !== 'completed');
-  const openBombs = bombMissions.filter((b) => b.direction === 'incoming' && b.status === 'in_progress');
+  const openGroup = groupMissions.filter((m) => m.status !== 'completed' && m.type === circleType);
+  const openBombs = bombMissions.filter(
+    (b) => b.direction === 'incoming' && b.status === 'in_progress' && b.type === circleType,
+  );
   const requested = params.get('mission');
   const mission =
     openBombs.find((b) => b.id === requested) ?? openGroup.find((g) => g.id === requested) ?? undefined;
-  const freeType: ActivityType = params.get('type') === 'bike' ? 'bike' : 'run';
-  const activityType = mission?.type ?? freeType;
-  const planId = mission ? mission.id : mode === 'group' ? GROUP : freeType === 'bike' ? FREE_RIDE : FREE_RUN;
+  const activityType: ActivityType = circleType;
+  const planId = mission ? mission.id : mode === 'group' ? GROUP : circleType === 'bike' ? FREE_RIDE : FREE_RUN;
 
   const planOptions = useMemo<PlanOption[]>(
     () => [
-      { id: FREE_RUN, label: 'Free run', description: 'No goal, just move', icon: 'activity', group: 'Quick start' },
-      { id: FREE_RIDE, label: 'Free ride', description: 'No goal, just move', icon: 'activity', group: 'Quick start' },
+      circleType === 'bike'
+        ? { id: FREE_RIDE, label: 'Free ride', description: 'No goal, just ride', icon: 'activity', group: 'Quick start' }
+        : { id: FREE_RUN, label: 'Free run', description: 'No goal, just run', icon: 'activity', group: 'Quick start' },
       ...(activeCircle
-        ? [{ id: GROUP, label: 'Group run', description: 'Run together, live with your circle', icon: 'users' as const, group: 'Together' }]
+        ? [
+            {
+              id: GROUP,
+              label: circleType === 'bike' ? 'Group ride' : 'Group run',
+              description:
+                circleType === 'bike' ? 'Ride together, live with your circle' : 'Run together, live with your circle',
+              icon: 'users' as const,
+              group: 'Together',
+            },
+          ]
         : []),
       ...openGroup.map((m) => ({
         id: m.id,
@@ -84,7 +97,7 @@ export default function Activity() {
         group: 'Bomb Missions',
       })),
     ],
-    [activeCircle, openGroup, openBombs],
+    [activeCircle, circleType, openGroup, openBombs],
   );
   const plan = planOptions.find((o) => o.id === planId) ?? planOptions[0];
 
@@ -151,10 +164,10 @@ export default function Activity() {
   // supaya saat user menekan Start lokasi sudah siap. Dilewati bila sedang merekam.
   const checkedOnEnter = useRef(false);
   useEffect(() => {
-    if (checkedOnEnter.current || status !== 'idle' || simulate) return;
+    if (!activeCircle || checkedOnEnter.current || status !== 'idle' || simulate) return;
     checkedOnEnter.current = true;
     void withLocation('check');
-  }, [status, simulate, withLocation]);
+  }, [activeCircle, status, simulate, withLocation]);
 
   // Izin diubah dari pengaturan saat modal terbuka → lanjutkan otomatis.
   useEffect(() => {
@@ -269,6 +282,10 @@ export default function Activity() {
     : mode === 'group'
       ? 'Live with your circle'
       : 'Solo · no goal';
+
+  if (!activeCircle && !tracking) {
+    return <CircleRequiredGate feature="activity" />;
+  }
 
   return (
     <div className="space-y-4">

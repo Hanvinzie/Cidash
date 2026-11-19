@@ -20,7 +20,7 @@ import {
   isAllowedDistance,
   priceQuest,
 } from './quest-pricing';
-import { CoinTxType, PointTxType, QuestStatus } from '@prisma/client';
+import { ActivityType, CoinTxType, PointTxType, QuestStatus } from '@prisma/client';
 
 export const BOMB_MISSION_FEE = 20;
 export const SNOOZE_MISSION_FEE = 10;
@@ -111,8 +111,15 @@ export class QuestsService {
     });
     const missionFee = price.coins;
 
-    // Verifikasi bahwa pembuat dan target sama-sama merupakan anggota circle yang dituju
-    const [creatorMember, targetMember] = await Promise.all([
+    // Verifikasi bahwa pembuat dan target sama-sama merupakan anggota circle yang dituju,
+    // serta tipe aktivitas Bomb Mission sesuai dengan tipe Circle.
+    const [squad, creatorMember, targetMember] = await Promise.all([
+      this.prisma.squad?.findUnique
+        ? this.prisma.squad.findUnique({
+            where: { id: createQuestDto.squadId },
+            select: { id: true, activityType: true },
+          })
+        : Promise.resolve(null),
       this.prisma.squadMember.findUnique({
         where: {
           squadId_userId: {
@@ -140,6 +147,14 @@ export class QuestsService {
     if (!targetMember) {
       throw new BadRequestException(
         'Target pengguna yang dituju bukan anggota dari Circle ini',
+      );
+    }
+
+    if (squad && squad.activityType !== createQuestDto.activityType) {
+      const label =
+        squad.activityType === ActivityType.RUNNING ? 'Lari (RUNNING)' : 'Sepeda (CYCLING)';
+      throw new BadRequestException(
+        `Circle ini khusus aktivitas ${label}. Bomb Mission hanya boleh bertipe yang sama.`,
       );
     }
 

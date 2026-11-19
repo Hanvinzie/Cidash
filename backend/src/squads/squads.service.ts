@@ -15,6 +15,7 @@ import {
 import { CreateSquadDto, JoinSquadDto } from './dto';
 import {
   ActivityStatus,
+  ActivityType,
   CoinTxType,
   PointTxType,
   QuestStatus,
@@ -35,6 +36,7 @@ interface CachedLeaderboardPayload {
     id: string;
     name: string;
     inviteCode: string;
+    activityType: ActivityType;
     isPremium: boolean;
     maxMembers: number;
   };
@@ -133,6 +135,7 @@ export class SquadsService {
         data: {
           name: createSquadDto.name.trim(),
           inviteCode,
+          activityType: createSquadDto.activityType ?? ActivityType.RUNNING,
           isPremium: wantPremium,
           createdById: userId,
         },
@@ -170,6 +173,7 @@ export class SquadsService {
         id: squad.id,
         name: squad.name,
         inviteCode: squad.inviteCode,
+        activityType: squad.activityType,
         isPremium: squad.isPremium,
         createdAt: squad.createdAt,
         role: Role.CAPTAIN,
@@ -246,6 +250,7 @@ export class SquadsService {
         id: squad.id,
         name: squad.name,
         inviteCode: squad.inviteCode,
+        activityType: squad.activityType,
         isPremium: squad.isPremium,
         role: Role.MEMBER,
         totalMembers: currentMembers + 1,
@@ -344,6 +349,7 @@ export class SquadsService {
         id: result.squad.id,
         name: result.squad.name,
         inviteCode: result.squad.inviteCode,
+        activityType: result.squad.activityType,
         isPremium: true,
         totalMembers: squad._count?.members ?? 1,
         maxMembers: PREMIUM_SQUAD_MAX_MEMBERS,
@@ -386,6 +392,7 @@ export class SquadsService {
       id: membership.squad.id,
       name: membership.squad.name,
       inviteCode: membership.squad.inviteCode,
+      activityType: membership.squad.activityType,
       isPremium: membership.squad.isPremium,
       role: membership.role,
       joinedAt: membership.joinedAt,
@@ -437,6 +444,7 @@ export class SquadsService {
           id: true,
           name: true,
           inviteCode: true,
+          activityType: true,
           isPremium: true,
         },
       }),
@@ -617,6 +625,7 @@ export class SquadsService {
       id: squad.id,
       name: squad.name,
       inviteCode: squad.inviteCode,
+      activityType: squad.activityType,
       isPremium: squad.isPremium,
       maxMembers: this.getMaxMembers(squad.isPremium),
       createdAt: squad.createdAt,
@@ -779,12 +788,18 @@ export class SquadsService {
    * dan menghitung progress jarak riil dari aktivitas COMPLETED seluruh anggota Circle.
    */
   async getCircleMissions(squadId: string, userId: string) {
-    const members = await this.prisma.squadMember.findMany({
-      where: { squadId },
-      select: { userId: true },
-    });
+    const [squad, members] = await Promise.all([
+      this.prisma.squad.findUnique({
+        where: { id: squadId },
+        select: { id: true, activityType: true },
+      }),
+      this.prisma.squadMember.findMany({
+        where: { squadId },
+        select: { userId: true },
+      }),
+    ]);
 
-    if (members.length === 0) {
+    if (!squad || members.length === 0) {
       throw new NotFoundException('Circle tidak ditemukan');
     }
 
@@ -798,12 +813,14 @@ export class SquadsService {
       squadId,
       'daily',
       memberIds.length,
+      squad.activityType,
       now,
     );
     const weeklySpec = buildCircleMissionSpec(
       squadId,
       'weekly',
       memberIds.length,
+      squad.activityType,
       now,
     );
 
@@ -891,12 +908,18 @@ export class SquadsService {
       );
     }
 
-    const members = await this.prisma.squadMember.findMany({
-      where: { squadId },
-      select: { userId: true },
-    });
+    const [squad, members] = await Promise.all([
+      this.prisma.squad.findUnique({
+        where: { id: squadId },
+        select: { id: true, activityType: true },
+      }),
+      this.prisma.squadMember.findMany({
+        where: { squadId },
+        select: { userId: true },
+      }),
+    ]);
 
-    if (members.length === 0) {
+    if (!squad || members.length === 0) {
       throw new NotFoundException('Circle tidak ditemukan');
     }
 
@@ -909,6 +932,7 @@ export class SquadsService {
       squadId,
       cadence,
       memberIds.length,
+      squad.activityType,
       new Date(),
     );
 

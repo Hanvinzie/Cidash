@@ -9,7 +9,7 @@ import { PrismaService } from '../database/prisma.service';
 import { invalidateUserCache } from '../common/cache/memory-cache';
 import { AntiCheatService } from './services/anti-cheat.service';
 import { CreateActivityDto } from './dto';
-import { ActivityStatus, PointTxType, QuestStatus } from '@prisma/client';
+import { ActivityStatus, ActivityType, PointTxType, QuestStatus } from '@prisma/client';
 import { SyncActivityBatchDto } from './dto';
 import {
   decodePolyline,
@@ -81,11 +81,44 @@ export class ActivitiesService {
   ) {}
 
   /**
+   * Memastikan pengguna sudah tergabung dalam minimal satu Circle dan tipe aktivitas
+   * sesuai dengan tipe Circle (RUNNING atau CYCLING) yang diikuti.
+   */
+  private async assertActivityAllowedForUserCircles(
+    userId: string,
+    type: ActivityType,
+  ): Promise<void> {
+    if (!this.prisma.squadMember?.findMany) return;
+    const memberships = await this.prisma.squadMember.findMany({
+      where: { userId },
+      select: { squad: { select: { activityType: true } } },
+    });
+
+    if (memberships.length === 0) {
+      throw new ForbiddenException(
+        'Anda harus membuat atau bergabung ke Circle terlebih dahulu sebelum merekam aktivitas.',
+      );
+    }
+
+    const allowedTypes = new Set(memberships.map((m) => m.squad.activityType));
+    if (!allowedTypes.has(type)) {
+      const allowedLabel = Array.from(allowedTypes)
+        .map((t) => (t === ActivityType.RUNNING ? 'Lari (RUNNING)' : 'Sepeda (CYCLING)'))
+        .join(' / ');
+      throw new BadRequestException(
+        `Aktivitas harus sesuai dengan tipe Circle Anda (${allowedLabel}).`,
+      );
+    }
+  }
+
+  /**
    * Menyimpan log perekaman aktivitas olahraga GPS baru.
    * Melakukan verifikasi anti-cheat otomatis, proteksi anti-replay / double-submit,
    * mencocokkan misi aktif, serta mengalokasikan rankPoints ke pengguna.
    */
   async createActivity(userId: string, createActivityDto: CreateActivityDto) {
+    await this.assertActivityAllowedForUserCircles(userId, createActivityDto.type);
+
     const startedAt = new Date(createActivityDto.startedAt);
     const endedAt = new Date(createActivityDto.endedAt);
 
@@ -335,6 +368,8 @@ export class ActivitiesService {
    * Mengembalikan `pointCount` agar client tahu dari indeks mana harus mengirim ulang.
    */
   async syncBatch(userId: string, activityId: string, dto: SyncActivityBatchDto) {
+    await this.assertActivityAllowedForUserCircles(userId, dto.type);
+
     const startedAt = new Date(dto.startedAt);
     if (isNaN(startedAt.getTime())) {
       throw new BadRequestException('Format waktu mulai tidak valid');

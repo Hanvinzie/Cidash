@@ -63,7 +63,8 @@ const tabIndex = (path: string) => navItems.findIndex((n) => path.startsWith(n.t
  * dan posisi scroll tiap tab diingat.
  */
 export default function AppLayout() {
-  const { user } = useApp();
+  const { user, activeCircle } = useApp();
+  const hasCircle = Boolean(activeCircle);
   const { pathname } = useLocation();
   const scrollPos = useRef(new Map<string, number>());
   const prevPath = useRef(pathname);
@@ -138,30 +139,42 @@ export default function AppLayout() {
         {/* Bottom navigation: icon + small label */}
         <nav aria-label="Main navigation" className="pb-safe fixed inset-x-0 bottom-0 z-20 border-t border-line/70 bg-surface [transform:translateZ(0)]">
           <ul className="mx-auto grid h-16 max-w-md grid-cols-4">
-            {navItems.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  onClick={() => handleNavClick(item.to)}
-                  className={({ isActive }) =>
-                    `flex h-full flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors active:scale-90 ${
-                      isActive ? 'text-cidash-primary' : 'text-subtle'
-                    }`
-                  }
-                >
-                  {({ isActive }) => (
-                    <>
-                      <span className="relative">
-                        <Icon name={item.icon} size={24} strokeWidth={isActive ? 2.4 : 1.9} />
-                        {item.to === ROUTES.activity && <RecordingDot />}
-                        {item.to === ROUTES.profile && <UpdateDot />}
-                      </span>
-                      <span>{item.label}</span>
-                    </>
-                  )}
-                </NavLink>
-              </li>
-            ))}
+            {navItems.map((item) => {
+              const locked = !hasCircle && (item.to === ROUTES.customQuest || item.to === ROUTES.activity);
+              return (
+                <li key={item.to}>
+                  <NavLink
+                    to={item.to}
+                    onClick={() => handleNavClick(item.to)}
+                    aria-label={locked ? `${item.label} (locked — join a circle first)` : item.label}
+                    className={({ isActive }) =>
+                      `flex h-full flex-col items-center justify-center gap-1 text-[11px] font-semibold transition-colors active:scale-90 ${
+                        isActive ? 'text-cidash-primary' : locked ? 'text-subtle/60' : 'text-subtle'
+                      }`
+                    }
+                  >
+                    {({ isActive }) => (
+                      <>
+                        <span className="relative">
+                          <Icon name={item.icon} size={24} strokeWidth={isActive ? 2.4 : 1.9} />
+                          {locked && (
+                            <span
+                              className="absolute -bottom-0.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-surface text-subtle ring-1 ring-line"
+                              aria-hidden
+                            >
+                              <Icon name="lock" size={10} strokeWidth={2.4} />
+                            </span>
+                          )}
+                          {!locked && item.to === ROUTES.activity && <RecordingDot />}
+                          {item.to === ROUTES.profile && <UpdateDot />}
+                        </span>
+                        <span>{item.label}</span>
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              );
+            })}
           </ul>
         </nav>
       </div>

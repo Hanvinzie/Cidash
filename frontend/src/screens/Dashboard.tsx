@@ -87,10 +87,11 @@ export default function Dashboard() {
               onChange={setActiveCircle}
               options={circles.map((c) => {
                 const cap = c.maxMembers ?? (c.isPremium ? 25 : 5);
+                const sport = c.activityType === 'bike' ? 'Cycling' : 'Running';
                 return {
                   value: c.id,
                   label: c.name,
-                  description: `${c.memberCount}/${cap} members (${c.isPremium ? 'Premium' : 'Free'}) · ${c.code}`,
+                  description: `${sport} · ${c.memberCount}/${cap} members (${c.isPremium ? 'Premium' : 'Free'}) · ${c.code}`,
                   leading: <InitialAvatar text={c.name} />,
                 };
               })}
@@ -98,12 +99,13 @@ export default function Dashboard() {
             <button
               type="button"
               onClick={() => setShowMembers(true)}
-              className="flex items-center gap-1 text-xs font-semibold text-subtle transition active:opacity-60"
+              className="flex flex-wrap items-center gap-1 text-xs font-semibold text-subtle transition active:opacity-60"
             >
               <Icon name="users" size={13} />
               <span>
                 {activeCircle.memberCount}/{maxMembers} members
               </span>
+              <Badge tone="neutral">{activeCircle.activityType === 'bike' ? 'Cycling' : 'Running'}</Badge>
               <Badge tone={activeCircle.isPremium ? 'primary' : 'neutral'}>
                 {activeCircle.isPremium ? 'Premium' : 'Free'}
               </Badge>
@@ -160,8 +162,10 @@ export default function Dashboard() {
             <Icon name="play" size={20} />
           </span>
           <span>
-            <span className="block font-bold">Solo run</span>
-            <span className="text-xs text-white/80">Track a run or ride</span>
+            <span className="block font-bold">{activeCircle.activityType === 'bike' ? 'Solo ride' : 'Solo run'}</span>
+            <span className="text-xs text-white/80">
+              {activeCircle.activityType === 'bike' ? 'Track a ride' : 'Track a run'}
+            </span>
           </span>
         </button>
         <button
@@ -180,10 +184,10 @@ export default function Dashboard() {
             <Icon name="users" size={20} />
           </span>
           <span className="min-w-0">
-            <span className="block font-bold">Group run</span>
+            <span className="block font-bold">{activeCircle.activityType === 'bike' ? 'Group ride' : 'Group run'}</span>
             <span className="block truncate text-xs text-muted">
               {liveRoom
-                ? `${liveRoom.hostName} +${liveRoom.participants.length - 1} ${liveRoom.status === 'live' ? 'running' : 'in lobby'}`
+                ? `${liveRoom.hostName} +${liveRoom.participants.length - 1} ${liveRoom.status === 'live' ? (activeCircle.activityType === 'bike' ? 'riding' : 'running') : 'in lobby'}`
                 : 'Host the first session'}
             </span>
           </span>

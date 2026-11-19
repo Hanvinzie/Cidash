@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Badge from '../ui/Badge';
 import Button from '../ui/Button';
-import { Segmented } from '../ui/Field';
 import Icon from '../ui/Icon';
 import Modal from '../ui/Modal';
 import Picker, { InitialAvatar } from '../ui/Picker';
@@ -43,14 +43,16 @@ const dayLabel = (d: number) => `${d} ${d === 1 ? 'day' : 'days'}`;
  * dihitung otomatis (dan dihitung ulang oleh server).
  */
 export default function SendBombModal({ onClose, onSent }: { onClose: () => void; onSent: () => void }) {
-  const { user, members, sendBomb } = useApp();
+  const { user, activeCircle, members, sendBomb } = useApp();
   const { myStatus } = useProtection();
   const navigate = useNavigate();
 
+  // Tipe Bomb Mission selalu mengikuti tipe Circle aktif (lari / sepeda).
+  const type: ActivityType = activeCircle?.activityType ?? 'run';
+  const distances = DISTANCE_OPTIONS_KM[type];
   const [step, setStep] = useState<Step>('who');
   const [targetId, setTargetId] = useState<string | null>(null);
-  const [type, setType] = useState<ActivityType>('run');
-  const [distanceKm, setDistanceKm] = useState(5);
+  const [distanceKm, setDistanceKm] = useState(() => distances[Math.min(2, distances.length - 1)]);
   const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
   const [deadlineDays, setDeadlineDays] = useState(3);
 
@@ -58,8 +60,6 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
   const resting = myStatus === 'RESTING';
   const idx = ORDER.indexOf(step);
 
-  // Jarak tersedia bergantung jenis aktivitas; bila jarak saat ini tidak tersedia, pakai yang pertama.
-  const distances = DISTANCE_OPTIONS_KM[type];
   const effectiveDistance = distances.includes(distanceKm) ? distanceKm : distances[Math.min(2, distances.length - 1)];
 
   const price = useMemo(
@@ -138,15 +138,10 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
 
           {step === 'what' && (
             <div className="space-y-4">
-              <Segmented<ActivityType>
-                ariaLabel="Activity type"
-                value={type}
-                onChange={setType}
-                options={[
-                  { value: 'run', label: 'Run' },
-                  { value: 'bike', label: 'Ride' },
-                ]}
-              />
+              <div className="flex items-center justify-between rounded-2xl bg-inset px-4 py-3 text-sm">
+                <span className="text-muted">Activity type</span>
+                <Badge tone="primary">{type === 'run' ? 'Running' : 'Cycling'} · Circle</Badge>
+              </div>
               <Picker
                 label="Distance"
                 sheetTitle="Choose a distance"

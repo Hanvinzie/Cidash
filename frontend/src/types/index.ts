@@ -47,6 +47,7 @@ export interface Circle {
   id: string;
   name: string;
   code: string; // kode unik 8 karakter
+  activityType: ActivityType; // tipe aktivitas circle: 'run' (lari) atau 'bike' (sepeda)
   memberCount: number;
   maxMembers?: number; // 5 (Free) atau 25 (Premium)
   isPremium?: boolean;

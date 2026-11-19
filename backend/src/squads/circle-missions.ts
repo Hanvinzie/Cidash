@@ -332,9 +332,12 @@ export function buildCircleMissionSpec(
   squadId: string,
   cadence: MissionCadence,
   memberCount: number,
+  activityType: ActivityType = ActivityType.RUNNING,
   now: Date = new Date(),
 ): GeneratedCircleMissionSpec {
-  const pool = cadence === 'daily' ? DAILY_MISSION_POOL : WEEKLY_MISSION_POOL;
+  const fullPool = cadence === 'daily' ? DAILY_MISSION_POOL : WEEKLY_MISSION_POOL;
+  const typedPool = fullPool.filter((t) => t.activityType === activityType);
+  const pool = typedPool.length > 0 ? typedPool : fullPool;
   const window = getMissionPeriodWindow(cadence, now);
   const template = selectTemplate(
     squadId,

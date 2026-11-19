@@ -23,8 +23,8 @@ export const initialUser: User = {
 };
 
 export const initialCircles: Circle[] = [
-  { id: 'cir_001', name: 'Sunset Run Squad', code: '8KZA1B2C', memberCount: 5, maxMembers: 5, isPremium: false, captainId: 'usr_002' },
-  { id: 'cir_002', name: 'Weekend Riders', code: 'QW9R4T7Y', memberCount: 3, maxMembers: 25, isPremium: true, captainId: 'usr_001' },
+  { id: 'cir_001', name: 'Sunset Run Squad', code: '8KZA1B2C', activityType: 'run', memberCount: 5, maxMembers: 5, isPremium: false, captainId: 'usr_002' },
+  { id: 'cir_002', name: 'Weekend Riders', code: 'QW9R4T7Y', activityType: 'bike', memberCount: 3, maxMembers: 25, isPremium: true, captainId: 'usr_001' },
 ];
 
 /** Anggota per circle (tidak termasuk user saat ini). */

@@ -91,6 +91,7 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
             <span>
               {members.length}/{maxMembers} members
             </span>
+            <Badge tone="neutral">{liveCircle.activityType === 'bike' ? 'Cycling' : 'Running'}</Badge>
             <Badge tone={isPremium ? 'primary' : 'neutral'}>
               {isPremium ? `Premium · Max ${maxMembers}` : `Free Tier · Max ${maxMembers}`}
             </Badge>
