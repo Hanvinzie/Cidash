@@ -5,8 +5,10 @@ import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
 import Modal from '../components/ui/Modal';
 import RunnerLoader from '../components/ui/RunnerLoader';
+import NoCircleGate from '../components/circle/NoCircleGate';
 import GroupRunPanel from '../components/activity/GroupRunPanel';
 import LocationPrompt from '../components/activity/LocationPrompt';
+import MissionSuggestModal, { type SuggestedMission } from '../components/activity/MissionSuggestModal';
 import PlanSheet, { type PlanOption } from '../components/activity/PlanSheet';
 import RecordingScreen from '../components/activity/RecordingScreen';
 import VerificationModal from '../components/activity/VerificationModal';
@@ -29,10 +31,29 @@ const GROUP = 'group';
 const WEAK_SIGNAL = "Couldn't find your location. Make sure GPS is on and you're in an open area.";
 /** Aktivitas di bawah ini tidak mendapat poin, jadi tidak perlu memanggil geocoding. */
 const MIN_GEOCODE_KM = 0.05;
+const MAX_SUGGESTIONS = 3;
+/** Bila pengguna menolak saran misi, jangan tanya lagi selama sesi aplikasi ini (hilang saat tab/app ditutup). */
+const SKIP_SUGGEST_KEY = 'cidash_skip_mission_suggest';
+
+const suggestSkipped = () => {
+  try {
+    return sessionStorage.getItem(SKIP_SUGGEST_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
 
 type BlockingIssue = Exclude<LocationIssue, 'timeout'>;
 
 export default function Activity() {
+  return (
+    <NoCircleGate feature="activity">
+      <ActivityScreen />
+    </NoCircleGate>
+  );
+}
+
+function ActivityScreen() {
   const { user, activeCircle, groupMissions, bombMissions, recordActivity } = useApp();
   const { tracker, group, live } = useRunSession();
   const toast = useToast();
@@ -112,10 +133,13 @@ export default function Activity() {
 
   // Mode simulasi diatur dari Profile → Settings. `forceSim` = user memilih simulasi dari panduan GPS.
   const [simSetting] = useBooleanSetting(SETTING_KEYS.simulate, false);
+  const [devMode] = useBooleanSetting(SETTING_KEYS.devMode, false);
   const [forceSim, setForceSim] = useState(false);
-  const simulate = simSetting || forceSim;
+  // Simulasi hanya berlaku bila opsi pengembang terbuka (disembunyikan dari pengguna awam).
+  const simulate = devMode && (simSetting || forceSim);
 
   const [planOpen, setPlanOpen] = useState(false);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
   const [finishing, setFinishing] = useState(false);
   const [result, setResult] = useState<VerificationResult | null>(null);
@@ -197,11 +221,56 @@ export default function Activity() {
 
   const canStart = mode === 'solo' || group.isLive;
 
-  function handleStart() {
+  // Misi sejenis (lari/sepeda sama) yang belum selesai: Bomb Mission dulu karena ada penalti, lalu circle mission.
+  const suggestions = useMemo<SuggestedMission[]>(
+    () =>
+      [
+        ...openBombs
+          .filter((b) => b.type === circleType)
+          .map((b) => ({
+            id: b.id,
+            title: `Bomb from @${b.counterpart.username}`,
+            targetKm: b.targetKm,
+            rewardRankPoints: b.rewardRankPoints,
+            kind: 'bomb' as const,
+          })),
+        ...openGroup
+          .filter((g) => g.type === circleType)
+          .map((g) => ({ id: g.id, title: g.title, targetKm: g.targetKm, kind: 'circle' as const })),
+      ].slice(0, MAX_SUGGESTIONS),
+    [openBombs, openGroup, circleType],
+  );
+  const isFreePlan = planId === FREE_RUN || planId === FREE_RIDE;
+
+  function startNow() {
     // iOS: izin kompas harus diminta langsung dari gestur tap, sebelum await apa pun.
     void requestCompassPermission();
     if (simulate) startTracking(true, undefined, activityType);
     else void withLocation('start');
+  }
+
+  function handleStart() {
+    if (isFreePlan && suggestions.length > 0 && !suggestSkipped()) {
+      setSuggestOpen(true);
+      return;
+    }
+    startNow();
+  }
+
+  function pickSuggestion(id: string) {
+    setSuggestOpen(false);
+    selectPlan(id);
+    startNow(); // jenis aktivitas misi sama dengan free run/ride yang dipilih, jadi tipe rekaman tidak berubah
+  }
+
+  function skipSuggestion() {
+    try {
+      sessionStorage.setItem(SKIP_SUGGEST_KEY, '1');
+    } catch {
+      /* private mode: akan ditanya lagi, tidak fatal */
+    }
+    setSuggestOpen(false);
+    startNow();
   }
 
   function handleResume() {
@@ -269,9 +338,7 @@ export default function Activity() {
     ? 'Locking high-accuracy GPS…'
     : !canStart
       ? 'Waiting for the session to go LIVE'
-      : simulate
-        ? 'Demo mode · simulated GPS'
-        : here
+      : here
           ? liveAcc !== null
             ? `GPS ready (±${liveAcc}m)`
             : 'GPS ready'
@@ -356,6 +423,16 @@ export default function Activity() {
         />
       )}
 
+      {suggestOpen && (
+        <MissionSuggestModal
+          type={circleType}
+          missions={suggestions}
+          onPick={pickSuggestion}
+          onSkip={skipSuggestion}
+          onClose={() => setSuggestOpen(false)}
+        />
+      )}
+
       {planOpen && (
         <PlanSheet value={planId} options={planOptions} onSelect={selectPlan} onClose={() => setPlanOpen(false)} />
       )}
@@ -418,11 +495,15 @@ export default function Activity() {
           issue={prompt}
           busy={locating}
           onRetry={() => void withLocation(pendingAction.current)}
-          onSimulate={() => {
-            setPrompt(null);
-            setForceSim(true);
-            if (status === 'idle' && pendingAction.current === 'start') startTracking(true, undefined, activityType);
-          }}
+          onSimulate={
+            devMode
+              ? () => {
+                  setPrompt(null);
+                  setForceSim(true);
+                  if (status === 'idle' && pendingAction.current === 'start') startTracking(true, undefined, activityType);
+                }
+              : undefined
+          }
           onClose={() => setPrompt(null)}
         />
       )}

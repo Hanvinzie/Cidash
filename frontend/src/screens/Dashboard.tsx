@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
-import Button from '../components/ui/Button';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
 import InstallBanner from '../components/ui/InstallBanner';
+import { NoCircleCard } from '../components/circle/NoCircleGate';
 import CircleMembersSheet from '../components/circle/CircleMembersSheet';
 import LeaderboardList from '../components/circle/LeaderboardList';
 import LeaderboardModal from '../components/circle/LeaderboardModal';
 import Picker, { InitialAvatar } from '../components/ui/Picker';
 import { useApp } from '../store/AppContext';
 import { useLiveRooms } from '../hooks/useGroupRun';
-import { activityFor, circleOnboarding, groupRunFor, ROUTES } from '../routes';
+import { activityFor, groupRunFor, ROUTES } from '../routes';
 
 const TOP_COUNT = 3;
 
@@ -31,16 +31,7 @@ export default function Dashboard() {
   const liveRoom = liveRooms.find((r) => r.status === 'live') ?? liveRooms[0];
 
   if (!activeCircle) {
-    return (
-      <Card className="mt-10 p-6 text-center">
-        <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
-          <Icon name="users" size={24} />
-        </span>
-        <p className="mb-1 font-bold">No circle yet</p>
-        <p className="mb-5 text-sm text-muted">Create a private circle or join one with an invite code.</p>
-        <Button onClick={() => navigate(circleOnboarding)}>Create or join a circle</Button>
-      </Card>
-    );
+    return <NoCircleCard />;
   }
 
   const maxMembers = activeCircle.maxMembers ?? (activeCircle.isPremium ? 25 : 5);

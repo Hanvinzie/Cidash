@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useLayoutEffect, useRef } from 'react';
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { profileTopUp, ROUTES } from '../../routes';
@@ -6,8 +6,10 @@ import { useApp } from '../../store/AppContext';
 import { useAppUpdate } from '../../lib/appUpdate';
 import { RunSessionProvider, useIsRecording } from '../../store/RunSession';
 import HideBoot from '../routing/HideBoot';
+import NotificationsModal from '../notifications/NotificationsModal';
 import Icon, { type IconName } from '../ui/Icon';
 import RunnerLoader from '../ui/RunnerLoader';
+import Wordmark from '../ui/Wordmark';
 
 const navItems: { to: string; label: string; icon: IconName; title: string }[] = [
   { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'CIDASH' },
@@ -28,12 +30,16 @@ function RecordingDot() {
   );
 }
 
-/** Titik merah di tab Profile bila ada versi aplikasi baru (detail & tombol Update di Settings → About). */
-function UpdateDot() {
+/** Titik merah di tab Profile bila ada versi aplikasi baru (detail di Settings → About) atau notifikasi belum dibaca. */
+function ProfileDot() {
   const { updateAvailable } = useAppUpdate();
-  if (!updateAvailable) return null;
+  const { unreadCount } = useApp();
+  if (!updateAvailable && unreadCount === 0) return null;
   return (
-    <span className="absolute -right-1 -top-0.5 flex h-2.5 w-2.5" aria-label="Update available">
+    <span
+      className="absolute -right-1 -top-0.5 flex h-2.5 w-2.5"
+      aria-label={unreadCount > 0 ? 'Unread notifications' : 'Update available'}
+    >
       <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cidash-primary opacity-60" />
       <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cidash-primary ring-2 ring-surface" />
     </span>
@@ -63,9 +69,10 @@ const tabIndex = (path: string) => navItems.findIndex((n) => path.startsWith(n.t
  * dan posisi scroll tiap tab diingat.
  */
 export default function AppLayout() {
-  const { user, activeCircle } = useApp();
+  const { user, activeCircle, unreadCount } = useApp();
   const hasCircle = Boolean(activeCircle);
   const { pathname } = useLocation();
+  const [notifOpen, setNotifOpen] = useState(false);
   const scrollPos = useRef(new Map<string, number>());
   const prevPath = useRef(pathname);
   const current = navItems[Math.max(0, tabIndex(pathname))];
@@ -95,23 +102,40 @@ export default function AppLayout() {
         <header className="pt-safe fixed inset-x-0 top-0 z-20 border-b border-line/70 bg-canvas [transform:translateZ(0)]">
           <div className="mx-auto flex h-14 max-w-md items-center justify-between px-4">
             {/* Home: wordmark "Cidash"; tab lain: judul halaman */}
-            <p
-              key={current.to}
-              className={`animate-fade-in font-extrabold tracking-tight ${
-                current.to === ROUTES.dashboard ? 'font-brand text-2xl text-cidash-primary' : 'text-xl'
-              }`}
-            >
-              {current.title}
-            </p>
+            {current.to === ROUTES.dashboard ? (
+              <Wordmark key={current.to} as="p" className="animate-fade-in text-2xl text-cidash-primary" />
+            ) : (
+              <p key={current.to} className="animate-fade-in text-xl font-extrabold tracking-tight">
+                {current.title}
+              </p>
+            )}
             <div className="flex items-center gap-1">
-              <NavLink
-                to={profileTopUp}
-                aria-label={`${user.coins} coins — top up`}
-                className="flex h-9 items-center gap-1 rounded-full px-2.5 text-sm font-bold text-warning transition active:scale-95"
-              >
-                <Icon name="coin" size={16} />
-                {user.coins}
-              </NavLink>
+              {/* Di Profile, lencana koin diganti tombol notifikasi (saldo ada di kartu Wallet). */}
+              {current.to === ROUTES.profile ? (
+                <button
+                  type="button"
+                  onClick={() => setNotifOpen(true)}
+                  aria-haspopup="dialog"
+                  aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+                  className="relative flex h-9 w-9 items-center justify-center rounded-full text-ink transition active:scale-95"
+                >
+                  <Icon name="bell" size={22} />
+                  {unreadCount > 0 && (
+                    <span className="absolute right-0 top-0 flex h-4 min-w-4 items-center justify-center rounded-full bg-cidash-primary px-1 text-[10px] font-bold leading-none text-cidash-on-primary ring-2 ring-canvas">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+              ) : (
+                <NavLink
+                  to={profileTopUp}
+                  aria-label={`${user.coins} coins — top up`}
+                  className="flex h-9 items-center gap-1 rounded-full px-2.5 text-sm font-bold text-warning transition active:scale-95"
+                >
+                  <Icon name="coin" size={16} />
+                  {user.coins}
+                </NavLink>
+              )}
             </div>
           </div>
         </header>
@@ -166,7 +190,7 @@ export default function AppLayout() {
                             </span>
                           )}
                           {!locked && item.to === ROUTES.activity && <RecordingDot />}
-                          {item.to === ROUTES.profile && <UpdateDot />}
+                          {item.to === ROUTES.profile && <ProfileDot />}
                         </span>
                         <span>{item.label}</span>
                       </>
@@ -178,6 +202,7 @@ export default function AppLayout() {
           </ul>
         </nav>
       </div>
+      {notifOpen && <NotificationsModal onClose={() => setNotifOpen(false)} />}
     </RunSessionProvider>
   );
 }

@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import Logo from '../ui/Logo';
+import Wordmark from '../ui/Wordmark';
 import { useAppUpdate } from '../../lib/appUpdate';
+import { DEV_TAPS_REQUIRED, SETTING_KEYS, useBooleanSetting } from '../../lib/settings';
+import { useToast } from '../../store/ToastContext';
 import { fetchContributors, GITHUB_REPO, GITHUB_URL, type Contributor } from '../../lib/github';
 
 const formatTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -155,16 +158,35 @@ function Contributors() {
 
 export default function AboutPanel() {
   const { currentVersion, buildTime } = useAppUpdate();
+  const toast = useToast();
+  const [devMode, setDevMode] = useBooleanSetting(SETTING_KEYS.devMode, false);
+  const taps = useRef({ count: 0, last: 0 });
+
+  /** Ketuk nomor versi 7x berurutan (jeda < 1,5 dtk) untuk membuka opsi pengembang, seperti di Android. */
+  function onVersionTap() {
+    if (devMode) return;
+    const now = Date.now();
+    taps.current.count = now - taps.current.last < 1500 ? taps.current.count + 1 : 1;
+    taps.current.last = now;
+    const left = DEV_TAPS_REQUIRED - taps.current.count;
+    if (left <= 0) {
+      setDevMode(true);
+      toast('Developer options enabled', 'success');
+    } else if (left <= 3) {
+      toast(`${left} more ${left === 1 ? 'tap' : 'taps'} to enable developer options`, 'info');
+    }
+  }
+
   return (
     <div className="max-h-[66dvh] space-y-5 overflow-y-auto pb-1">
       <div className="flex flex-col items-center text-center">
         <Logo size={72} className="shadow-lg shadow-cidash-primary/25" />
-        <h3 className="mt-3 text-xl font-extrabold tracking-tight">Cidash</h3>
-        <p className="text-xs text-subtle">
+        <Wordmark as="h3" className="mt-3 text-2xl" />
+        <button type="button" onClick={onVersionTap} className="select-none text-xs text-subtle" aria-label={`Version ${currentVersion}`}>
           Version {currentVersion}
           <span className="mx-1.5">·</span>
           Built {new Date(buildTime).toLocaleDateString('en-US', { dateStyle: 'medium' })}
-        </p>
+        </button>
       </div>
 
       <UpdateCard />

@@ -63,8 +63,11 @@ export default function RecordingScreen({
 
   const running = status === 'running';
   const progress = goalKm ? Math.min(1, distanceKm / goalKm) : 0;
-  const gps = simulated ? 'Simulation' : accuracyMeters !== null ? `GPS ±${accuracyMeters}m` : 'Finding GPS…';
-  const syncText = syncState === 'syncing' ? 'Syncing…' : unsynced > 0 && syncState === 'pending' ? 'Saved on device' : null;
+  // Hanya kondisi yang perlu tindakan yang ditampilkan: sinyal GPS lemah atau jeda. Tidak ada label teknis
+  // ("Recording", "Simulation", status sync) yang tidak berguna bagi pelari.
+  const weakGps = !simulated && (accuracyMeters === null || accuracyMeters > 30);
+  void syncState;
+  void unsynced;
 
   const metric = (label: string, value: string | number, unit?: string) => (
     <div className="flex flex-1 flex-col items-center">
@@ -88,16 +91,15 @@ export default function RecordingScreen({
           className="pointer-events-none absolute inset-x-0 top-0 flex flex-col items-start gap-2 px-3"
           style={{ paddingTop: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
         >
-          <span
-            className={`pointer-events-auto flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-bold shadow-lg ${
-              running ? 'bg-cidash-primary text-cidash-on-primary' : 'bg-surface text-ink'
-            }`}
-            aria-live="polite"
-          >
-            <span className={`h-2 w-2 rounded-full bg-current ${running ? 'animate-pulse' : 'opacity-60'}`} />
-            {running ? 'Recording' : 'Paused'} · {gps}
-            {syncText && <span className="font-medium opacity-80">· {syncText}</span>}
-          </span>
+          {(!running || weakGps) && (
+            <span
+              className="pointer-events-auto flex items-center gap-2 rounded-full bg-surface px-3 py-1.5 text-xs font-bold text-ink shadow-lg"
+              aria-live="polite"
+            >
+              <span className={`h-2 w-2 rounded-full ${running ? 'animate-pulse bg-warning' : 'bg-subtle'}`} />
+              {!running ? 'Paused' : accuracyMeters === null ? 'Finding GPS…' : 'Weak GPS signal'}
+            </span>
+          )}
           {gapMessage && (
             <span className="pointer-events-auto rounded-full bg-surface px-3 py-1.5 text-xs font-semibold shadow-lg">
               {gapMessage}
