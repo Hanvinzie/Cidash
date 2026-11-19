@@ -5,6 +5,7 @@ import Button from '../components/ui/Button';
 import Icon from '../components/ui/Icon';
 import Modal from '../components/ui/Modal';
 import RunnerLoader from '../components/ui/RunnerLoader';
+import NoCircleGate from '../components/circle/NoCircleGate';
 import GroupRunPanel from '../components/activity/GroupRunPanel';
 import LocationPrompt from '../components/activity/LocationPrompt';
 import PlanSheet, { type PlanOption } from '../components/activity/PlanSheet';
@@ -33,6 +34,14 @@ const MIN_GEOCODE_KM = 0.05;
 type BlockingIssue = Exclude<LocationIssue, 'timeout'>;
 
 export default function Activity() {
+  return (
+    <NoCircleGate feature="activity">
+      <ActivityScreen />
+    </NoCircleGate>
+  );
+}
+
+function ActivityScreen() {
   const { user, activeCircle, groupMissions, bombMissions, recordActivity } = useApp();
   const { tracker, group, live } = useRunSession();
   const toast = useToast();
