@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { LngLatBounds, Map as MapLibreMap, Marker, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
+import { AttributionControl, LngLatBounds, Map as MapLibreMap, Marker, setWorkerUrl, type GeoJSONSource } from 'maplibre-gl';
 import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import Icon from '../ui/Icon';
@@ -22,6 +22,9 @@ const STYLE_DARK = import.meta.env.VITE_MAP_STYLE_URL_DARK || 'https://tiles.ope
 const DEFAULT_CENTER: [number, number] = [106.8022, -6.2183]; // [lng, lat] Gelora Bung Karno
 const PRIMARY = '#ea2845';
 const RECORDING_PITCH = 45;
+/** Zoom awal saat merekam: cukup dekat agar jejak rute terlihat detail (±jalan per jalan). */
+const RECORDING_ZOOM = 18.5;
+const PREVIEW_ZOOM = 16.5;
 
 export interface MapFriend {
   id: string;
@@ -99,6 +102,12 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
   const themeRef = useRef(resolved);
   themeRef.current = resolved;
   const [follow, setFollow] = useState(true);
+  /** true = peta dikunci utara di atas (kompas ditekan); false = berputar searah gerak (heading-up). */
+  const [northUp, setNorthUp] = useState(false);
+  /** Jarum kompas diputar langsung lewat DOM agar tidak me-render ulang peta ±60x/detik saat kamera berputar. */
+  const needleRef = useRef<HTMLSpanElement>(null);
+  /** Setelah pengguna mengubah zoom sendiri, kamera berhenti memaksa zoom otomatis. */
+  const userZoomed = useRef(false);
 
   const heading = useHeading(points, true);
   const lastPoint = points[points.length - 1];
@@ -137,9 +146,9 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
       container,
       style: themeRef.current === 'dark' ? STYLE_DARK : STYLE_LIGHT,
       center: lng !== undefined && lat !== undefined ? [lng, lat] : DEFAULT_CENTER,
-      zoom: 16.5,
+      zoom: recording ? RECORDING_ZOOM : PREVIEW_ZOOM,
       maxPitch: 60,
-      attributionControl: { compact: true },
+      attributionControl: false,
       // Di halaman yang bisa di-scroll, satu jari menggulir halaman; peta digeser dengan dua jari.
       cooperativeGestures: !recording,
     });
@@ -147,7 +156,23 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
     // Hanya mode dev: memudahkan uji otomatis membaca bearing/pitch peta.
     if (import.meta.env.DEV) (container as HTMLElement & { __map?: MapLibreMap }).__map = map;
 
+    // Atribusi (wajib ada) dipasang manual dan DITUTUP secara default; pengguna menekan ikon "i" untuk membukanya.
+    map.addControl(new AttributionControl({ compact: true }), 'bottom-right');
+    const collapseAttribution = () => {
+      const el = container.querySelector('.maplibregl-ctrl-attrib');
+      el?.removeAttribute('open');
+      el?.classList.remove('maplibregl-compact-show');
+    };
+    collapseAttribution();
+    map.once('load', collapseAttribution);
+
     map.on('style.load', () => ensureRouteLayers(map));
+    map.on('rotate', () => {
+      if (needleRef.current) needleRef.current.style.transform = `rotate(${-map.getBearing()}deg)`;
+    });
+    map.on('zoomstart', (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) userZoomed.current = true;
+    });
     // Pengguna menggeser/memutar peta sendiri → berhenti mengikuti sampai tombol recenter ditekan.
     const stopFollow = (e: { originalEvent?: unknown }) => e.originalEvent && setFollow(false);
     map.on('dragstart', stopFollow);
@@ -231,16 +256,18 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
     if (!map || !follow || lat === undefined || lng === undefined) return;
     const current = map.getBearing();
     // Putar lewat jalur terpendek (359° → 1° tidak berputar balik 358°).
-    const bearing = recording && heading !== null ? current + angleDelta(current, heading) : recording ? current : 0;
+    const bearing =
+      recording && !northUp && heading !== null ? current + angleDelta(current, heading) : recording && !northUp ? current : 0;
     map.easeTo({
       center: [lng, lat],
       bearing,
       pitch: recording ? RECORDING_PITCH : 0,
-      zoom: Math.max(map.getZoom(), recording ? 17 : 16),
+      // Zoom awal cukup dekat; setelah pengguna mengubah zoom sendiri, hormati pilihannya.
+      zoom: userZoomed.current ? map.getZoom() : recording ? RECORDING_ZOOM : PREVIEW_ZOOM,
       duration: 800,
       essential: true,
     });
-  }, [lat, lng, heading, follow, recording]);
+  }, [lat, lng, heading, follow, recording, northUp]);
 
   // ---- Teman circle yang berbagi lokasi live (Supabase Realtime Broadcast) ----
   useEffect(() => {
@@ -270,7 +297,8 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
     setFollow(true);
     const map = mapRef.current;
     if (map && lat !== undefined && lng !== undefined) {
-      map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 17), duration: 500 });
+      userZoomed.current = false;
+      map.easeTo({ center: [lng, lat], zoom: recording ? RECORDING_ZOOM : PREVIEW_ZOOM, duration: 500 });
     }
   }
 
@@ -289,7 +317,31 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
     <div className={`relative h-full w-full ${className}`}>
       {/* Inline style: CSS MapLibre (.maplibregl-map {position: relative}) dimuat belakangan dan menimpa kelas Tailwind → tinggi 0. */}
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      <div className="absolute right-3 top-3 z-10 flex flex-col gap-2" style={recording ? { top: 'calc(env(safe-area-inset-top) + 0.75rem)' } : undefined}>
+      {/* Kompas di kanan atas: jarum menunjuk utara; ketuk untuk mengunci utara-di-atas / kembali searah gerak. */}
+      {recording && (
+        <button
+          type="button"
+          onClick={() => {
+            setNorthUp((v) => !v);
+            setFollow(true);
+          }}
+          aria-label={northUp ? 'North is up. Tap to rotate with your direction' : 'Map rotates with you. Tap to keep north up'}
+          aria-pressed={northUp}
+          className={`${buttonClass} absolute right-3 z-10 ${northUp ? '!bg-cidash-primary !text-cidash-on-primary' : ''}`}
+          style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
+        >
+          <span ref={needleRef} className="relative block h-8 w-8" style={{ transition: 'transform 80ms linear' }} aria-hidden>
+            <svg viewBox="0 0 32 32" className="h-8 w-8">
+              <path d="M16 3 21.5 16h-11Z" fill={northUp ? '#fff' : '#ea2845'} />
+              <path d="M16 29 10.5 16h11Z" fill="currentColor" opacity="0.35" />
+            </svg>
+            <span className="absolute left-1/2 top-[-1px] -translate-x-1/2 text-[8px] font-extrabold leading-none">N</span>
+          </span>
+        </button>
+      )}
+
+      {/* Fokus & rute lengkap di kanan bawah, tepat di atas ikon info atribusi OpenFreeMap. */}
+      <div className="absolute right-3 z-10 flex flex-col gap-2" style={{ bottom: '3.25rem' }}>
         <button
           type="button"
           onClick={recenter}
