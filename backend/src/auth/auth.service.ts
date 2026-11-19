@@ -194,7 +194,14 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new UnauthorizedException('Email atau password salah');
+      // Dibedakan dari "password salah" agar aplikasi bisa mengajak pengguna mendaftar. Ini tidak membuka informasi
+      // baru: /auth/register sudah menjawab 409 "Email sudah terdaftar". Batas 12 percobaan/menit tetap berlaku.
+      throw new UnauthorizedException({
+        statusCode: 401,
+        error: 'Unauthorized',
+        code: 'EMAIL_NOT_REGISTERED',
+        message: 'Email belum terdaftar',
+      });
     }
 
     // Validasi password hash
