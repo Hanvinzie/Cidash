@@ -226,7 +226,7 @@ function ActivityScreen() {
     () =>
       [
         ...openBombs
-          .filter((b) => b.type === freeType)
+          .filter((b) => b.type === circleType)
           .map((b) => ({
             id: b.id,
             title: `Bomb from @${b.counterpart.username}`,
@@ -235,10 +235,10 @@ function ActivityScreen() {
             kind: 'bomb' as const,
           })),
         ...openGroup
-          .filter((g) => g.type === freeType)
+          .filter((g) => g.type === circleType)
           .map((g) => ({ id: g.id, title: g.title, targetKm: g.targetKm, kind: 'circle' as const })),
       ].slice(0, MAX_SUGGESTIONS),
-    [openBombs, openGroup, freeType],
+    [openBombs, openGroup, circleType],
   );
   const isFreePlan = planId === FREE_RUN || planId === FREE_RIDE;
 
@@ -425,7 +425,7 @@ function ActivityScreen() {
 
       {suggestOpen && (
         <MissionSuggestModal
-          type={freeType}
+          type={circleType}
           missions={suggestions}
           onPick={pickSuggestion}
           onSkip={skipSuggestion}
