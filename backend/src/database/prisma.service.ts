@@ -11,18 +11,33 @@ function redactDbCredentials(msg: string): string {
 /**
  * Memastikan parameter connection pooling terpasang pada DATABASE_URL
  * sehingga lonjakan konkurensi tinggi tidak menghabiskan koneksi PostgreSQL.
+ *
+ * Khusus di Vercel Serverless + Supabase Pooler:
+ * - Port 5432 (Session Mode) dibatasi hanya 15 klien total -> mudah kena EMAXCONNSESSION.
+ * - Port 6543 (Transaction Mode / PgBouncer) mendukung ratusan klien serverless serentak.
  */
 function ensurePoolingParams(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl);
-    if (!parsed.searchParams.has('connection_limit')) {
-      parsed.searchParams.set(
-        'connection_limit',
-        process.env.VERCEL ? '1' : '15',
-      );
+    const isSupabasePooler = parsed.hostname.endsWith('.pooler.supabase.com');
+
+    if (process.env.VERCEL && isSupabasePooler && (!parsed.port || parsed.port === '5432')) {
+      parsed.port = '6543';
     }
+
+    if (parsed.port === '6543') {
+      parsed.searchParams.set('pgbouncer', 'true');
+    }
+
+    if (process.env.VERCEL) {
+      // Wajib 1 koneksi per lambda instance agar tidak menghabiskan pool
+      parsed.searchParams.set('connection_limit', '1');
+    } else if (!parsed.searchParams.has('connection_limit')) {
+      parsed.searchParams.set('connection_limit', '15');
+    }
+
     if (!parsed.searchParams.has('pool_timeout')) {
-      parsed.searchParams.set('pool_timeout', '15');
+      parsed.searchParams.set('pool_timeout', '20');
     }
     if (!parsed.searchParams.has('connect_timeout')) {
       parsed.searchParams.set('connect_timeout', '10');
@@ -59,6 +74,12 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
+    // Di Vercel serverless, biarkan Prisma lazy-connect saat query pertama agar cold start
+    // lebih cepat dan tidak menahan koneksi idle di pooler.
+    if (process.env.VERCEL) {
+      this.isConnected = true;
+      return;
+    }
     try {
       await this.$connect();
       this.isConnected = true;
