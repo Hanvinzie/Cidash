@@ -4,6 +4,7 @@
   "devCommand": "npm run dev --workspace frontend -- --port $PORT",
   "buildCommand": "npm run build:frontend",
   "outputDirectory": "frontend/dist",
+  "regions": ["hnd1"],
   "functions": {
     "api/index.mjs": {
       "includeFiles": "{backend/dist/serverless.mjs,node_modules/.prisma/client/**}",

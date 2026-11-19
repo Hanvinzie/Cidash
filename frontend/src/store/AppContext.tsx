@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   circleMembers,
@@ -452,18 +452,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const hydrateFromBackend = useCallback(async (): Promise<Circle[]> => {
-    const token = tokenStore.get();
-    if (!token) {
-      setHydrating(false);
-      return [];
-    }
+  const activeCircleIdRef = useRef<string | null>(activeCircleId);
+  activeCircleIdRef.current = activeCircleId;
+  const skipAutoHydrateRef = useRef(false);
+  const lastSyncedCircleRef = useRef<string | null>(null);
 
-    setHydrating(true);
-    try {
-      const [me, mySquadsRes] = await Promise.all([
-        http<BackendUser>('/auth/me'),
-        http<{
+  const hydrateFromBackend = useCallback(
+    async (options?: { preloadedUser?: BackendUser; blockOnDetails?: boolean }): Promise<Circle[]> => {
+      const token = tokenStore.get();
+      if (!token) {
+        setHydrating(false);
+        return [];
+      }
+
+      setHydrating(true);
+      try {
+        const mySquadsPromise = http<{
           squads: {
             id: string;
             name: string;
@@ -473,57 +477,77 @@ export function AppProvider({ children }: { children: ReactNode }) {
             maxMembers?: number;
             captain?: { id: string; name: string } | null;
           }[];
-        }>('/squads/my'),
-      ]);
+        }>('/squads/my');
 
-      const mappedUser = mapBackendUser(me);
-      setUser(mappedUser);
+        const [me, mySquadsRes] = await Promise.all([
+          options?.preloadedUser ? Promise.resolve(options.preloadedUser) : http<BackendUser>('/auth/me'),
+          mySquadsPromise,
+        ]);
 
-      const mappedCircles: Circle[] = mySquadsRes.squads.map((s) => ({
-        id: s.id,
-        name: s.name,
-        code: s.inviteCode,
-        isPremium: Boolean(s.isPremium),
-        memberCount: s.totalMembers,
-        maxMembers: s.maxMembers ?? (s.isPremium ? 25 : 5),
-        captainId: s.captain?.id,
-      }));
+        const mappedUser = mapBackendUser(me);
+        setUser(mappedUser);
 
-      setCircles(mappedCircles);
-      const selectedCircle =
-        mappedCircles.find((c) => c.id === activeCircleId) ?? mappedCircles[0] ?? null;
-      setActiveCircleId(selectedCircle?.id ?? null);
+        const mappedCircles: Circle[] = mySquadsRes.squads.map((s) => ({
+          id: s.id,
+          name: s.name,
+          code: s.inviteCode,
+          isPremium: Boolean(s.isPremium),
+          memberCount: s.totalMembers,
+          maxMembers: s.maxMembers ?? (s.isPremium ? 25 : 5),
+          captainId: s.captain?.id,
+        }));
 
-      if (mappedCircles.length === 0) {
-        setBackendLeaderboard([]);
-        setBackendMembers([]);
-        setBombMissions([]);
-        setGroupMissions([]);
+        setCircles(mappedCircles);
+        const selectedCircle =
+          mappedCircles.find((c) => c.id === activeCircleIdRef.current) ?? mappedCircles[0] ?? null;
+        lastSyncedCircleRef.current = selectedCircle?.id ?? null;
+        setActiveCircleId(selectedCircle?.id ?? null);
+
+        if (mappedCircles.length === 0) {
+          setBackendLeaderboard([]);
+          setBackendMembers([]);
+          setBombMissions([]);
+          setGroupMissions([]);
+        }
+
+        const detailsPromise = Promise.all([
+          selectedCircle ? syncCircleLeaderboard(selectedCircle.id, me.id) : Promise.resolve(),
+          selectedCircle ? syncCircleMissions(selectedCircle.id) : Promise.resolve(),
+          syncQuests(selectedCircle?.id),
+          syncActivities(selectedCircle),
+        ]).finally(() => {
+          setHydrating(false);
+        });
+
+        if (options?.blockOnDetails !== false) {
+          await detailsPromise;
+        } else {
+          void detailsPromise;
+        }
+
+        return mappedCircles;
+      } catch {
+        setHydrating(false);
+        return [];
       }
-
-      await Promise.all([
-        selectedCircle ? syncCircleLeaderboard(selectedCircle.id, me.id) : Promise.resolve(),
-        selectedCircle ? syncCircleMissions(selectedCircle.id) : Promise.resolve(),
-        syncQuests(selectedCircle?.id),
-        syncActivities(selectedCircle),
-      ]);
-
-      return mappedCircles;
-    } catch {
-      return [];
-    } finally {
-      setHydrating(false);
-    }
-  }, [activeCircleId, mapBackendUser, syncActivities, syncCircleLeaderboard, syncCircleMissions, syncQuests]);
+    },
+    [mapBackendUser, syncActivities, syncCircleLeaderboard, syncCircleMissions, syncQuests],
+  );
 
   useEffect(() => {
     if (isAuthenticated && tokenStore.get()) {
+      if (skipAutoHydrateRef.current) {
+        skipAutoHydrateRef.current = false;
+        return;
+      }
       void hydrateFromBackend();
     }
   }, [isAuthenticated, hydrateFromBackend]);
 
   useEffect(() => {
     if (isAuthenticated && tokenStore.get() && activeCircleId) {
+      if (lastSyncedCircleRef.current === activeCircleId) return;
+      lastSyncedCircleRef.current = activeCircleId;
       void syncCircleLeaderboard(activeCircleId, user.id);
       void syncCircleMissions(activeCircleId);
       void syncQuests(activeCircleId);
@@ -614,8 +638,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       tokenStore.set(res.accessToken);
       localStorage.setItem(AUTH_KEY, '1');
       setUser(mapBackendUser(res.user));
+      skipAutoHydrateRef.current = true;
       setAuth(true);
-      const loadedCircles = await hydrateFromBackend();
+      const loadedCircles = await hydrateFromBackend({
+        preloadedUser: res.user,
+        blockOnDetails: false,
+      });
       return { circleCount: loadedCircles.length };
     },
     [hydrateFromBackend, mapBackendUser],
