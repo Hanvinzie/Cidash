@@ -20,6 +20,8 @@ export interface User {
   username: string;
   email?: string;
   avatarUrl?: string;
+  /** Tanggal daftar (ISO). */
+  createdAt?: string;
   rankPoints: number;
   coins: number;
   shieldTickets?: number;
@@ -32,6 +34,13 @@ export interface User {
   weeklyRestUsed?: number;
   maxWeeklyRest?: number;
   nextRestCost?: number | null;
+}
+
+/** Total sepanjang masa dari server (bukan hanya 25 aktivitas terakhir yang dimuat). */
+export interface ActivitySummary {
+  workouts: number;
+  distanceKm: number;
+  durationMinutes: number;
 }
 
 export interface Circle {
@@ -88,6 +97,8 @@ export interface BombMission {
   penaltyRankPoints: number;
   status: MissionStatus;
   snoozed?: boolean;
+  /** Tingkat kesulitan yang dipilih pengirim (menentukan batas waktu, koin, dan taruhan). */
+  difficulty?: 'EASY' | 'MEDIUM' | 'HARD' | 'HELL';
 }
 
 export type RunMode = 'solo' | 'group';
@@ -102,6 +113,8 @@ export interface ActivityLog {
   routeLabel: string; // label rute / misi
   missionStatus: MissionStatus;
   route: GeoPoint[]; // untuk render ulang Social Track Map Card
+  locationLabel?: string | null; // hasil reverse geocoding sekali saat Finish (mis. "Senayan, Jakarta")
+  elevationGain?: number; // meter
   circle: Pick<Circle, 'name' | 'code'> | null; // snapshot saat aktivitas direkam
 }
 
@@ -118,6 +131,11 @@ export interface GeoPoint {
   timestamp: number; // ms
   accuracy?: number; // radius akurasi GPS dalam meter
   speed?: number | null; // m/s dari sensor GPS jika tersedia
+  heading?: number | null; // arah gerak (derajat dari utara) dari sensor GPS jika tersedia
+  altitude?: number | null; // meter di atas permukaan laut jika tersedia
+  altitudeAccuracy?: number | null;
+  /** true = titik pertama setelah jeda yang terlalu jauh: garis TIDAK ditarik dari titik sebelumnya. */
+  gap?: boolean;
 }
 
 export interface VerificationResult {

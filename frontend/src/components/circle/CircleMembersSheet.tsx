@@ -2,11 +2,15 @@ import { useState } from 'react';
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Badge from '../ui/Badge';
+import ConfirmDialog from '../ui/ConfirmDialog';
 import Icon from '../ui/Icon';
 import { InitialAvatar } from '../ui/Picker';
 import { useApp } from '../../store/AppContext';
 import { useLiveRooms } from '../../hooks/useGroupRun';
 import type { Circle } from '../../types';
+
+/** Biaya upgrade circle ke Premium (sama dengan AppContext.upgradeCircle dan backend). */
+const UPGRADE_COST = 100;
 
 interface CircleMembersSheetProps {
   circle: Circle;
@@ -17,7 +21,7 @@ interface CircleMembersSheetProps {
 
 /** Bottom sheet daftar anggota circle: role, status lari live, status Bomb Mission, kapasitas Free/Premium, Kick (Captain), & Leave Circle. */
 export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: CircleMembersSheetProps) {
-  const { circles, membersOf, upgradeCircle, leaveCircle, kickMember } = useApp();
+  const { user, circles, membersOf, upgradeCircle, leaveCircle, kickMember } = useApp();
   const liveCircle = circles.find((c) => c.id === circle.id) ?? circle;
   const members = membersOf(liveCircle.id);
   const myMember = members.find((m) => m.isMe);
@@ -30,7 +34,8 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
   const runningNow = new Set(rooms.filter((r) => r.status === 'live').flatMap((r) => r.participants.map((p) => p.userId)));
   const [copied, setCopied] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
-  const [kickingUserId, setKickingUserId] = useState<string | null>(null);
+  const [kickTarget, setKickTarget] = useState<{ id: string; username: string } | null>(null);
+  const [confirmUpgrade, setConfirmUpgrade] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function shareInvite() {
@@ -51,16 +56,18 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
     setBusy(true);
     try {
       await upgradeCircle(liveCircle.id);
+      setConfirmUpgrade(false);
     } finally {
       setBusy(false);
     }
   }
 
-  async function handleKick(userId: string) {
+  async function handleKick() {
+    if (!kickTarget) return;
     setBusy(true);
     try {
-      await kickMember(liveCircle.id, userId);
-      setKickingUserId(null);
+      await kickMember(liveCircle.id, kickTarget.id);
+      setKickTarget(null);
     } finally {
       setBusy(false);
     }
@@ -123,35 +130,14 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
                 </span>
 
                 {amCaptain && !m.isMe && (
-                  kickingUserId === m.id ? (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void handleKick(m.id)}
-                        className="rounded-lg bg-danger px-2 py-1 text-[11px] font-bold text-white"
-                      >
-                        Kick
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => setKickingUserId(null)}
-                        className="rounded-lg bg-inset px-2 py-1 text-[11px] font-semibold text-muted"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setKickingUserId(m.id)}
-                      aria-label={`Remove @${m.username} from circle`}
-                      className="rounded-lg p-1.5 text-subtle transition hover:bg-danger/10 hover:text-danger"
-                    >
-                      <Icon name="close" size={15} />
-                    </button>
-                  )
+                  <button
+                    type="button"
+                    onClick={() => setKickTarget({ id: m.id, username: m.username })}
+                    aria-label={`Remove @${m.username} from circle`}
+                    className="rounded-lg p-1.5 text-subtle transition hover:bg-danger/10 hover:text-danger active:scale-90"
+                  >
+                    <Icon name="close" size={15} />
+                  </button>
                 )}
               </li>
             ))}
@@ -159,7 +145,7 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
 
           <div className="space-y-2">
             {!isPremium && (
-              <Button fullWidth variant="secondary" disabled={busy} onClick={() => void handleUpgrade()}>
+              <Button fullWidth variant="secondary" disabled={busy} onClick={() => setConfirmUpgrade(true)}>
                 <Icon name="coin" size={15} />
                 Upgrade to Premium Circle (Max 25 · 100 coins)
               </Button>
@@ -216,6 +202,41 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
               </div>
             )}
           </div>
+
+          {kickTarget && (
+            <ConfirmDialog
+              title={`Remove @${kickTarget.username}?`}
+              confirmLabel="Remove from circle"
+              tone="danger"
+              busy={busy}
+              onConfirm={handleKick}
+              onCancel={() => setKickTarget(null)}
+            >
+              <p>
+                <b>@{kickTarget.username}</b> will lose access to this circle's leaderboard and missions. They can join again with the
+                invite code.
+              </p>
+            </ConfirmDialog>
+          )}
+
+          {confirmUpgrade && (
+            <ConfirmDialog
+              title="Upgrade to Premium?"
+              confirmLabel={`Pay ${UPGRADE_COST} coins`}
+              busy={busy}
+              confirmDisabled={user.coins < UPGRADE_COST}
+              onConfirm={handleUpgrade}
+              onCancel={() => setConfirmUpgrade(false)}
+            >
+              <p>
+                "{liveCircle.name}" grows from 5 to <b>25 members</b>. This costs <b>{UPGRADE_COST} coins</b> and cannot be undone.
+              </p>
+              <p className={`mt-2 font-semibold ${user.coins < UPGRADE_COST ? 'text-danger' : 'text-ink'}`}>
+                Your balance: {user.coins} coins
+                {user.coins < UPGRADE_COST && ` (need ${UPGRADE_COST - user.coins} more)`}
+              </p>
+            </ConfirmDialog>
+          )}
         </div>
       )}
     </Modal>

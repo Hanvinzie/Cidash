@@ -1,55 +1,40 @@
-import { FormEvent, Suspense, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
-import Badge, { StatusBadge } from '../components/ui/Badge';
+import Badge from '../components/ui/Badge';
 import CoinBalance from '../components/ui/CoinBalance';
-import Icon, { type IconName } from '../components/ui/Icon';
-import Modal from '../components/ui/Modal';
+import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
-import { Input, Segmented } from '../components/ui/Field';
-import RouteSvg from '../components/share/RouteSvg';
+import HistoryModal from '../components/activity/HistoryModal';
+import SettingsModal from '../components/settings/SettingsModal';
+import ProfileOverviewModal from '../components/profile/ProfileOverviewModal';
+import TopUpModal from '../components/profile/TopUpModal';
 import { ShareCardModal } from '../lazyScreens';
-import { coinPackages } from '../data/mock';
-import { formatDuration } from '../lib/geo';
+import { useAppUpdate } from '../lib/appUpdate';
 import { useApp } from '../store/AppContext';
-import { useTheme, type ThemePreference } from '../store/ThemeContext';
 import { circleOnboarding, ROUTES } from '../routes';
 import CircleMembersSheet from '../components/circle/CircleMembersSheet';
 import type { ActivityLog, Circle } from '../types';
 
-type SettingKey = 'edit' | 'notifications' | 'privacy' | 'help';
-
-const SETTINGS: { key: SettingKey; label: string; icon: IconName }[] = [
-  { key: 'edit', label: 'Edit profile', icon: 'edit' },
-  { key: 'notifications', label: 'Notifications', icon: 'bell' },
-  { key: 'privacy', label: 'Privacy & security', icon: 'shield' },
-  { key: 'help', label: 'Help & rules', icon: 'help' },
-];
-
 export default function Profile() {
-  const { user, circles, activeCircle, setActiveCircle, activityHistory, topUp, updateProfileName, logout } = useApp();
-  const { preference, setPreference } = useTheme();
+  const { user, circles, activeCircle, setActiveCircle, activityHistory, topUp, logout } = useApp();
+  const { updateAvailable } = useAppUpdate();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [shareLog, setShareLog] = useState<ActivityLog | null>(null);
   const [membersCircle, setMembersCircle] = useState<Circle | null>(null);
-  const [activeSetting, setActiveSetting] = useState<SettingKey | null>(null);
-  const [nameInput, setNameInput] = useState(user.username);
-  const [notifBomb, setNotifBomb] = useState(() => localStorage.getItem('cidash_notif_bomb') !== '0');
-  const [notifGroup, setNotifGroup] = useState(() => localStorage.getItem('cidash_notif_group') !== '0');
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [overviewOpen, setOverviewOpen] = useState(false);
   const showTopUp = params.get('topup') === '1';
 
   const totalKm = activityHistory.reduce((sum, a) => sum + a.distanceKm, 0);
   const shieldCount = user.shieldTickets ?? 0;
 
-  // Top-up panel state lives in the URL so other screens can deep-link to it.
-  const toggleTopUp = () => setParams(showTopUp ? {} : { topup: '1' }, { replace: true });
-
-  function handleBuy(coins: number) {
-    topUp(coins); // Demo mode top-up
-    setParams({}, { replace: true });
-  }
+  // Status modal top up ada di URL agar layar lain (mis. koin di header) bisa membukanya langsung.
+  const openTopUp = () => setParams({ topup: '1' }, { replace: true });
+  const closeTopUp = () => setParams({}, { replace: true });
 
   function handleOpenCircle(id: string) {
     setActiveCircle(id);
@@ -61,16 +46,17 @@ export default function Profile() {
     navigate(ROUTES.login, { replace: true });
   }
 
-  function handleSaveProfile(e: FormEvent, close: () => void) {
-    e.preventDefault();
-    updateProfileName(nameInput);
-    close();
-  }
-
   return (
     <div className="space-y-7">
-      {/* Identity */}
-      <Card className="p-5">
+      {/* Identity: tekan kartu untuk ringkasan lengkap */}
+      <Card className="relative p-5">
+        <button
+          type="button"
+          onClick={() => setOverviewOpen(true)}
+          aria-haspopup="dialog"
+          aria-label="Open profile overview"
+          className="absolute inset-0 z-10 rounded-[inherit] transition active:bg-ink/5"
+        />
         <div className="flex items-center gap-4">
           <div
             className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-cidash-primary text-2xl font-extrabold uppercase text-cidash-on-primary ring-4 ring-cidash-primary/15"
@@ -85,6 +71,7 @@ export default function Profile() {
           <Badge tone="primary">
             <Icon name="shield" size={13} /> {shieldCount} {shieldCount === 1 ? 'Shield' : 'Shields'}
           </Badge>
+          <Icon name="chevronRight" size={18} className="shrink-0 text-subtle" />
         </div>
         <dl className="mt-4 grid grid-cols-3 divide-x divide-line rounded-xl bg-inset py-3 text-center">
           {[
@@ -103,72 +90,26 @@ export default function Profile() {
       {/* Wallet */}
       <section>
         <SectionTitle>Wallet</SectionTitle>
-        <CoinBalance coins={user.coins} onTopUp={toggleTopUp} topUpLabel={showTopUp ? 'Close' : 'Top up'} />
-        {showTopUp && (
-          <Card className="mt-3 space-y-2">
-            <p className="text-xs font-semibold text-muted">Choose a package (Demo instant top-up)</p>
-            {coinPackages.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => handleBuy(p.coins + (p.bonusCoins ?? 0))}
-                className="flex w-full items-center justify-between rounded-xl border border-line bg-inset px-4 py-3 text-left transition hover:border-cidash-primary active:scale-[0.98]"
-              >
-                <span className="flex items-center gap-2">
-                  <Icon name="coin" size={18} className="text-warning" />
-                  <span className="font-bold">{p.coins} coins</span>
-                  {p.bonusCoins && <Badge tone="success">+{p.bonusCoins} bonus</Badge>}
-                </span>
-                <span className="text-sm font-bold text-cidash-primary">{p.priceLabel}</span>
-              </button>
-            ))}
-          </Card>
-        )}
+        <CoinBalance coins={user.coins} onTopUp={openTopUp} />
       </section>
 
-      {/* History & route gallery */}
-      <section>
-        <SectionTitle>Activity history</SectionTitle>
-        {activityHistory.length === 0 ? (
-          <Card className="py-8 text-center text-sm text-subtle">No recorded workouts yet.</Card>
-        ) : (
-          <ul className="space-y-3">
-            {activityHistory.map((a) => (
-              <li key={a.id}>
-                <Card className="flex items-center gap-3 p-3">
-                  <RouteSvg
-                    points={a.route}
-                    width={64}
-                    height={64}
-                    strokeWidth={3}
-                    padding={6}
-                    className="h-14 w-14 shrink-0 rounded-xl bg-cidash-primary/5 text-subtle"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-bold">
-                      {a.type === 'run' ? 'Run' : 'Ride'} · {a.distanceKm} km
-                    </p>
-                    <p className="truncate text-xs text-subtle">
-                      {a.date} · {formatDuration(a.durationSec)}
-                    </p>
-                    <div className="mt-1">
-                      <StatusBadge status={a.missionStatus} />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setShareLog(a)}
-                    aria-label={`Share ${a.distanceKm} km ${a.type === 'run' ? 'run' : 'ride'}`}
-                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary transition hover:bg-cidash-primary/20 active:scale-90"
-                  >
-                    <Icon name="share" size={18} />
-                  </button>
-                </Card>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+      {/* Riwayat: daftar lengkap ada di dalam modal agar halaman tidak memanjang */}
+      <button type="button" onClick={() => setHistoryOpen(true)} className="block w-full text-left" aria-haspopup="dialog">
+        <Card className="flex items-center gap-3 p-4 transition active:scale-[0.99]">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-cidash-primary">
+            <Icon name="history" size={20} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold">Activity history</span>
+            <span className="block text-xs text-subtle">
+              {activityHistory.length === 0
+                ? 'No workouts yet'
+                : `${activityHistory.length} ${activityHistory.length === 1 ? 'workout' : 'workouts'} · ${totalKm.toFixed(1)} km`}
+            </span>
+          </span>
+          <Icon name="chevronRight" size={18} className="text-subtle" />
+        </Card>
+      </button>
 
       {/* Circles */}
       <section>
@@ -216,64 +157,22 @@ export default function Profile() {
         )}
       </section>
 
-      {/* Settings (incl. appearance) */}
-      <section>
-        <SectionTitle>Settings</SectionTitle>
-        <Card className="p-0">
-          <div className="border-b border-line/70 p-3">
-            <p className="mb-2 px-1 text-xs font-semibold text-muted">Appearance</p>
-            <Segmented<ThemePreference>
-              ariaLabel="Theme"
-              value={preference}
-              onChange={setPreference}
-              options={[
-                {
-                  value: 'light',
-                  label: (
-                    <>
-                      <Icon name="sun" size={16} /> Light
-                    </>
-                  ),
-                },
-                {
-                  value: 'dark',
-                  label: (
-                    <>
-                      <Icon name="moon" size={16} /> Dark
-                    </>
-                  ),
-                },
-                {
-                  value: 'system',
-                  label: (
-                    <>
-                      <Icon name="monitor" size={16} /> Auto
-                    </>
-                  ),
-                },
-              ]}
-            />
-          </div>
-          <ul className="divide-y divide-line/70">
-            {SETTINGS.map((item) => (
-              <li key={item.key}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (item.key === 'edit') setNameInput(user.username);
-                    setActiveSetting(item.key);
-                  }}
-                  className="flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition hover:bg-inset"
-                >
-                  <Icon name={item.icon} size={18} className="text-muted" />
-                  <span className="flex-1">{item.label}</span>
-                  <Icon name="chevronRight" size={16} className="text-subtle" />
-                </button>
-              </li>
-            ))}
-          </ul>
+      {/* Semua pengaturan (tema, notifikasi, lokasi, profil, About) ada di modal ini */}
+      <button type="button" onClick={() => setSettingsOpen(true)} className="block w-full text-left" aria-haspopup="dialog">
+        <Card className="flex items-center gap-3 p-4 transition active:scale-[0.99]">
+          <span className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-inset text-muted">
+            <Icon name="settings" size={20} />
+            {updateAvailable && (
+              <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full bg-cidash-primary ring-2 ring-surface" aria-label="Update available" />
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-bold">Settings</span>
+            <span className="block text-xs text-subtle">{updateAvailable ? 'Update available' : 'Appearance, notifications, about'}</span>
+          </span>
+          <Icon name="chevronRight" size={18} className="text-subtle" />
         </Card>
-      </section>
+      </button>
 
       <Button variant="danger" fullWidth onClick={handleLogout}>
         <Icon name="logout" size={18} /> Sign out
@@ -290,108 +189,14 @@ export default function Profile() {
         />
       )}
 
-      {activeSetting === 'edit' && (
-        <Modal title="Edit profile" onClose={() => setActiveSetting(null)}>
-          {(close) => (
-            <form onSubmit={(e) => handleSaveProfile(e, () => close())} className="space-y-4">
-              <Input
-                label="Display name"
-                value={nameInput}
-                onChange={(e) => setNameInput(e.target.value)}
-                minLength={2}
-                maxLength={60}
-                required
-              />
-              <Button type="submit" fullWidth disabled={nameInput.trim().length < 2}>
-                Save changes
-              </Button>
-            </form>
-          )}
-        </Modal>
-      )}
+      {overviewOpen && <ProfileOverviewModal onClose={() => setOverviewOpen(false)} />}
 
-      {activeSetting === 'notifications' && (
-        <Modal title="Notifications" onClose={() => setActiveSetting(null)}>
-          {(close) => (
-            <div className="space-y-4">
-              <label className="flex items-center justify-between text-sm">
-                <span>
-                  <span className="block font-semibold">Bomb Mission alerts</span>
-                  <span className="text-xs text-subtle">When a friend sends or completes a dare</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={notifBomb}
-                  onChange={(e) => {
-                    setNotifBomb(e.target.checked);
-                    localStorage.setItem('cidash_notif_bomb', e.target.checked ? '1' : '0');
-                  }}
-                  className="h-5 w-5 accent-cidash-primary"
-                />
-              </label>
-              <label className="flex items-center justify-between text-sm">
-                <span>
-                  <span className="block font-semibold">Live Group Run invites</span>
-                  <span className="text-xs text-subtle">When a circle member starts a live lobby</span>
-                </span>
-                <input
-                  type="checkbox"
-                  checked={notifGroup}
-                  onChange={(e) => {
-                    setNotifGroup(e.target.checked);
-                    localStorage.setItem('cidash_notif_group', e.target.checked ? '1' : '0');
-                  }}
-                  className="h-5 w-5 accent-cidash-primary"
-                />
-              </label>
-              <Button fullWidth onClick={() => close()}>
-                Done
-              </Button>
-            </div>
-          )}
-        </Modal>
-      )}
+      {showTopUp && <TopUpModal balance={user.coins} onClose={closeTopUp} onBuy={topUp} />}
 
-      {activeSetting === 'privacy' && (
-        <Modal title="Privacy & security" onClose={() => setActiveSetting(null)}>
-          {(close) => (
-            <div className="space-y-3 text-sm text-muted">
-              <p>
-                <b>Invite-only Circles:</b> Only members with your 8-character circle code can view the circle leaderboard or send Bomb Missions.
-              </p>
-              <p>
-                <b>Email Privacy:</b> Your email address is never exposed to other circle members.
-              </p>
-              <p>
-                <b>Anti-Cheat Verification:</b> Every workout is verified on the server using Haversine coordinate continuity and speed limits to keep leaderboards fair.
-              </p>
-              <Button fullWidth onClick={() => close()} className="mt-2">
-                Got it
-              </Button>
-            </div>
-          )}
-        </Modal>
-      )}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
 
-      {activeSetting === 'help' && (
-        <Modal title="How Cidash works" onClose={() => setActiveSetting(null)}>
-          {(close) => (
-            <div className="space-y-3 text-sm text-muted">
-              <p>
-                <b>Rank Points (RP):</b> Earn 10 RP per kilometer on every verified run or ride, plus bonus stakes from completing Bomb Missions.
-              </p>
-              <p>
-                <b>Bomb Missions:</b> Spend coins to challenge a circle friend with a distance & time goal. If they succeed, they win the stakes RP; if they fail or expire, you win the RP!
-              </p>
-              <p>
-                <b>Shield Tickets:</b> Use a Shield Ticket to neutralize an incoming Bomb Mission without losing any Rank Points.
-              </p>
-              <Button fullWidth onClick={() => close()} className="mt-2">
-                Close
-              </Button>
-            </div>
-          )}
-        </Modal>
+      {historyOpen && (
+        <HistoryModal logs={activityHistory} onClose={() => setHistoryOpen(false)} onShare={(log) => setShareLog(log)} />
       )}
 
       {shareLog && (

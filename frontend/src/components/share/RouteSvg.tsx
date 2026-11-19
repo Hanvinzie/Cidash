@@ -48,7 +48,8 @@ export default function RouteSvg({
   const offX = (width - (maxX - minX) * scale) / 2;
   const offY = (height - (maxY - minY) * scale) / 2;
   const pts = xs.map((x, i) => [offX + (x - minX) * scale, offY + (ys[i] - minY) * scale] as const);
-  const d = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  // Jeda yang terputus (gap) memulai subpath baru ("M"), sehingga tidak ada garis lurus antar-segmen.
+  const d = pts.map(([x, y], i) => `${i === 0 || points[i].gap ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   const [sx, sy] = pts[0];
   const [ex, ey] = pts[pts.length - 1];
   const r = strokeWidth + 1.5;

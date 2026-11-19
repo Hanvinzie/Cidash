@@ -7,12 +7,14 @@ import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
 import InstallBanner from '../components/ui/InstallBanner';
 import CircleMembersSheet from '../components/circle/CircleMembersSheet';
+import LeaderboardList from '../components/circle/LeaderboardList';
+import LeaderboardModal from '../components/circle/LeaderboardModal';
 import Picker, { InitialAvatar } from '../components/ui/Picker';
 import { useApp } from '../store/AppContext';
 import { useLiveRooms } from '../hooks/useGroupRun';
 import { activityFor, circleOnboarding, groupRunFor, ROUTES } from '../routes';
 
-const MEDAL = ['bg-amber-400 text-amber-950', 'bg-slate-300 text-slate-800', 'bg-orange-300 text-orange-950'];
+const TOP_COUNT = 3;
 
 function greeting() {
   const h = new Date().getHours();
@@ -24,6 +26,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
   const liveRooms = useLiveRooms(activeCircle?.id);
   const liveRoom = liveRooms.find((r) => r.status === 'live') ?? liveRooms[0];
 
@@ -123,15 +126,25 @@ export default function Dashboard() {
           </p>
         )}
 
-        <dl className="grid grid-cols-2 divide-x divide-line rounded-xl bg-inset py-3">
+        {/* Rank Points & Season rank membuka leaderboard lengkap */}
+        <dl className="grid grid-cols-2 divide-x divide-line rounded-xl bg-inset">
           {stats.map((s) => (
-            <div key={s.label} className="flex flex-col items-center gap-0.5 px-1 text-center">
+            <button
+              key={s.label}
+              type="button"
+              onClick={() => setShowLeaderboard(true)}
+              aria-haspopup="dialog"
+              aria-label={`${s.label}: ${s.value}. Open leaderboard`}
+              className="flex flex-col items-center gap-0.5 px-1 py-3 text-center transition first:rounded-l-xl last:rounded-r-xl active:bg-line/60"
+            >
               <dd className="flex items-center gap-1 text-lg font-extrabold">
                 <Icon name={s.icon} size={16} className="text-cidash-primary" />
                 {s.value}
               </dd>
-              <dt className="text-[11px] font-medium text-subtle">{s.label}</dt>
-            </div>
+              <dt className="flex items-center gap-0.5 text-[11px] font-medium text-subtle">
+                {s.label} <Icon name="chevronRight" size={11} />
+              </dt>
+            </button>
           ))}
         </dl>
       </Card>
@@ -248,47 +261,44 @@ export default function Dashboard() {
         )}
       </section>
 
-      {/* Leaderboard */}
+      {/* Leaderboard: hanya 3 teratas, lengkapnya di modal */}
       <section>
-        <SectionTitle action={<span className="text-xs text-subtle">Resets quarterly</span>}>Leaderboard</SectionTitle>
+        <SectionTitle
+          action={
+            <button
+              type="button"
+              onClick={() => setShowLeaderboard(true)}
+              className="flex items-center text-xs font-semibold text-cidash-primary"
+            >
+              See all <Icon name="chevronRight" size={14} />
+            </button>
+          }
+        >
+          Leaderboard
+        </SectionTitle>
         <Card className="p-0">
-          <ol className="divide-y divide-line/70">
-            {leaderboard.map((e) => {
-              const isMe = e.user.id === user.id;
-              return (
-                <li
-                  key={e.user.id}
-                  className={`flex items-center gap-3 px-4 py-3 ${isMe ? 'bg-cidash-primary/5' : ''}`}
-                >
-                  <span
-                    className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      MEDAL[e.rank - 1] ?? 'bg-inset text-subtle'
-                    }`}
-                  >
-                    {e.rank}
-                  </span>
-                  <span
-                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cidash-primary/10 text-sm font-bold uppercase text-cidash-primary"
-                    aria-hidden
-                  >
-                    {e.user.username.charAt(0)}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">
-                      {e.user.username}
-                      {isMe && <span className="ml-1.5 text-xs font-semibold text-cidash-primary">(you)</span>}
-                    </span>
-                    <span className="text-xs text-subtle">{e.totalDistanceKm} km</span>
-                  </span>
-                  <span className="text-right text-sm font-bold">
-                    {e.rankPoints.toLocaleString('en-US')} <span className="text-xs font-medium text-subtle">RP</span>
-                  </span>
-                </li>
-              );
-            })}
-          </ol>
+          <LeaderboardList entries={leaderboard.slice(0, TOP_COUNT)} myId={user.id} />
+          {myRank !== null && myRank > TOP_COUNT && (
+            <button
+              type="button"
+              onClick={() => setShowLeaderboard(true)}
+              className="flex w-full items-center justify-between border-t border-line/70 bg-cidash-primary/5 px-4 py-3 text-left text-sm font-semibold text-cidash-primary transition active:bg-cidash-primary/10"
+            >
+              <span>Your position: #{myRank}</span>
+              <Icon name="chevronRight" size={16} />
+            </button>
+          )}
         </Card>
       </section>
+      {showLeaderboard && (
+        <LeaderboardModal
+          circleName={activeCircle.name}
+          entries={leaderboard}
+          myId={user.id}
+          myRank={myRank}
+          onClose={() => setShowLeaderboard(false)}
+        />
+      )}
       {showMembers && <CircleMembersSheet circle={activeCircle} onClose={() => setShowMembers(false)} />}
     </div>
   );

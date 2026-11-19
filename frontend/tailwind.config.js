@@ -13,6 +13,7 @@ export default {
     extend: {
       fontFamily: {
         sans: ['"Plus Jakarta Sans Variable"', '"Plus Jakarta Sans"', 'system-ui', '-apple-system', 'sans-serif'],
+        brand: ['"Rubik One"', 'system-ui', 'sans-serif'],
       },
       colors: {
         cidash: {

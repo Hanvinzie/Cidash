@@ -13,7 +13,7 @@ import {
   LEADERBOARD_CACHE_TTL_MS,
 } from '../common/cache/memory-cache';
 import { CreateSquadDto, JoinSquadDto } from './dto';
-import { CoinTxType, QuestStatus, Role } from '@prisma/client';
+import { ActivityStatus, CoinTxType, QuestStatus, Role } from '@prisma/client';
 import * as crypto from 'crypto';
 
 export const FREE_SQUAD_MAX_MEMBERS = 5;
@@ -487,7 +487,8 @@ export class SquadsService {
       memberIds.length > 0 && this.prisma.activity?.groupBy
         ? ((await this.prisma.activity.groupBy({
             by: ['userId'],
-            where: { userId: { in: memberIds } },
+            // Draft yang masih direkam (RECORDING) tidak boleh ikut dihitung di leaderboard.
+            where: { userId: { in: memberIds }, status: ActivityStatus.COMPLETED },
             _sum: { distanceMeters: true },
           })) ?? [])
         : [];

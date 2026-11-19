@@ -1,8 +1,9 @@
 @import '@fontsource-variable/plus-jakarta-sans';
+@import '@fontsource/rubik-one';
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@config '../tailwind.config.js';
+@custom-variant dark (&:where(.dark, .dark *));
 
 /*
  * Cidash color tokens (R G B). Panduan lengkap: README.md → "Color Guide".
@@ -148,6 +149,13 @@
   .animate-rise {
     animation: rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
+  /* Bilah progres saat memasang update (selaras MIN_UPDATING_MS di lib/appUpdate.ts). */
+  .animate-update-bar {
+    animation: update-bar 1.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+  .animate-hop {
+    animation: hop 1.4s ease-in-out infinite;
+  }
 }
 
 /* --page-dir: 1 = tab di kanan, -1 = tab di kiri (diset AppLayout). */
@@ -206,6 +214,24 @@
   }
 }
 
+@keyframes update-bar {
+  from {
+    width: 6%;
+  }
+  to {
+    width: 100%;
+  }
+}
+@keyframes hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-4px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -216,20 +242,107 @@
   }
 }
 
-/* Peta OSM lebih gelap di dark mode (hanya layer tile; rute merah tidak ikut terinversi). */
-.dark .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+/* ---------- Peta (MapLibre) ---------- */
+.maplibregl-map {
+  font-family: inherit;
 }
-
-.leaflet-container {
-  outline: none !important;
-  touch-action: pan-y !important; /* jangan tangkap gestur scroll halaman */
-  cursor: default;
-}
-
-.leaflet-container .leaflet-control-attribution {
+.maplibregl-ctrl-attrib {
   @apply rounded-tl-md bg-surface/80 text-[10px] text-subtle;
 }
-.leaflet-container .leaflet-control-attribution a {
+.maplibregl-ctrl-attrib a {
   @apply text-muted;
+}
+.dark .maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+
+/* Penanda posisi pengguna: panah arah + denyut. Tanpa arah (belum bergerak/kompas mati) → titik. */
+.cidash-me {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cidash-me__pulse {
+  position: absolute;
+  inset: 4px;
+  border-radius: 9999px;
+  background: rgb(var(--c-primary) / 0.22);
+  animation: me-pulse 2s ease-out infinite;
+}
+.cidash-me__arrow {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  filter: drop-shadow(0 2px 3px rgb(0 0 0 / 0.35));
+}
+.cidash-me__dot {
+  display: none;
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border-radius: 9999px;
+  background: rgb(var(--c-primary));
+  border: 3px solid #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+}
+.cidash-me.no-heading .cidash-me__arrow {
+  display: none;
+}
+.cidash-me.no-heading .cidash-me__dot {
+  display: block;
+}
+@keyframes me-pulse {
+  from {
+    transform: scale(0.45);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.1);
+    opacity: 0;
+  }
+}
+
+.cidash-start {
+  width: 14px;
+  height: 14px;
+  border-radius: 9999px;
+  background: rgb(var(--c-success));
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+}
+
+.cidash-friend {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.cidash-friend__bubble {
+  display: flex;
+  height: 30px;
+  width: 30px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  border: 3px solid #fff;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.35);
+}
+.cidash-friend__name {
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: 9999px;
+  background: rgb(var(--c-surface) / 0.92);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgb(var(--c-ink));
 }

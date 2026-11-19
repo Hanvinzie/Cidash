@@ -5,7 +5,7 @@ import {
   SNOOZE_MISSION_FEE,
 } from './quests.service';
 import { PrismaService } from '../database/prisma.service';
-import { ActivityType, QuestStatus } from '@prisma/client';
+import { ActivityType, QuestDifficulty, QuestStatus } from '@prisma/client';
 import { BadRequestException } from '@nestjs/common';
 
 describe('QuestsService', () => {
@@ -70,11 +70,12 @@ describe('QuestsService', () => {
         targetUserId,
         activityType: ActivityType.RUNNING,
         targetDistance: 5000,
-        targetMaxPace: 6.0,
-        stakesPoints: 50,
+        difficulty: QuestDifficulty.MEDIUM,
         rewardTitle: 'Weekend Run Challenge',
-        deadline: new Date(Date.now() + 86400000).toISOString(),
+        deadline: new Date(Date.now() + 3 * 86400000).toISOString(),
       };
+      // 5 km x 2.5 koin/km x 1.4 (Medium) x 1.2 (3 hari) = 21 koin → taruhan MEDIUM (70 RP), batas 43 menit
+      const EXPECTED_COINS = 21;
 
       mockPrismaService.squadMember.findUnique
         .mockResolvedValueOnce({ squadId, userId: creatorId })
@@ -92,7 +93,7 @@ describe('QuestsService', () => {
       });
 
       mockPrismaService.user.update.mockResolvedValueOnce({
-        coinBalance: 100 - BOMB_MISSION_FEE,
+        coinBalance: 100 - EXPECTED_COINS,
       });
 
       const mockQuest = {
@@ -109,8 +110,15 @@ describe('QuestsService', () => {
       const result = await service.createQuest(creatorId, dto);
 
       expect(result.message).toBe('Bomb Mission berhasil dikirimkan ke teman satu Circle');
-      expect(result.cost).toBe(BOMB_MISSION_FEE);
-      expect(result.remainingCoinBalance).toBe(80);
+      expect(result.cost).toBe(EXPECTED_COINS);
+      expect(result.pricing).toMatchObject({ coins: 21, stakesTier: 'MEDIUM', stakesPoints: 70, timeLimitMin: 43 });
+      expect(mockPrismaService.quest.create.mock.calls[0][0].data).toMatchObject({
+        wagerCoins: 21,
+        stakesPoints: 70,
+        difficulty: QuestDifficulty.MEDIUM,
+        targetMaxPace: 8.5,
+      });
+      expect(result.remainingCoinBalance).toBe(79);
       expect(result.quest.id).toBe('quest-123');
     });
 
@@ -134,8 +142,8 @@ describe('QuestsService', () => {
           targetUserId,
           activityType: ActivityType.RUNNING,
           targetDistance: 3000,
-          stakesPoints: 40,
-          deadline: new Date(Date.now() + 86400000).toISOString(),
+          difficulty: QuestDifficulty.EASY,
+          deadline: new Date(Date.now() + 2 * 86400000).toISOString(),
         }),
       ).rejects.toThrow(BadRequestException);
     });
@@ -161,10 +169,35 @@ describe('QuestsService', () => {
           targetUserId,
           activityType: ActivityType.RUNNING,
           targetDistance: 3000,
-          stakesPoints: 40,
-          deadline: new Date(Date.now() + 86400000).toISOString(),
+          difficulty: QuestDifficulty.EASY,
+          deadline: new Date(Date.now() + 2 * 86400000).toISOString(),
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('createQuest rules', () => {
+    const base = {
+      squadId: 'squad-1',
+      targetUserId: 'target-2',
+      activityType: ActivityType.RUNNING,
+      targetDistance: 5000,
+      difficulty: QuestDifficulty.HARD,
+      deadline: new Date(Date.now() + 2 * 86400000).toISOString(),
+    };
+
+    it('rejects a distance that is not one of the official options', async () => {
+      await expect(service.createQuest('creator-1', { ...base, targetDistance: 4200 })).rejects.toThrow(/Jarak misi/);
+    });
+
+    it('rejects a deadline shorter than 1 day', async () => {
+      const soon = new Date(Date.now() + 3 * 3600 * 1000).toISOString();
+      await expect(service.createQuest('creator-1', { ...base, deadline: soon })).rejects.toThrow(/antara 1 sampai 7 hari/);
+    });
+
+    it('rejects a deadline longer than 7 days', async () => {
+      const far = new Date(Date.now() + 10 * 86400000).toISOString();
+      await expect(service.createQuest('creator-1', { ...base, deadline: far })).rejects.toThrow(/antara 1 sampai 7 hari/);
     });
   });
 

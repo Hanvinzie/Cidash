@@ -1,11 +1,11 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import { AppProvider } from './store/AppContext';
 import { ThemeProvider } from './store/ThemeContext';
 import { ToastProvider } from './store/ToastContext';
+import { initAppUpdate } from './lib/appUpdate';
 import './index.css';
 
 if (import.meta.env.DEV) {
@@ -23,10 +23,10 @@ if (import.meta.env.DEV) {
       if (navigator.serviceWorker.controller) window.location.reload();
     });
   }
-} else {
-  // Daftarkan service worker PWA (auto update, aktif di build produksi).
-  registerSW({ immediate: true });
 }
+
+// Daftarkan service worker PWA (build produksi) + pantau versi baru. Pemasangan menunggu tombol Update di About.
+initAppUpdate();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

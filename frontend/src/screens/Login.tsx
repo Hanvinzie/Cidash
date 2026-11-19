@@ -5,7 +5,6 @@ import Card from '../components/ui/Card';
 import Icon from '../components/ui/Icon';
 import Logo from '../components/ui/Logo';
 import InstallBanner from '../components/ui/InstallBanner';
-import ThemeToggle from '../components/ui/ThemeToggle';
 import { Input, Segmented } from '../components/ui/Field';
 import { useApp } from '../store/AppContext';
 import { ROUTES } from '../routes';
@@ -22,7 +21,7 @@ const HIGHLIGHTS = [
 ] as const;
 
 export default function Login() {
-  const { isAuthenticated, login, circles, createCircle, joinCircle } = useApp();
+  const { isAuthenticated, login, createCircle, joinCircle } = useApp();
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
@@ -41,10 +40,20 @@ export default function Login() {
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * Pengguna yang baru daftar (atau akun tanpa circle) boleh melewati langkah ini. Pengguna lama yang membuka
+   * halaman ini dari aplikasi justru perlu tombol kembali, dan tidak melihat circle yang sudah ada di sini.
+   */
+  const [firstTime, setFirstTime] = useState(false);
 
   const redirectTo = (location.state as { from?: string } | null)?.from ?? ROUTES.dashboard;
+  /** Dibuka dari dalam aplikasi (mis. Profile → Create / join): kembali ke halaman sebelumnya. */
+  const openedFromApp = isAuthenticated && params.get('step') === 'circle' && location.key !== 'default';
+  const goBack = () => (openedFromApp ? navigate(-1) : navigate(redirectTo, { replace: true }));
 
-  if (isAuthenticated && step === 'auth') return <Navigate to={redirectTo} replace />;
+  // Jangan alihkan saat login masih berjalan: `login()` menandai pengguna terautentikasi sebelum hasilnya kembali,
+  // sehingga pengguna baru langsung dilempar ke Dashboard dan tidak pernah melihat langkah "Join a circle".
+  if (isAuthenticated && step === 'auth' && !loading) return <Navigate to={redirectTo} replace />;
 
   function handleModeChange(nextMode: AuthMode) {
     setMode(nextMode);
@@ -60,6 +69,7 @@ export default function Login() {
       if (circleCount > 0 && !joinCode) {
         navigate(redirectTo, { replace: true });
       } else {
+        setFirstTime(mode === 'register' || circleCount === 0);
         setStep('circle');
       }
     } catch (err) {
@@ -106,10 +116,6 @@ export default function Login() {
       />
 
       <div className="relative mx-auto w-full max-w-md px-5 pb-[calc(env(safe-area-inset-bottom)+2.5rem)] pt-[calc(env(safe-area-inset-top)+1.5rem)]">
-        <div className="mb-6 flex justify-end">
-          <ThemeToggle />
-        </div>
-
         <InstallBanner className="mb-6" />
 
         <div className="mb-8 text-center">
@@ -212,6 +218,7 @@ export default function Login() {
                     if (circleCount > 0 && !joinCode) {
                       navigate(redirectTo, { replace: true });
                     } else {
+                      setFirstTime(circleCount === 0);
                       setStep('circle');
                     }
                   } catch (err) {
@@ -227,6 +234,15 @@ export default function Login() {
           </>
         ) : (
           <Card className="space-y-5 p-5">
+            {!firstTime && (
+              <button
+                type="button"
+                onClick={goBack}
+                className="-ml-1 -mt-1 flex items-center gap-1 rounded-full py-1 pl-1 pr-3 text-sm font-semibold text-muted transition active:scale-95 active:bg-inset"
+              >
+                <Icon name="chevronLeft" size={18} /> Back
+              </button>
+            )}
             <div>
               <h2 className="text-lg font-bold">Join a circle</h2>
               <p className="text-sm text-muted">Create a new private group or join one with a friend's code.</p>
@@ -268,9 +284,9 @@ export default function Login() {
               </Button>
             </form>
 
-            {circles.length > 0 && (
+            {firstTime && (
               <Button variant="ghost" fullWidth onClick={() => navigate(redirectTo, { replace: true })}>
-                Skip — use my existing circles ({circles.length})
+                Skip for now
               </Button>
             )}
           </Card>

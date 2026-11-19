@@ -13,6 +13,14 @@ export function haversineKm(a: GeoPoint, b: GeoPoint): number {
   return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
 }
 
+/** Arah (derajat, 0–360 searah jarum jam dari utara) dari titik `a` menuju `b`. */
+export function bearingDeg(a: GeoPoint, b: GeoPoint): number {
+  const dLng = toRad(b.lng - a.lng);
+  const y = Math.sin(dLng) * Math.cos(toRad(b.lat));
+  const x = Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
 /** Batas kecepatan wajar (km/jam) — di atasnya dianggap kendaraan bermotor. */
 export const MAX_SPEED_KMH: Record<ActivityType, number> = { run: 25, bike: 60 };
 
@@ -46,6 +54,7 @@ export function estimateCalories(distanceKm: number, type: ActivityType): number
  */
 export function detectSpeedViolation(points: GeoPoint[], type: ActivityType): boolean {
   for (let i = 1; i < points.length; i++) {
+    if (points[i].gap) continue; // celah setelah jeda bukan lonjakan kecepatan
     const dtHours = (points[i].timestamp - points[i - 1].timestamp) / 3_600_000;
     if (dtHours <= 0) continue;
     const speed = haversineKm(points[i - 1], points[i]) / dtHours;
