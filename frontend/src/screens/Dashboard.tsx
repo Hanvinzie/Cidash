@@ -22,7 +22,7 @@ function greeting() {
 }
 
 export default function Dashboard() {
-  const { user, circles, activeCircle, setActiveCircle, leaderboard, myRank, groupMissions } = useApp();
+  const { user, circles, activeCircle, setActiveCircle, leaderboard, myRank, groupMissions, claimGroupMission } = useApp();
   const navigate = useNavigate();
   const [copied, setCopied] = useState(false);
   const [showMembers, setShowMembers] = useState(false);
@@ -216,10 +216,13 @@ export default function Dashboard() {
                         <div className="mb-1 flex items-center gap-1.5">
                           <StatusBadge status={m.status} />
                           <Badge>{m.cadence === 'daily' ? 'Daily' : 'Weekly'}</Badge>
+                          <Badge>{m.type === 'run' ? 'Run' : 'Ride'}</Badge>
                         </div>
                         <p className="font-bold">{m.title}</p>
                         <p className="mt-0.5 flex items-center gap-1 text-xs text-subtle">
                           <Icon name="clock" size={12} /> Due {m.deadline}
+                          {m.rewardRankPoints ? ` · +${m.rewardRankPoints} RP` : ''}
+                          {m.rewardCoins ? ` · +${m.rewardCoins} coins` : ''}
                         </p>
                       </div>
                       <p className="shrink-0 text-right">
@@ -243,13 +246,23 @@ export default function Dashboard() {
                       <p className="text-xs text-muted">
                         {m.progressKm} / {m.targetKm} km
                       </p>
-                      {!done && (
+                      {!done ? (
                         <button
                           type="button"
                           onClick={() => navigate(activityFor(m.id))}
                           className="flex items-center text-xs font-semibold text-cidash-primary"
                         >
                           Start <Icon name="chevronRight" size={14} />
+                        </button>
+                      ) : m.claimed ? (
+                        <span className="text-xs font-semibold text-emerald-500">Claimed ✓</span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => void claimGroupMission(m.circleId, m.cadence)}
+                          className="rounded-full bg-cidash-primary px-3 py-1 text-xs font-semibold text-white transition active:scale-95"
+                        >
+                          Claim Reward
                         </button>
                       )}
                     </div>

@@ -81,6 +81,32 @@ export class SquadsController {
   }
 
   /**
+   * Mengambil Daily & Weekly Circle Missions yang di-randomize secara deterministik per periode.
+   */
+  @RateLimit(60, 60_000)
+  @Get(':id/missions')
+  async getCircleMissions(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) squadId: string,
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.squadsService.getCircleMissions(squadId, userId);
+  }
+
+  /**
+   * Mengklaim reward Daily / Weekly Circle Mission yang sudah mencapai target jarak.
+   */
+  @RateLimit(15, 60_000)
+  @HttpCode(HttpStatus.OK)
+  @Post(':id/missions/:cadence/claim')
+  async claimCircleMission(
+    @Param('id', new ParseUUIDPipe({ version: '4' })) squadId: string,
+    @Param('cadence') cadence: 'daily' | 'weekly',
+    @CurrentUser('id') userId: string,
+  ) {
+    return this.squadsService.claimCircleMission(squadId, userId, cadence);
+  }
+
+  /**
    * Mengambil informasi detail dari suatu Circle.
    */
   @RateLimit(60, 60_000)

@@ -82,6 +82,10 @@ export interface GroupMission {
   deadline: string; // ISO atau label singkat
   status: MissionStatus;
   cadence: 'daily' | 'weekly';
+  periodKey?: string;
+  rewardRankPoints?: number;
+  rewardCoins?: number;
+  claimed?: boolean;
 }
 
 export interface BombMission {

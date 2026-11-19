@@ -132,6 +132,7 @@ interface AppState {
   rejectBomb: (id: string) => void;
   useShield: (id: string) => void;
   snoozeBomb: (id: string) => void;
+  claimGroupMission: (circleId: string, cadence: 'daily' | 'weekly') => Promise<void>;
   recordActivity: (input: RecordActivityInput) => VerificationResult;
 }
 
@@ -295,6 +296,52 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const syncCircleMissions = useCallback(async (circleId: string) => {
+    try {
+      const res = await http<{
+        squadId: string;
+        missions: Array<{
+          id: string;
+          circleId: string;
+          cadence: 'daily' | 'weekly';
+          periodKey: string;
+          title: string;
+          activityType: 'RUNNING' | 'CYCLING';
+          targetKm: number;
+          progressKm: number;
+          deadline: string;
+          status: 'completed' | 'in_progress';
+          rewardRankPoints: number;
+          rewardCoins: number;
+          claimed: boolean;
+        }>;
+      }>(`/squads/${circleId}/missions`);
+
+      const mapped: GroupMission[] = res.missions.map((m) => ({
+        id: m.id,
+        circleId: m.circleId,
+        title: m.title,
+        type: m.activityType === 'RUNNING' ? 'run' : 'bike',
+        targetKm: m.targetKm,
+        progressKm: m.progressKm,
+        deadline: m.deadline,
+        status: m.status,
+        cadence: m.cadence,
+        periodKey: m.periodKey,
+        rewardRankPoints: m.rewardRankPoints,
+        rewardCoins: m.rewardCoins,
+        claimed: m.claimed,
+      }));
+
+      setGroupMissions((prev) => [
+        ...prev.filter((g) => g.circleId !== circleId),
+        ...mapped,
+      ]);
+    } catch {
+      // Abaikan jika backend belum tersedia / offline
+    }
+  }, []);
+
   const syncQuests = useCallback(async (circleId?: string) => {
     try {
       const query = circleId ? `?squadId=${encodeURIComponent(circleId)}` : '';
@@ -447,45 +494,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         mappedCircles.find((c) => c.id === activeCircleId) ?? mappedCircles[0] ?? null;
       setActiveCircleId(selectedCircle?.id ?? null);
 
-      if (mappedCircles.length > 0) {
-        setGroupMissions((prev) => {
-          const existingIds = new Set(prev.map((g) => g.circleId));
-          const extra: GroupMission[] = mappedCircles
-            .filter((c) => !existingIds.has(c.id))
-            .flatMap((c) => [
-              {
-                id: `gm_daily_${c.id.slice(0, 6)}`,
-                circleId: c.id,
-                title: 'Morning 5K Together',
-                type: 'run' as const,
-                targetKm: 5,
-                progressKm: 2.5,
-                deadline: 'Today, 21:00',
-                status: 'in_progress' as const,
-                cadence: 'daily' as const,
-              },
-              {
-                id: `gm_weekly_${c.id.slice(0, 6)}`,
-                circleId: c.id,
-                title: 'Circle Mileage 40K',
-                type: 'run' as const,
-                targetKm: 40,
-                progressKm: 18.4,
-                deadline: 'Sun, 23:59',
-                status: 'in_progress' as const,
-                cadence: 'weekly' as const,
-              },
-            ]);
-          return [...prev, ...extra];
-        });
-      } else {
+      if (mappedCircles.length === 0) {
         setBackendLeaderboard([]);
         setBackendMembers([]);
         setBombMissions([]);
+        setGroupMissions([]);
       }
 
       await Promise.all([
         selectedCircle ? syncCircleLeaderboard(selectedCircle.id, me.id) : Promise.resolve(),
+        selectedCircle ? syncCircleMissions(selectedCircle.id) : Promise.resolve(),
         syncQuests(selectedCircle?.id),
         syncActivities(selectedCircle),
       ]);
@@ -496,7 +514,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } finally {
       setHydrating(false);
     }
-  }, [activeCircleId, mapBackendUser, syncActivities, syncCircleLeaderboard, syncQuests]);
+  }, [activeCircleId, mapBackendUser, syncActivities, syncCircleLeaderboard, syncCircleMissions, syncQuests]);
 
   useEffect(() => {
     if (isAuthenticated && tokenStore.get()) {
@@ -507,9 +525,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (isAuthenticated && tokenStore.get() && activeCircleId) {
       void syncCircleLeaderboard(activeCircleId, user.id);
+      void syncCircleMissions(activeCircleId);
       void syncQuests(activeCircleId);
     }
-  }, [activeCircleId, isAuthenticated, syncCircleLeaderboard, syncQuests, user.id]);
+  }, [activeCircleId, isAuthenticated, syncCircleLeaderboard, syncCircleMissions, syncQuests, user.id]);
 
   const leaderboard = useMemo<LeaderboardEntry[]>(() => {
     if (backendLeaderboard) return backendLeaderboard;
@@ -1284,6 +1303,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             }
             return Promise.all([
               activeCircle ? syncCircleLeaderboard(activeCircle.id, user.id) : Promise.resolve(),
+              activeCircle ? syncCircleMissions(activeCircle.id) : Promise.resolve(),
               syncQuests(activeCircle?.id),
               syncActivities(activeCircle),
             ]);
@@ -1309,11 +1329,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
       seasonDistanceKm,
       syncActivities,
       syncCircleLeaderboard,
+      syncCircleMissions,
       syncQuests,
       toast,
       user.id,
       user.rankPoints,
     ],
+  );
+
+  const claimGroupMission = useCallback(
+    async (circleId: string, cadence: 'daily' | 'weekly') => {
+      if (!tokenStore.get()) {
+        setGroupMissions((prev) =>
+          prev.map((m) =>
+            m.circleId === circleId && m.cadence === cadence ? { ...m, claimed: true } : m,
+          ),
+        );
+        toast('Reward claimed!', 'success');
+        return;
+      }
+
+      try {
+        const res = await post<{
+          message: string;
+          rankPoints: number;
+          coinBalance: number;
+        }>(`/squads/${circleId}/missions/${cadence}/claim`);
+
+        setUser((u) => ({
+          ...u,
+          rankPoints: res.rankPoints,
+          coins: res.coinBalance,
+        }));
+        setGroupMissions((prev) =>
+          prev.map((m) =>
+            m.circleId === circleId && m.cadence === cadence ? { ...m, claimed: true } : m,
+          ),
+        );
+        toast(res.message || 'Reward claimed!', 'success');
+        void syncCircleLeaderboard(circleId, user.id);
+      } catch (err) {
+        toast(err instanceof Error ? err.message : 'Gagal klaim reward misi', 'error');
+      }
+    },
+    [syncCircleLeaderboard, toast, user.id],
   );
 
   const value: AppState = {
@@ -1347,6 +1406,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     rejectBomb,
     useShield,
     snoozeBomb,
+    claimGroupMission,
     recordActivity,
   };
 

@@ -13,8 +13,18 @@ import {
   LEADERBOARD_CACHE_TTL_MS,
 } from '../common/cache/memory-cache';
 import { CreateSquadDto, JoinSquadDto } from './dto';
-import { ActivityStatus, CoinTxType, QuestStatus, Role } from '@prisma/client';
+import {
+  ActivityStatus,
+  CoinTxType,
+  PointTxType,
+  QuestStatus,
+  Role,
+} from '@prisma/client';
 import * as crypto from 'crypto';
+import {
+  buildCircleMissionSpec,
+  MissionCadence,
+} from './circle-missions';
 
 export const FREE_SQUAD_MAX_MEMBERS = 5;
 export const PREMIUM_SQUAD_MAX_MEMBERS = 25;
@@ -761,6 +771,227 @@ export class SquadsService {
 
     return {
       message: `Anggota ${targetMember.user.name} berhasil dikeluarkan dari Circle`,
+    };
+  }
+
+  /**
+   * Menghasilkan Daily & Weekly Circle Missions secara deterministik (seeded per squadId + periode WIB)
+   * dan menghitung progress jarak riil dari aktivitas COMPLETED seluruh anggota Circle.
+   */
+  async getCircleMissions(squadId: string, userId: string) {
+    const members = await this.prisma.squadMember.findMany({
+      where: { squadId },
+      select: { userId: true },
+    });
+
+    if (members.length === 0) {
+      throw new NotFoundException('Circle tidak ditemukan');
+    }
+
+    const memberIds = members.map((m) => m.userId);
+    if (!memberIds.includes(userId)) {
+      throw new ForbiddenException('Anda bukan anggota dari Circle ini');
+    }
+
+    const now = new Date();
+    const dailySpec = buildCircleMissionSpec(
+      squadId,
+      'daily',
+      memberIds.length,
+      now,
+    );
+    const weeklySpec = buildCircleMissionSpec(
+      squadId,
+      'weekly',
+      memberIds.length,
+      now,
+    );
+
+    const [dailyAgg, weeklyAgg, claimedLedgers] = await Promise.all([
+      this.prisma.activity.aggregate({
+        where: {
+          userId: { in: memberIds },
+          status: ActivityStatus.COMPLETED,
+          type: dailySpec.activityType,
+          endedAt: { gte: dailySpec.start, lte: dailySpec.end },
+        },
+        _sum: { distanceMeters: true },
+      }),
+      this.prisma.activity.aggregate({
+        where: {
+          userId: { in: memberIds },
+          status: ActivityStatus.COMPLETED,
+          type: weeklySpec.activityType,
+          endedAt: { gte: weeklySpec.start, lte: weeklySpec.end },
+        },
+        _sum: { distanceMeters: true },
+      }),
+      this.prisma.pointLedger.findMany({
+        where: {
+          userId,
+          reference: {
+            in: [dailySpec.claimReference, weeklySpec.claimReference],
+          },
+        },
+        select: { reference: true },
+      }),
+    ]);
+
+    const claimedRefs = new Set(
+      claimedLedgers.map((l) => l.reference).filter(Boolean),
+    );
+
+    const formatMission = (
+      spec: typeof dailySpec,
+      totalMeters: number | null,
+    ) => {
+      const progressKm = +((totalMeters ?? 0) / 1000).toFixed(2);
+      const completed = progressKm >= spec.targetKm;
+      return {
+        id: spec.id,
+        circleId: spec.circleId,
+        cadence: spec.cadence,
+        periodKey: spec.periodKey,
+        code: spec.code,
+        title: spec.title,
+        activityType: spec.activityType,
+        targetKm: spec.targetKm,
+        progressKm,
+        deadline: spec.deadline,
+        deadlineIso: spec.deadlineIso,
+        status: completed ? ('completed' as const) : ('in_progress' as const),
+        rewardRankPoints: spec.rewardRankPoints,
+        rewardCoins: spec.rewardCoins,
+        claimed: claimedRefs.has(spec.claimReference),
+      };
+    };
+
+    return {
+      squadId,
+      memberCount: memberIds.length,
+      missions: [
+        formatMission(dailySpec, dailyAgg._sum.distanceMeters),
+        formatMission(weeklySpec, weeklyAgg._sum.distanceMeters),
+      ],
+    };
+  }
+
+  /**
+   * Mengklaim reward (Rank Points & Coins) untuk Daily atau Weekly Circle Mission
+   * yang sudah mencapai target jarak. Idempotent per user per periode.
+   */
+  async claimCircleMission(
+    squadId: string,
+    userId: string,
+    cadence: MissionCadence,
+  ) {
+    if (cadence !== 'daily' && cadence !== 'weekly') {
+      throw new BadRequestException(
+        'Cadence misi tidak valid (gunakan daily atau weekly)',
+      );
+    }
+
+    const members = await this.prisma.squadMember.findMany({
+      where: { squadId },
+      select: { userId: true },
+    });
+
+    if (members.length === 0) {
+      throw new NotFoundException('Circle tidak ditemukan');
+    }
+
+    const memberIds = members.map((m) => m.userId);
+    if (!memberIds.includes(userId)) {
+      throw new ForbiddenException('Anda bukan anggota dari Circle ini');
+    }
+
+    const spec = buildCircleMissionSpec(
+      squadId,
+      cadence,
+      memberIds.length,
+      new Date(),
+    );
+
+    const agg = await this.prisma.activity.aggregate({
+      where: {
+        userId: { in: memberIds },
+        status: ActivityStatus.COMPLETED,
+        type: spec.activityType,
+        endedAt: { gte: spec.start, lte: spec.end },
+      },
+      _sum: { distanceMeters: true },
+    });
+
+    const progressKm = +((agg._sum.distanceMeters ?? 0) / 1000).toFixed(2);
+    if (progressKm < spec.targetKm) {
+      throw new BadRequestException(
+        `Misi belum selesai (${progressKm}/${spec.targetKm} km).`,
+      );
+    }
+
+    const updatedUser = await this.prisma.$transaction(async (tx) => {
+      const existingClaim = await tx.pointLedger.findFirst({
+        where: {
+          userId,
+          reference: spec.claimReference,
+        },
+        select: { id: true },
+      });
+
+      if (existingClaim) {
+        throw new ConflictException(
+          'Reward untuk misi periode ini sudah Anda klaim.',
+        );
+      }
+
+      const user = await tx.user.update({
+        where: { id: userId },
+        data: {
+          rankPoints: { increment: spec.rewardRankPoints },
+          coinBalance: { increment: spec.rewardCoins },
+        },
+        select: {
+          id: true,
+          rankPoints: true,
+          coinBalance: true,
+        },
+      });
+
+      await tx.pointLedger.create({
+        data: {
+          userId,
+          amount: spec.rewardRankPoints,
+          type: PointTxType.ACTIVITY_REWARD,
+          reference: spec.claimReference,
+        },
+      });
+
+      if (spec.rewardCoins > 0) {
+        await tx.coinTransaction.create({
+          data: {
+            userId,
+            amount: spec.rewardCoins,
+            type: CoinTxType.TOP_UP,
+            reference: spec.claimReference,
+          },
+        });
+      }
+
+      return user;
+    });
+
+    invalidateUserCache(userId);
+    invalidateSquadCache(squadId);
+
+    return {
+      message: `Reward "${spec.title}" berhasil diklaim (+${spec.rewardRankPoints} RP, +${spec.rewardCoins} koin)!`,
+      claimed: true,
+      cadence,
+      periodKey: spec.periodKey,
+      rewardRankPoints: spec.rewardRankPoints,
+      rewardCoins: spec.rewardCoins,
+      rankPoints: updatedUser.rankPoints,
+      coinBalance: updatedUser.coinBalance,
     };
   }
 }
