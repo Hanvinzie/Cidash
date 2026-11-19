@@ -5,8 +5,8 @@
   "buildCommand": "npm run build:frontend",
   "outputDirectory": "frontend/dist",
   "functions": {
-    "api/index.ts": {
-      "includeFiles": "{backend/dist/**,node_modules/.prisma/client/**}",
+    "api/index.mjs": {
+      "includeFiles": "{backend/dist/serverless.mjs,node_modules/.prisma/client/**}",
       "maxDuration": 30
     }
   },
