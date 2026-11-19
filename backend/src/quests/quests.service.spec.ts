@@ -74,7 +74,7 @@ describe('QuestsService', () => {
         rewardTitle: 'Weekend Run Challenge',
         deadline: new Date(Date.now() + 3 * 86400000).toISOString(),
       };
-      // 5 km x 2.5 koin/km x 1.4 (Medium) x 1.2 (3 hari) = 21 koin → taruhan MEDIUM (70 RP), batas 43 menit
+      // 5 km x 2.5 koin/km x 1.4 (Medium) x 1.2 (3 hari) = 21 koin → stakes default MEDIUM = 2 x 21 = 42 → 40 RP, batas 43 menit
       const EXPECTED_COINS = 21;
 
       mockPrismaService.squadMember.findUnique
@@ -111,10 +111,10 @@ describe('QuestsService', () => {
 
       expect(result.message).toBe('Bomb Mission berhasil dikirimkan ke teman satu Circle');
       expect(result.cost).toBe(EXPECTED_COINS);
-      expect(result.pricing).toMatchObject({ coins: 21, stakesTier: 'MEDIUM', stakesPoints: 70, timeLimitMin: 43 });
+      expect(result.pricing).toMatchObject({ coins: 21, stakesTier: 'MEDIUM', stakesPoints: 40, timeLimitMin: 43 });
       expect(mockPrismaService.quest.create.mock.calls[0][0].data).toMatchObject({
         wagerCoins: 21,
-        stakesPoints: 70,
+        stakesPoints: 40,
         difficulty: QuestDifficulty.MEDIUM,
         targetMaxPace: 8.5,
       });

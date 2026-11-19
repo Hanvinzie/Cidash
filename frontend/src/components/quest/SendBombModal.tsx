@@ -14,9 +14,12 @@ import {
   DIFFICULTY_LABEL,
   DISTANCE_OPTIONS_KM,
   STAKES_LABEL,
+  STAKES_TIERS,
   formatMinutes,
   priceQuest,
+  stakesPointsFor,
   type Difficulty,
+  type StakesTier,
 } from '../../lib/questPricing';
 import type { ActivityType } from '../../types';
 
@@ -53,6 +56,7 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
   const [distanceKm, setDistanceKm] = useState(5);
   const [difficulty, setDifficulty] = useState<Difficulty>('MEDIUM');
   const [deadlineDays, setDeadlineDays] = useState(3);
+  const [stakes, setStakes] = useState<StakesTier>('MEDIUM');
 
   const target = members.find((m) => m.id === targetId);
   const resting = myStatus === 'RESTING';
@@ -63,8 +67,8 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
   const effectiveDistance = distances.includes(distanceKm) ? distanceKm : distances[Math.min(2, distances.length - 1)];
 
   const price = useMemo(
-    () => priceQuest({ type, distanceKm: effectiveDistance, difficulty, deadlineDays }),
-    [type, effectiveDistance, difficulty, deadlineDays],
+    () => priceQuest({ type, distanceKm: effectiveDistance, difficulty, deadlineDays, stakes }),
+    [type, effectiveDistance, difficulty, deadlineDays, stakes],
   );
   const canAfford = user.coins >= price.coins;
 
@@ -73,7 +77,7 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
 
   function send(close: (after?: () => void) => void) {
     if (!target || !canAfford || resting) return;
-    sendBomb({ targetUserId: target.id, type, targetKm: effectiveDistance, difficulty, deadlineDays });
+    sendBomb({ targetUserId: target.id, type, targetKm: effectiveDistance, difficulty, deadlineDays, stakes });
     close(() => {
       onClose();
       onSent();
@@ -199,6 +203,34 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
               />
               <p className="-mt-2 px-1 text-[11px] text-subtle">A shorter deadline costs more coins.</p>
 
+              {/* Taruhan RP dipilih sendiri; nilainya mengikuti harga koin akhir. */}
+              <div>
+                <p className="mb-1.5 text-xs font-semibold text-muted">Stakes</p>
+                <div role="radiogroup" aria-label="Stakes" className="grid grid-cols-3 gap-2">
+                  {STAKES_TIERS.map((t) => {
+                    const selected = t === stakes;
+                    return (
+                      <button
+                        key={t}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => setStakes(t)}
+                        className={`rounded-2xl border px-2 py-2.5 text-center transition active:scale-[0.97] ${
+                          selected ? 'border-cidash-primary bg-cidash-primary/5' : 'border-line bg-inset'
+                        }`}
+                      >
+                        <span className={`block text-sm font-bold ${selected ? 'text-cidash-primary' : ''}`}>{STAKES_LABEL[t]}</span>
+                        <span className={`mt-0.5 inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${TIER_STYLE[t]}`}>
+                          ±{stakesPointsFor(price.coins, t)} RP
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1.5 px-1 text-[11px] text-subtle">Higher stakes win and lose more RP. The coin cost stays the same.</p>
+              </div>
+
               <div className="space-y-2 rounded-2xl bg-inset p-3.5">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted">Cost</span>
@@ -206,13 +238,7 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
                     <Icon name="coin" size={16} className="text-warning" /> {price.coins}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted">Stakes</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${TIER_STYLE[price.stakesTier]}`}>
-                    {STAKES_LABEL[price.stakesTier]} · ±{price.stakesPoints} RP
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-2 pt-1 text-center text-xs font-semibold">
+                <div className="grid grid-cols-2 gap-2 text-center text-xs font-semibold">
                   <span className="rounded-lg bg-success/10 py-1.5 text-success">Win: +{price.stakesPoints} RP</span>
                   <span className="rounded-lg bg-danger/10 py-1.5 text-danger">Fail: −{price.stakesPoints} RP</span>
                 </div>

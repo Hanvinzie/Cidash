@@ -39,11 +39,12 @@ const DEADLINE_MULTIPLIER = [0, 1.6, 1.35, 1.2, 1.1, 1.1, 1.0, 1.0];
 const MIN_COINS = 5;
 const MAX_COINS = 100;
 
-const STAKES_TIERS: { tier: StakesTier; maxCoins: number; points: number }[] = [
-  { tier: 'LOW', maxCoins: 20, points: 30 },
-  { tier: 'MEDIUM', maxCoins: 50, points: 70 },
-  { tier: 'HIGH', maxCoins: Infinity, points: 120 },
-];
+/** Taruhan dipilih pengguna; RP mengikuti harga koin akhir (dasar 2 x koin, dikali pengali, kelipatan 5). */
+export const STAKES_TIERS: StakesTier[] = ['LOW', 'MEDIUM', 'HIGH'];
+export const DEFAULT_STAKES: StakesTier = 'MEDIUM';
+const STAKES_MULTIPLIER: Record<StakesTier, number> = { LOW: 0.5, MEDIUM: 1, HIGH: 2 };
+const MIN_STAKES_POINTS = 5;
+const MAX_STAKES_POINTS = 500;
 
 export interface QuestPrice {
   /** Pace maksimum (menit/km). */
@@ -61,24 +62,31 @@ export function maxPaceFor(type: ActivityType, distanceKm: number, difficulty: D
   return base * (long ? FATIGUE_FACTOR : 1);
 }
 
+/** RP yang dipertaruhkan untuk harga koin dan tingkat stakes tertentu. */
+export function stakesPointsFor(coins: number, tier: StakesTier): number {
+  const rounded = Math.round((coins * 2 * STAKES_MULTIPLIER[tier]) / 5) * 5;
+  return Math.min(MAX_STAKES_POINTS, Math.max(MIN_STAKES_POINTS, rounded));
+}
+
 export function priceQuest(input: {
   type: ActivityType;
   distanceKm: number;
   difficulty: Difficulty;
   deadlineDays: number;
+  stakes?: StakesTier;
 }): QuestPrice {
   const days = Math.min(MAX_DEADLINE_DAYS, Math.max(MIN_DEADLINE_DAYS, Math.round(input.deadlineDays)));
   const pace = maxPaceFor(input.type, input.distanceKm, input.difficulty);
   const raw =
     input.distanceKm * COINS_PER_KM[input.type] * DIFFICULTY_MULTIPLIER[input.difficulty] * DEADLINE_MULTIPLIER[days];
   const coins = Math.min(MAX_COINS, Math.max(MIN_COINS, Math.round(raw)));
-  const stakes = STAKES_TIERS.find((s) => coins <= s.maxCoins) ?? STAKES_TIERS[STAKES_TIERS.length - 1];
+  const tier = input.stakes ?? DEFAULT_STAKES;
   return {
     maxPace: Number(pace.toFixed(2)),
     timeLimitMin: Math.round(input.distanceKm * pace),
     coins,
-    stakesTier: stakes.tier,
-    stakesPoints: stakes.points,
+    stakesTier: tier,
+    stakesPoints: stakesPointsFor(coins, tier),
   };
 }
 

@@ -7,7 +7,8 @@ interface LocationPromptProps {
   issue: Exclude<LocationIssue, 'timeout'>;
   busy: boolean;
   onRetry: () => void;
-  onSimulate: () => void;
+  /** Hanya diberikan saat opsi pengembang terbuka; pengguna awam tidak melihat tombol simulasi. */
+  onSimulate?: () => void;
   onClose: () => void;
 }
 
@@ -77,9 +78,16 @@ export default function LocationPrompt({ issue, busy, onRetry, onSimulate, onClo
                 {busy ? 'Finding you…' : 'Try again'}
               </Button>
             )}
-            <Button variant={canRetry ? 'ghost' : 'primary'} fullWidth onClick={() => close(onSimulate)}>
-              Use simulation mode
-            </Button>
+            {onSimulate && (
+              <Button variant={canRetry ? 'ghost' : 'primary'} fullWidth onClick={() => close(onSimulate)}>
+                Use simulation mode
+              </Button>
+            )}
+            {!canRetry && !onSimulate && (
+              <Button fullWidth onClick={() => close()}>
+                Got it
+              </Button>
+            )}
           </div>
         </div>
       )}
