@@ -99,8 +99,10 @@ export default function Activity() {
 
   // Mode simulasi diatur dari Profile → Settings. `forceSim` = user memilih simulasi dari panduan GPS.
   const [simSetting] = useBooleanSetting(SETTING_KEYS.simulate, false);
+  const [devMode] = useBooleanSetting(SETTING_KEYS.devMode, false);
   const [forceSim, setForceSim] = useState(false);
-  const simulate = simSetting || forceSim;
+  // Simulasi hanya berlaku bila opsi pengembang terbuka (disembunyikan dari pengguna awam).
+  const simulate = devMode && (simSetting || forceSim);
 
   const [planOpen, setPlanOpen] = useState(false);
   const [confirmFinish, setConfirmFinish] = useState(false);
@@ -256,9 +258,7 @@ export default function Activity() {
     ? 'Locking high-accuracy GPS…'
     : !canStart
       ? 'Waiting for the session to go LIVE'
-      : simulate
-        ? 'Demo mode · simulated GPS'
-        : here
+      : here
           ? liveAcc !== null
             ? `GPS ready (±${liveAcc}m)`
             : 'GPS ready'
@@ -401,11 +401,15 @@ export default function Activity() {
           issue={prompt}
           busy={locating}
           onRetry={() => void withLocation(pendingAction.current)}
-          onSimulate={() => {
-            setPrompt(null);
-            setForceSim(true);
-            if (status === 'idle' && pendingAction.current === 'start') startTracking(true, undefined, activityType);
-          }}
+          onSimulate={
+            devMode
+              ? () => {
+                  setPrompt(null);
+                  setForceSim(true);
+                  if (status === 'idle' && pendingAction.current === 'start') startTracking(true, undefined, activityType);
+                }
+              : undefined
+          }
           onClose={() => setPrompt(null)}
         />
       )}

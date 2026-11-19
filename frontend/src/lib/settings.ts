@@ -12,7 +12,12 @@ export const SETTING_KEYS = {
   liveShare: 'cidash_live_share',
   /** Mode simulasi GPS (demo di desktop). */
   simulate: 'cidash_simulate',
+  /** Opsi pengembang terbuka (ketuk versi di About 7x). Menyembunyikan alat uji dari pengguna awam. */
+  devMode: 'cidash_dev_mode',
 } as const;
+
+/** Berapa ketukan pada nomor versi untuk membuka opsi pengembang. */
+export const DEV_TAPS_REQUIRED = 7;
 
 function read(key: string, fallback: boolean): boolean {
   try {
