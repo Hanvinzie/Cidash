@@ -12,6 +12,26 @@ import {
 import { del, http, post, tokenStore } from '../services/http';
 import { decodeSegments, encodePolyline, encodeRoute } from '../lib/polyline';
 import { priceQuest, type Difficulty, type StakesTier } from '../lib/questPricing';
+import {
+  clearSnapshots,
+  diffMembers,
+  diffQuests,
+  loadKnownCircles,
+  loadNotifications,
+  loadSeenAt,
+  loadSnapshot,
+  mergeNotifications,
+  removedFromCircle,
+  saveKnownCircles,
+  saveNotifications,
+  saveSeenAt,
+  saveSnapshot,
+  type AppNotification,
+  type MemberSnap,
+  type QuestSnap,
+} from '../lib/notifications';
+import { useAutoRefresh } from '../hooks/useAutoRefresh';
+import { useCircleEvents } from '../hooks/useCircleEvents';
 import { useToast } from './ToastContext';
 import type {
   ActivityLog,
@@ -35,6 +55,8 @@ const MAX_SHIELD_TICKETS = 2;
 const SHIELD_WEEKLY_COSTS = [25, 50] as const;
 const REST_WEEKLY_COSTS = [0, 15] as const;
 const SNOOZE_COST_COINS = 10;
+/** Selang polling data circle saat tab terlihat. */
+const REFRESH_INTERVAL_MS = 25_000;
 
 const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}`;
 const generateCircleCode = () =>
@@ -116,6 +138,10 @@ interface AppState {
   activityHistory: ActivityLog[];
   /** Total sepanjang masa dari server; null bila belum dimuat (mode demo memakai riwayat lokal). */
   activitySummary: ActivitySummary | null;
+  /** Pusat notifikasi (diturunkan di klien dari perubahan data circle), terbaru dulu. */
+  notifications: AppNotification[];
+  unreadCount: number;
+  markNotificationsRead: () => void;
 
   login: (credentials?: AuthCredentials) => Promise<{ circleCount: number }>;
   logout: () => void;
@@ -237,7 +263,84 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // ---- Notifikasi: daftar per pengguna di localStorage, snapshot per pengguna + circle ----
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [seenAt, setSeenAt] = useState(0);
+  const userIdRef = useRef('');
+  const notifRef = useRef<AppNotification[]>([]);
+  const circleNamesRef = useRef(new Map<string, string>());
+  /** Circle yang saya tinggalkan sendiri (bukan di-kick) dan anggota yang saya keluarkan sendiri. */
+  const selfLeftRef = useRef(new Set<string>());
+  const selfRemovedRef = useRef(new Set<string>());
+
+  const switchNotifUser = useCallback((id: string) => {
+    if (userIdRef.current === id) return;
+    userIdRef.current = id;
+    notifRef.current = id ? loadNotifications(id) : [];
+    setNotifications(notifRef.current);
+    setSeenAt(id ? loadSeenAt(id) : 0);
+  }, []);
+
+  const pushNotifications = useCallback((items: AppNotification[]) => {
+    const uid = userIdRef.current;
+    if (!uid || items.length === 0) return;
+    const merged = mergeNotifications(notifRef.current, items);
+    if (merged === notifRef.current) return;
+    notifRef.current = merged;
+    setNotifications(merged);
+    saveNotifications(uid, merged);
+  }, []);
+
+  const markNotificationsRead = useCallback(() => {
+    const now = Date.now();
+    setSeenAt(now);
+    if (userIdRef.current) saveSeenAt(userIdRef.current, now);
+  }, []);
+
+  const unreadCount = useMemo(() => notifications.filter((n) => n.at > seenAt).length, [notifications, seenAt]);
+
+  const ingestMembers = useCallback(
+    (circleId: string, entries: LeaderboardEntry[]) => {
+      const uid = userIdRef.current;
+      if (!uid) return;
+      const next: MemberSnap[] = entries.map((e) => ({
+        id: e.user.id,
+        name: e.user.username,
+        rankPoints: e.rankPoints,
+        km: e.totalDistanceKm,
+        rank: e.rank,
+      }));
+      const prev = loadSnapshot<MemberSnap>(uid, circleId, 'm');
+      saveSnapshot(uid, circleId, 'm', next);
+      pushNotifications(
+        diffMembers(prev, next, {
+          meId: uid,
+          circleId,
+          circleName: circleNamesRef.current.get(circleId) ?? 'your circle',
+          selfRemoved: selfRemovedRef.current,
+        }),
+      );
+    },
+    [pushNotifications],
+  );
+
+  const ingestQuests = useCallback(
+    (circleId: string, next: QuestSnap[]) => {
+      const uid = userIdRef.current;
+      if (!uid) return;
+      const prev = loadSnapshot<QuestSnap>(uid, circleId, 'q');
+      saveSnapshot(uid, circleId, 'q', next);
+      pushNotifications(
+        diffQuests(prev, next, { meId: uid, circleId, circleName: circleNamesRef.current.get(circleId) ?? 'your circle' }),
+      );
+    },
+    [pushNotifications],
+  );
+
   const logout = useCallback(() => {
+    switchNotifUser('');
+    selfLeftRef.current.clear();
+    selfRemovedRef.current.clear();
     tokenStore.clear();
     localStorage.removeItem(AUTH_KEY);
     setBackendLeaderboard(null);
@@ -255,7 +358,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('cidash:unauthorized', onUnauthorized);
   }, [logout, toast]);
 
-  const syncCircleLeaderboard = useCallback(async (circleId: string, currentUserId: string) => {
+  /** `keepOnError`: polling di latar belakang tidak boleh mengosongkan data yang sudah tampil saat jaringan putus. Mengembalikan true bila sukses. */
+  const syncCircleLeaderboard = useCallback(
+    async (circleId: string, currentUserId: string, opts?: { keepOnError?: boolean }): Promise<boolean> => {
     try {
       const res = await http<{
         leaderboard: {
@@ -280,6 +385,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         restUntil: item.restUntil ?? null,
       }));
       setBackendLeaderboard(entries);
+      ingestMembers(circleId, entries);
       setBackendCaptainId(res.leaderboard.find((item) => item.role === 'CAPTAIN')?.userId ?? null);
       setBackendMembers(
         res.leaderboard
@@ -291,12 +397,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
             restUntil: item.restUntil ?? null,
           })),
       );
+      return true;
     } catch {
-      setBackendLeaderboard(null);
-      setBackendMembers(null);
-      setBackendCaptainId(null);
+      if (!opts?.keepOnError) {
+        setBackendLeaderboard(null);
+        setBackendMembers(null);
+        setBackendCaptainId(null);
+      }
+      return false;
     }
-  }, []);
+    },
+    [ingestMembers],
+  );
 
   const syncCircleMissions = useCallback(async (circleId: string) => {
     try {
@@ -344,7 +456,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const syncQuests = useCallback(async (circleId?: string) => {
+  const syncQuests = useCallback(async (circleId?: string): Promise<boolean> => {
     try {
       const query = circleId ? `?squadId=${encodeURIComponent(circleId)}` : '';
       type ApiQuest = {
@@ -362,6 +474,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         creator: { id: string; name: string };
         targetUser: { id: string; name: string };
         isTargetUser: boolean;
+        isCreator?: boolean;
       };
       // Riwayat (selesai/gagal/Shield) opsional: bila gagal, misi aktif tetap tampil.
       const [active, history] = await Promise.all([
@@ -369,7 +482,26 @@ export function AppProvider({ children }: { children: ReactNode }) {
         http<{ quests: ApiQuest[] }>(`/quests/history${query}`).catch(() => ({ quests: [] as ApiQuest[] })),
       ]);
 
-      const mapped: BombMission[] = [...active.quests, ...history.quests].map((q) => {
+      const all = [...active.quests, ...history.quests];
+      if (circleId) {
+        ingestQuests(
+          circleId,
+          all.map((q) => ({
+            id: q.id,
+            status: q.status,
+            creatorId: q.creator.id,
+            creatorName: q.creator.name,
+            targetId: q.targetUser.id,
+            targetName: q.targetUser.name,
+          })),
+        );
+      }
+
+      // /quests/active memuat SEMUA misi aktif di circle. Tab Received/Sent hanya untuk misi yang melibatkan saya;
+      // misi antar anggota lain masuk ke pusat notifikasi.
+      const me = userIdRef.current;
+      const involvesMe = (q: ApiQuest) => q.isTargetUser || (q.isCreator ?? q.creator.id === me);
+      const mapped: BombMission[] = all.filter(involvesMe).map((q) => {
         const targetKm = +(q.targetDistance / 1000).toFixed(2);
         const pace = q.targetMaxPace && q.targetMaxPace > 0 ? q.targetMaxPace : 7;
         const durationMin = Math.max(5, Math.round(targetKm * pace));
@@ -405,10 +537,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         };
       });
       setBombMissions(mapped);
+      return true;
     } catch {
       // Keep local state if offline
+      return false;
     }
-  }, []);
+  }, [ingestQuests]);
 
   const syncActivities = useCallback(async (currentCircle: Circle | null) => {
     try {
@@ -486,6 +620,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           options?.preloadedUser ? Promise.resolve(options.preloadedUser) : http<BackendUser>('/auth/me'),
           mySquadsPromise,
         ]);
+        switchNotifUser(me.id);
 
         const mappedUser = mapBackendUser(me);
         setUser(mappedUser);
@@ -500,6 +635,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
           maxMembers: s.maxMembers ?? (s.isPremium ? 25 : 5),
           captainId: s.captain?.id,
         }));
+        // Circle yang dulu saya ikuti tapi kini hilang: di-kick bila bukan karena saya keluar sendiri.
+        const knownCircles = loadKnownCircles(me.id);
+        if (knownCircles) {
+          const nowIds = new Set(mappedCircles.map((c) => c.id));
+          const gone = knownCircles.filter((k) => !nowIds.has(k.id));
+          const removed = gone.filter((k) => !selfLeftRef.current.has(k.id));
+          pushNotifications(removed.map((k) => removedFromCircle(k.id, k.name)));
+          if (removed.length > 0) toast(`You were removed from "${removed[0].name}"`, 'info');
+          gone.forEach((k) => {
+            clearSnapshots(me.id, k.id);
+            selfLeftRef.current.delete(k.id);
+          });
+        }
+        saveKnownCircles(
+          me.id,
+          mappedCircles.map((c) => ({ id: c.id, name: c.name })),
+        );
+        mappedCircles.forEach((c) => circleNamesRef.current.set(c.id, c.name));
 
         setCircles(mappedCircles);
         const selectedCircle =
@@ -535,7 +688,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return [];
       }
     },
-    [mapBackendUser, syncActivities, syncCircleLeaderboard, syncCircleMissions, syncQuests],
+    [mapBackendUser, pushNotifications, switchNotifUser, syncActivities, syncCircleLeaderboard, syncCircleMissions, syncQuests, toast],
   );
 
   useEffect(() => {
@@ -557,6 +710,46 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void syncQuests(activeCircleId);
     }
   }, [activeCircleId, isAuthenticated, syncCircleLeaderboard, syncCircleMissions, syncQuests, user.id]);
+
+  // ---- Refresh otomatis: polling saat tab terlihat + sinyal Realtime opsional ----
+  const liveRef = useRef({ circleIds: '', activeCircleId: null as string | null });
+  liveRef.current = {
+    circleIds: circles
+      .map((c) => c.id)
+      .sort()
+      .join(','),
+    activeCircleId: activeCircle?.id ?? null,
+  };
+
+  const refreshLive = useCallback(async (): Promise<boolean> => {
+    if (!tokenStore.get()) return true;
+    const [me, mine] = await Promise.all([http<BackendUser>('/auth/me'), http<{ squads: { id: string }[] }>('/squads/my')]);
+    const ids = mine.squads
+      .map((s) => s.id)
+      .sort()
+      .join(',');
+    // Keanggotaan berubah (bergabung dari perangkat lain, di-kick, circle dihapus): muat ulang semuanya.
+    if (ids !== liveRef.current.circleIds) {
+      await hydrateFromBackend();
+      return true;
+    }
+    setUser(mapBackendUser(me));
+    const circleId = liveRef.current.activeCircleId;
+    if (!circleId) return true;
+    const [board, quests] = await Promise.all([
+      syncCircleLeaderboard(circleId, me.id, { keepOnError: true }),
+      syncQuests(circleId),
+    ]);
+    return board && quests;
+  }, [hydrateFromBackend, mapBackendUser, syncCircleLeaderboard, syncQuests]);
+
+  const authedWithToken = isAuthenticated && Boolean(tokenStore.get());
+  const { refreshNow } = useAutoRefresh({ enabled: authedWithToken, intervalMs: REFRESH_INTERVAL_MS, task: refreshLive });
+  const { notify: notifyCircle } = useCircleEvents({
+    circleId: activeCircle?.id,
+    enabled: authedWithToken,
+    onSignal: refreshNow,
+  });
 
   const leaderboard = useMemo<LeaderboardEntry[]>(() => {
     if (backendLeaderboard) return backendLeaderboard;
@@ -641,6 +834,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const res = await post<{ accessToken: string; user: BackendUser }>(path, payload);
       tokenStore.set(res.accessToken);
       localStorage.setItem(AUTH_KEY, '1');
+      switchNotifUser(res.user.id);
       setUser(mapBackendUser(res.user));
       skipAutoHydrateRef.current = true;
       setAuth(true);
@@ -650,7 +844,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       return { circleCount: loadedCircles.length };
     },
-    [hydrateFromBackend, mapBackendUser],
+    [hydrateFromBackend, mapBackendUser, switchNotifUser],
   );
 
   const updateProfileName = useCallback(
@@ -694,6 +888,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           maxMembers: res.squad.maxMembers ?? (res.squad.isPremium ? 25 : 5),
           captainId: user.id,
         };
+        circleNamesRef.current.set(circle.id, circle.name);
         setCircles((cs) => [circle, ...cs.filter((c) => c.id !== circle.id)]);
         setActiveCircleId(circle.id);
         toast(
@@ -749,8 +944,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           memberCount: res.squad.totalMembers ?? 2,
           maxMembers: res.squad.maxMembers ?? (res.squad.isPremium ? 25 : 5),
         };
+        circleNamesRef.current.set(circle.id, circle.name);
         setCircles((cs) => [circle, ...cs.filter((c) => c.id !== circle.id)]);
         setActiveCircleId(circle.id);
+        notifyCircle(circle.id);
         toast(`Joined "${circle.name}" (${circle.memberCount}/${circle.maxMembers} members)!`, 'success');
         return circle;
       }
@@ -780,7 +977,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toast(`Joined "${circle.name}"!`, 'success');
       return circle;
     },
-    [circles, toast],
+    [circles, notifyCircle, toast],
   );
 
   const upgradeCircle = useCallback(
@@ -832,6 +1029,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (circleId: string): Promise<void> => {
       if (tokenStore.get()) {
         const res = await post<{ message: string }>(`/squads/${circleId}/leave`);
+        selfLeftRef.current.add(circleId);
+        notifyCircle(circleId);
         toast(res.message || 'Left circle', 'info');
         await hydrateFromBackend();
         return;
@@ -845,13 +1044,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
       toast('Left circle', 'info');
     },
-    [activeCircleId, hydrateFromBackend, toast],
+    [activeCircleId, hydrateFromBackend, notifyCircle, toast],
   );
 
   const kickMember = useCallback(
     async (circleId: string, targetUserId: string): Promise<void> => {
       if (tokenStore.get()) {
         const res = await del<{ message: string }>(`/squads/${circleId}/members/${targetUserId}`);
+        selfRemovedRef.current.add(targetUserId);
+        notifyCircle(circleId);
         toast(res.message || 'Member removed from circle', 'info');
         await syncCircleLeaderboard(circleId, user.id);
         await hydrateFromBackend();
@@ -859,7 +1060,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       toast('Member removed from circle', 'info');
     },
-    [hydrateFromBackend, syncCircleLeaderboard, toast, user.id],
+    [hydrateFromBackend, notifyCircle, syncCircleLeaderboard, toast, user.id],
   );
 
   const topUp = useCallback(
@@ -1098,6 +1299,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .then((res) => {
             setUser((u) => ({ ...u, coins: res.remainingCoinBalance }));
             toast(`Bomb Mission sent to @${target.username}!`, 'success');
+            notifyCircle(activeCircle.id);
             return Promise.all([
               syncQuests(activeCircle.id),
               syncCircleLeaderboard(activeCircle.id, user.id),
@@ -1112,7 +1314,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toast(`Bomb Mission sent to @${target.username}!`, 'success');
       }
     },
-    [activeCircle, members, syncCircleLeaderboard, syncQuests, toast, user.availabilityStatus, user.coins, user.id],
+    [activeCircle, members, notifyCircle, syncCircleLeaderboard, syncQuests, toast, user.availabilityStatus, user.coins, user.id],
   );
 
   const acceptBomb = useCallback(
@@ -1122,6 +1324,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         void post(`/quests/${id}/accept`)
           .then(() => {
             toast('Challenge accepted! Good luck!', 'success');
+            if (activeCircle) notifyCircle(activeCircle.id);
             return syncQuests(activeCircle?.id);
           })
           .catch((err) => {
@@ -1132,7 +1335,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         toast('Challenge accepted! Good luck!', 'success');
       }
     },
-    [activeCircle?.id, syncQuests, toast],
+    [activeCircle, notifyCircle, syncQuests, toast],
   );
 
   const useShield = useCallback(
@@ -1162,6 +1365,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         void post<{ message?: string }>(`/quests/${id}/shield`)
           .then((res) => {
             toast(res.message || 'Shield Ticket used! Penalty neutralized.', 'success');
+            if (activeCircle) notifyCircle(activeCircle.id);
             return Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]);
           })
           .catch((err) => {
@@ -1177,7 +1381,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         );
       }
     },
-    [activeCircle?.id, bombMissions, hydrateFromBackend, syncQuests, toast, user.shieldTickets],
+    [activeCircle, bombMissions, hydrateFromBackend, notifyCircle, syncQuests, toast, user.shieldTickets],
   );
 
   const snoozeBomb = useCallback(
@@ -1241,6 +1445,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             } else {
               toast(`Mission declined (−${res.penaltyPoints ?? quest?.penaltyRankPoints ?? 0} RP)`, 'info');
             }
+            if (activeCircle) notifyCircle(activeCircle.id);
             return Promise.all([syncQuests(activeCircle?.id), hydrateFromBackend()]);
           })
           .catch((err) => {
@@ -1257,7 +1462,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [activeCircle?.id, bombMissions, hydrateFromBackend, syncQuests, toast, user.shieldTickets],
+    [activeCircle, bombMissions, hydrateFromBackend, notifyCircle, syncQuests, toast, user.shieldTickets],
   );
 
   const recordActivity = useCallback(
@@ -1353,6 +1558,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (res.rewards?.currentRankPoints !== undefined) {
               setUser((u) => ({ ...u, rankPoints: res.rewards!.currentRankPoints }));
             }
+            if (activeCircle) notifyCircle(activeCircle.id);
             return Promise.all([
               activeCircle ? syncCircleLeaderboard(activeCircle.id, user.id) : Promise.resolve(),
               activeCircle ? syncCircleMissions(activeCircle.id) : Promise.resolve(),
@@ -1378,6 +1584,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeCircle,
       bombMissions,
       groupMissions,
+      notifyCircle,
       seasonDistanceKm,
       syncActivities,
       syncCircleLeaderboard,
@@ -1443,6 +1650,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     bombMissions,
     activityHistory,
     activitySummary,
+    notifications,
+    unreadCount,
+    markNotificationsRead,
     login,
     logout,
     updateProfileName,

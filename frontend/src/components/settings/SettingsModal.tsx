@@ -125,8 +125,8 @@ function Notifications() {
   const [group, setGroup] = useBooleanSetting(SETTING_KEYS.notifyGroup, true);
   return (
     <div className="space-y-1">
-      <Toggle checked={bomb} onChange={setBomb} label="Bomb Mission alerts" description="When a friend sends or completes a dare" />
-      <Toggle checked={group} onChange={setGroup} label="Live Group Run invites" description="When a circle member starts a live lobby" />
+      <Toggle checked={bomb} onChange={setBomb} label="Bomb Mission alerts" description="When a Bomb Mission is sent, finished, or blocked in your circle" />
+      <Toggle checked={group} onChange={setGroup} label="Circle activity" description="New members, milestones, and live group runs" />
     </div>
   );
 }
