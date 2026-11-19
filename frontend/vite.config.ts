@@ -7,7 +7,7 @@ const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 
 const BUILD_TIME = new Date().toISOString();
 
 const manifest: Partial<ManifestOptions> = {
-  name: 'Cidash — Social Gamified Fitness',
+  name: 'Cidash — Social Gamified Fitness Tracker',
   short_name: 'Cidash',
   description: 'A social, gamified fitness tracker for private, invite-only circles.',
   theme_color: '#ea2845',

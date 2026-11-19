@@ -14,7 +14,6 @@ import { useApp } from '../store/AppContext';
 import { useLiveRooms } from '../hooks/useGroupRun';
 import { activityFor, circleOnboarding, groupRunFor, ROUTES } from '../routes';
 
-/** Jumlah peringkat teratas yang tampil di kartu Home; sisanya ada di modal leaderboard. */
 const TOP_COUNT = 3;
 
 function greeting() {

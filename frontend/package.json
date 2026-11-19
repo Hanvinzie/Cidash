@@ -1,7 +1,7 @@
 {
   "name": "@cidash/frontend",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.2.2",
   "type": "module",
   "description": "Cidash PWA frontend (React + TypeScript + Tailwind + Vite)",
   "scripts": {

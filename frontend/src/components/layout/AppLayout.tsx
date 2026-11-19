@@ -10,7 +10,7 @@ import Icon, { type IconName } from '../ui/Icon';
 import RunnerLoader from '../ui/RunnerLoader';
 
 const navItems: { to: string; label: string; icon: IconName; title: string }[] = [
-  { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'Cidash' },
+  { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'CIDASH' },
   { to: ROUTES.customQuest, label: 'Quests', icon: 'quest', title: 'Quests' },
   { to: ROUTES.activity, label: 'Activity', icon: 'activity', title: 'Activity' },
   { to: ROUTES.profile, label: 'Profile', icon: 'user', title: 'Profile' },
