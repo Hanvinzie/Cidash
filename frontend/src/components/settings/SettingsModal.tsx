@@ -134,6 +134,7 @@ function Notifications() {
 function ActivitySettings() {
   const [liveShare, setLiveShare] = useBooleanSetting(SETTING_KEYS.liveShare, false);
   const [simulate, setSimulate] = useBooleanSetting(SETTING_KEYS.simulate, false);
+  const [devMode, setDevMode] = useBooleanSetting(SETTING_KEYS.devMode, false);
   return (
     <div className="space-y-1">
       <Toggle
@@ -142,12 +143,27 @@ function ActivitySettings() {
         label="Share live location with my circle"
         description="Circle members see you on their map while you record. Group runs always share."
       />
-      <Toggle
-        checked={simulate}
-        onChange={setSimulate}
-        label="Demo mode (simulated GPS)"
-        description="Test an activity on a desktop without moving"
-      />
+      {/* Alat uji: hanya tampil setelah opsi pengembang dibuka (ketuk versi di About 7x). */}
+      {devMode && (
+        <>
+          <Toggle
+            checked={simulate}
+            onChange={setSimulate}
+            label="Simulated GPS (developer)"
+            description="Run a recorded GBK loop instead of using the GPS"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              setSimulate(false);
+              setDevMode(false);
+            }}
+            className="mt-1 text-xs font-semibold text-subtle underline"
+          >
+            Hide developer options
+          </button>
+        </>
+      )}
     </div>
   );
 }
