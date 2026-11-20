@@ -59,6 +59,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    /** Kode galat yang stabil dari server (mis. EMAIL_NOT_REGISTERED); jangan mengandalkan teks pesan. */
+    public code?: string,
   ) {
     super(message);
   }
@@ -98,7 +100,7 @@ export async function http<T>(path: string, init: RequestInit = {}): Promise<T> 
       window.dispatchEvent(new CustomEvent('cidash:unauthorized'));
     }
 
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, typeof body?.code === 'string' ? body.code : undefined);
   }
   return res.status === 204 ? (undefined as T) : res.json();
 }

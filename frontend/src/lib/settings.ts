@@ -12,9 +12,15 @@ export const SETTING_KEYS = {
   liveShare: 'cidash_live_share',
   /** Mode simulasi GPS (demo di desktop). */
   simulate: 'cidash_simulate',
+  /** Opsi pengembang terbuka (ketuk versi di About 7x). Menyembunyikan alat uji dari pengguna awam. */
+  devMode: 'cidash_dev_mode',
 } as const;
 
-function read(key: string, fallback: boolean): boolean {
+/** Berapa ketukan pada nomor versi untuk membuka opsi pengembang. */
+export const DEV_TAPS_REQUIRED = 7;
+
+/** Baca pengaturan di luar komponen React (mis. saat memutuskan perlu menyimpan notifikasi atau tidak). */
+export function readBooleanSetting(key: string, fallback: boolean): boolean {
   try {
     const v = localStorage.getItem(key);
     return v === null ? fallback : v === '1';
@@ -24,10 +30,10 @@ function read(key: string, fallback: boolean): boolean {
 }
 
 export function useBooleanSetting(key: string, fallback: boolean): [boolean, (value: boolean) => void] {
-  const [value, setValue] = useState(() => read(key, fallback));
+  const [value, setValue] = useState(() => readBooleanSetting(key, fallback));
 
   useEffect(() => {
-    const sync = () => setValue(read(key, fallback));
+    const sync = () => setValue(readBooleanSetting(key, fallback));
     window.addEventListener(EVENT, sync);
     window.addEventListener('storage', sync);
     return () => {

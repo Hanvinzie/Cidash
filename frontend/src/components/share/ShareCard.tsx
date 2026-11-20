@@ -95,7 +95,7 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {/* Latar kartu merah → logo primary (tile terang). Ikut terekspor ke PNG (same-origin, tanpa CORS). */}
           <img src="/brand/logo-cidash-primary.svg" alt="" width={30} height={30} style={{ width: 30, height: 30, borderRadius: 5 }} />
-          <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: -0.3 }}>Cidash</span>
+          <span style={{ fontFamily: '"Rubik One", system-ui, sans-serif', fontSize: 19, fontWeight: 400, letterSpacing: 1, textTransform: 'uppercase' }}>CIDASH</span>
         </div>
         <span style={{ fontSize: 11, fontWeight: 600, color: C.soft }}>{log.date}</span>
       </div>

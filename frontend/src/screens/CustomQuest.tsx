@@ -5,6 +5,7 @@ import Button from '../components/ui/Button';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
+import NoCircleGate from '../components/circle/NoCircleGate';
 import SwipeToDelete from '../components/ui/SwipeToDelete';
 import { Segmented } from '../components/ui/Field';
 import ProtectionModal from '../components/quest/ProtectionModal';
@@ -35,6 +36,14 @@ function outcomeText(q: BombMission): string {
 }
 
 export default function CustomQuest() {
+  return (
+    <NoCircleGate feature="quests">
+      <QuestsScreen />
+    </NoCircleGate>
+  );
+}
+
+function QuestsScreen() {
   const { user, activeCircle, bombMissions, acceptBomb, rejectBomb, useShield, snoozeBomb } = useApp();
   const { myStatus, shieldCount, maxShields } = useProtection();
   const { hidden, hide } = useHiddenQuests(user.id);

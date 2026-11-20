@@ -52,6 +52,14 @@
 
     <!-- Boot splash + animasi pelari. Kelas .runner juga dipakai komponen RunnerLoader. -->
     <style>
+      /* Rubik One untuk wordmark splash. Didaftarkan di sini (bukan di index.css) karena splash tampil lebih dulu. */
+      @font-face {
+        font-family: 'Rubik One';
+        font-style: normal;
+        font-weight: 400;
+        font-display: block;
+        src: url('/fonts/rubik-one-latin-400.woff2') format('woff2');
+      }
       html, body { margin: 0; background: #f6f6f8; }
       html.dark, html.dark body { background: #0b0f17; }
       #boot {
@@ -77,7 +85,8 @@
       html.dark .boot-logo.on-light { display: none; }
       html.dark .boot-logo.on-dark { display: block; }
       .boot-word {
-        font-size: 30px; font-weight: 800; letter-spacing: -0.5px; color: #111827;
+        font-family: 'Rubik One', system-ui, sans-serif;
+        font-size: 30px; font-weight: 400; letter-spacing: 1px; text-transform: uppercase; color: #111827;
         animation: boot-rise 0.5s ease-out 0.25s both;
       }
       html.dark .boot-word { color: #f8fafc; }
@@ -104,7 +113,7 @@
       <div class="boot-brand" aria-label="Cidash">
         <img class="boot-logo on-light" src="/brand/logo-cidash-secondary.svg" width="56" height="56" alt="" />
         <img class="boot-logo on-dark" src="/brand/logo-cidash-primary.svg" width="56" height="56" alt="" />
-        <span class="boot-word">Cidash</span>
+        <span class="boot-word">CIDASH</span>
       </div>
       <svg class="runner" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <line class="ground" x1="4" y1="61" x2="60" y2="61" stroke-width="2" opacity="0.35" />

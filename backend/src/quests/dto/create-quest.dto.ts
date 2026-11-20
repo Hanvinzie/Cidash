@@ -1,5 +1,6 @@
 import {
   IsEnum,
+  IsIn,
   IsISO8601,
   IsInt,
   IsNotEmpty,
@@ -36,6 +37,11 @@ export class CreateQuestDto {
   /** Tingkat kesulitan: menentukan batas waktu (pace), biaya koin, dan taruhan RP. Dihitung ulang di server. */
   @IsEnum(QuestDifficulty, { message: 'difficulty harus EASY, MEDIUM, HARD, atau HELL' })
   difficulty: QuestDifficulty;
+
+  /** Tingkat taruhan RP yang dipilih pengirim. Besarnya dihitung server dari harga koin. Default MEDIUM. */
+  @IsOptional()
+  @IsIn(['LOW', 'MEDIUM', 'HIGH'], { message: 'stakes harus LOW, MEDIUM, atau HIGH' })
+  stakes?: 'LOW' | 'MEDIUM' | 'HIGH';
 
   /** @deprecated Diabaikan: pace dihitung server dari jarak dan kesulitan. */
   @IsOptional()

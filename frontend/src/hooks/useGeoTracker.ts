@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { haversineKm } from '../lib/geo';
 import { setGeocodeLocked } from '../lib/geocode';
+import { createDemoRunner } from '../lib/demoRoute';
 import { issueFromError, type LocationIssue } from '../lib/location';
 import { clearTrack, loadTrack, saveMeta, savePoint, type TrackMeta } from '../lib/trackStore';
 import {
@@ -46,11 +47,6 @@ const ELEVATION_STEP_M = 3;
 const RESUME_GAP_M = 50;
 /** Seberapa sering ringkasan sesi disimpan ke IndexedDB saat merekam. */
 const META_SAVE_INTERVAL_MS = 5000;
-
-const SIM_CENTER = { lat: -6.2183, lng: 106.8022 }; // Gelora Bung Karno, Jakarta
-const SIM_RADIUS_LAT = 0.00145; // ~160m radius loop (~1 km keliling)
-const SIM_RADIUS_LNG = 0.00185;
-const SIM_ANGULAR_STEP = 0.021; // ~3.35 m/detik (pace ~5:00 min/km)
 
 interface KalmanState {
   lat: number;
@@ -102,7 +98,8 @@ export function useGeoTracker() {
   const statusRef = useRef<TrackStatus>('idle');
   const watchId = useRef<number | null>(null);
   const simTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const simAngle = useRef<number>(0);
+  /** Pelari demo (jalur GBK). Dibuat baru tiap sesi baru; Resume melanjutkan dari posisinya. */
+  const demoRunner = useRef<ReturnType<typeof createDemoRunner> | null>(null);
 
   // Sumber kebenaran data sesi (ref) agar callback async tidak membaca state basi.
   const pointsRef = useRef<GeoPoint[]>([]);
@@ -449,37 +446,12 @@ export function useGeoTracker() {
   const startSources = useCallback(
     (simulate: boolean) => {
       if (simulate) {
-        // Titik awal HANYA untuk sesi baru. Saat Resume, simulasi melanjutkan dari sudut terakhir;
+        // Titik awal HANYA untuk sesi baru. Saat Resume, pelari demo melanjutkan dari posisi terakhirnya;
         // kalau tidak, posisi melompat ke titik awal dan "lompatan" itu terekam sebagai gerakan.
-        if (pointsRef.current.length === 0) {
-          simAngle.current = 0;
-          addPoint(
-            {
-              lat: SIM_CENTER.lat,
-              lng: SIM_CENTER.lng + SIM_RADIUS_LNG,
-              timestamp: Date.now(),
-              accuracy: 4,
-              speed: 3.35,
-            },
-            true,
-          );
-        }
-        simTimer.current = setInterval(() => {
-          simAngle.current += SIM_ANGULAR_STEP;
-          const t = simAngle.current;
-          addPoint(
-            {
-              lat: +(SIM_CENTER.lat + SIM_RADIUS_LAT * Math.sin(t)).toFixed(7),
-              lng: +(SIM_CENTER.lng + SIM_RADIUS_LNG * Math.cos(t)).toFixed(7),
-              timestamp: Date.now(),
-              accuracy: 4,
-              speed: 3.35,
-              // Arah singgung lingkaran (searah jarum jam dilihat dari atas) agar peta ikut berputar saat demo.
-              heading: (((Math.atan2(-SIM_RADIUS_LNG * Math.sin(t), SIM_RADIUS_LAT * Math.cos(t)) * 180) / Math.PI) + 360) % 360,
-            },
-            true,
-          );
-        }, 1000);
+        if (!demoRunner.current) demoRunner.current = createDemoRunner();
+        const runner = demoRunner.current;
+        if (pointsRef.current.length === 0) addPoint(runner.start(Date.now()), true);
+        simTimer.current = setInterval(() => addPoint(runner.step(Date.now()), true), 1000);
         return;
       }
 
@@ -583,7 +555,7 @@ export function useGeoTracker() {
     lastSampleTs.current = null;
     recent.current = [];
     kalman.current = null;
-    simAngle.current = 0;
+    demoRunner.current = null;
     accumulatedMs.current = 0;
     runSegmentStartMs.current = null;
     pointsRef.current = [];

@@ -108,6 +108,7 @@ export class QuestsService {
       distanceKm,
       difficulty: createQuestDto.difficulty,
       deadlineDays,
+      stakes: createQuestDto.stakes,
     });
     const missionFee = price.coins;
 
