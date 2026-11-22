@@ -6,7 +6,8 @@ import Modal from '../ui/Modal';
 import Toggle from '../ui/Toggle';
 import AboutPanel from './AboutPanel';
 import { useAppUpdate } from '../../lib/appUpdate';
-import { SETTING_KEYS, useBooleanSetting } from '../../lib/settings';
+import { DEFAULT_WEIGHT_KG, sanitizeWeightKg } from '../../lib/geo';
+import { SETTING_KEYS, saveWeightKg, useBooleanSetting } from '../../lib/settings';
 import { useApp } from '../../store/AppContext';
 import { useTheme, type ThemePreference } from '../../store/ThemeContext';
 import { THEMES } from '../../lib/themes';
@@ -220,15 +221,34 @@ function ActivitySettings() {
 function EditProfile({ onDone }: { onDone: () => void }) {
   const { user, updateProfileName } = useApp();
   const [name, setName] = useState(user.username);
+  // Berat badan hanya disimpan di perangkat ini dan dipakai menghitung kalori. Kosong = pakai bawaan.
+  const [weight, setWeight] = useState(() => (localStorage.getItem(SETTING_KEYS.weightKg) ?? ''));
+  const weightValue = weight.trim() === '' ? null : Number(weight.replace(',', '.'));
+  const weightInvalid = weightValue !== null && sanitizeWeightKg(weightValue) !== weightValue;
   function submit(e: FormEvent) {
     e.preventDefault();
     updateProfileName(name);
+    saveWeightKg(weight);
     onDone();
   }
   return (
     <form onSubmit={submit} className="space-y-4">
       <Input label="Display name" value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={60} required />
-      <Button type="submit" fullWidth disabled={name.trim().length < 2}>
+      <Input
+        label="Weight (kg)"
+        inputMode="decimal"
+        value={weight}
+        onChange={(e) => setWeight(e.target.value)}
+        placeholder={`${DEFAULT_WEIGHT_KG} (default)`}
+        hint={
+          weightInvalid ? (
+            <span className="text-danger">Enter a weight between 30 and 250 kg.</span>
+          ) : (
+            'Used to estimate calories. Stored on this device only.'
+          )
+        }
+      />
+      <Button type="submit" fullWidth disabled={name.trim().length < 2 || weightInvalid}>
         Save changes
       </Button>
     </form>

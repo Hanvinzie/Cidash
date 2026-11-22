@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { DEFAULT_WEIGHT_KG, sanitizeWeightKg } from './geo';
 
 // Pengaturan perangkat sederhana (disimpan di localStorage, tersinkron antar komponen & tab).
 // Tema memakai ThemeContext sendiri.
@@ -14,6 +15,8 @@ export const SETTING_KEYS = {
   simulate: 'cidash_simulate',
   /** Opsi pengembang terbuka (ketuk versi di About 7x). Menyembunyikan alat uji dari pengguna awam. */
   devMode: 'cidash_dev_mode',
+  /** Berat badan (kg) untuk menghitung kalori. Kosong = pakai bawaan. */
+  weightKg: 'cidash_weight_kg',
 } as const;
 
 /** Berapa ketukan pada nomor versi untuk membuka opsi pengembang. */
@@ -56,4 +59,26 @@ export function useBooleanSetting(key: string, fallback: boolean): [boolean, (va
   );
 
   return [value, update];
+}
+
+/** Berat badan pengguna (kg) untuk kalori; bawaan bila belum diisi atau nilainya tidak masuk akal. */
+export function readWeightKg(): number {
+  try {
+    const raw = localStorage.getItem(SETTING_KEYS.weightKg);
+    return raw === null ? DEFAULT_WEIGHT_KG : sanitizeWeightKg(raw);
+  } catch {
+    return DEFAULT_WEIGHT_KG;
+  }
+}
+
+/** Simpan berat badan; nilai kosong/tidak valid menghapus pengaturan (kembali ke bawaan). */
+export function saveWeightKg(value: string): void {
+  try {
+    const n = Number(value.replace(',', '.'));
+    if (value.trim() === '' || sanitizeWeightKg(n) !== n) localStorage.removeItem(SETTING_KEYS.weightKg);
+    else localStorage.setItem(SETTING_KEYS.weightKg, String(Math.round(n * 10) / 10));
+    window.dispatchEvent(new Event(EVENT));
+  } catch {
+    /* storage penuh / private mode */
+  }
 }

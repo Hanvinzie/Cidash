@@ -3,7 +3,8 @@ import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import Modal from '../ui/Modal';
 import RouteSvg from '../share/RouteSvg';
-import { estimateCalories, formatDuration, formatPace } from '../../lib/geo';
+import { caloriesFor } from '../../lib/calories';
+import { formatDuration, formatPace } from '../../lib/geo';
 import type { ActivityLog } from '../../types';
 
 interface HistoryModalProps {
@@ -78,7 +79,7 @@ function Detail({ log, onBack, onShare }: { log: ActivityLog; onBack: () => void
     { label: 'Time', value: formatDuration(log.durationSec), unit: '' },
     { label: 'Pace', value: formatPace(log.durationSec, log.distanceKm), unit: '/km' },
     { label: 'Elevation', value: `${Math.round(log.elevationGain ?? 0)}`, unit: 'm' },
-    { label: 'Calories', value: `${estimateCalories(log.distanceKm, log.type)}`, unit: 'kcal' },
+    { label: 'Calories', value: `${caloriesFor(log.distanceKm, log.type, log.durationSec)}`, unit: 'kcal' },
   ];
   return (
     <div className="space-y-5">

@@ -19,6 +19,7 @@ import { useRunSession } from '../store/RunSession';
 import { useToast } from '../store/ToastContext';
 import { requestCompassPermission } from '../lib/compass';
 import { detectSpeedViolation, formatDuration } from '../lib/geo';
+import { prepareRoute } from '../lib/routeProcessing';
 import { fallbackLabel, resolveActivityLabel } from '../lib/geocode';
 import { LocationError, requestPosition, watchPermission, type LocationIssue } from '../lib/location';
 import { SETTING_KEYS, useBooleanSetting } from '../lib/settings';
@@ -295,6 +296,8 @@ function ActivityScreen() {
         snap.distanceKm >= MIN_GEOCODE_KM
           ? await resolveActivityLabel(snap.points, snap.type, startedAt)
           : fallbackLabel(snap.type, startedAt);
+      // Rapikan rute sekali di sini (opsional snap-to-road lalu Douglas–Peucker). Jarak tetap dari hasil perekaman.
+      const route = await prepareRoute(snap.points, snap.type);
       setResult(
         recordActivity({
           missionId: mission?.id ?? null,
@@ -302,7 +305,7 @@ function ActivityScreen() {
           type: snap.type,
           distanceKm: snap.distanceKm,
           durationSec: snap.elapsedSec,
-          route: snap.points,
+          route,
           speedViolation: detectSpeedViolation(snap.points, snap.type),
           sessionId: snap.sessionId,
           startedAt,
@@ -409,6 +412,7 @@ function ActivityScreen() {
           distanceKm={tracker.distanceKm}
           elapsedSec={tracker.elapsedSec}
           elevationGain={tracker.elevationGain}
+          paceSecPerKm={tracker.paceSecPerKm}
           accuracyMeters={liveAcc}
           simulated={tracker.simulated}
           syncState={tracker.syncState}

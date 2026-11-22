@@ -1,7 +1,8 @@
 import { forwardRef } from 'react';
 import type { CSSProperties } from 'react';
 import RouteSvg from './RouteSvg';
-import { estimateCalories, formatDuration, formatPace } from '../../lib/geo';
+import { caloriesFor } from '../../lib/calories';
+import { formatDuration, formatPace } from '../../lib/geo';
 import type { ActivityLog } from '../../types';
 
 // Warna tetap (tidak ikut light/dark) agar PNG yang dibagikan selalu identik.
@@ -43,7 +44,7 @@ const ShareCard = forwardRef<HTMLDivElement, ShareCardProps>(function ShareCard(
   const metrics = [
     { label: 'Pace /km', value: formatPace(log.durationSec, log.distanceKm) },
     { label: 'Time', value: formatDuration(log.durationSec) },
-    { label: 'kcal', value: String(estimateCalories(log.distanceKm, log.type)) },
+    { label: 'kcal', value: String(caloriesFor(log.distanceKm, log.type, log.durationSec)) },
   ];
 
   return (

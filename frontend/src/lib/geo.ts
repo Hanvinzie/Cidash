@@ -43,9 +43,80 @@ export function formatPace(durationSec: number, distanceKm: number): string {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** Estimasi kalori kasar berbasis jarak (kkal/km). */
-export function estimateCalories(distanceKm: number, type: ActivityType): number {
-  return Math.round(distanceKm * (type === 'run' ? 62 : 28));
+/** Pace dari detik per km → "m:ss". Di luar rentang masuk akal tampil "—". */
+export function formatPaceSec(secPerKm: number): string {
+  if (!Number.isFinite(secPerKm) || secPerKm <= 0 || secPerKm > 3600) return '—';
+  const total = Math.round(secPerKm);
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+}
+
+/** Berat badan bawaan (kg) bila pengguna belum mengisi profil. Mendekati rata-rata dewasa. */
+export const DEFAULT_WEIGHT_KG = 65;
+const WEIGHT_RANGE_KG = [30, 250] as const;
+
+/**
+ * MET (Metabolic Equivalent of Task) menurut kecepatan, mengacu pada Compendium of Physical Activities.
+ * Titik: [km/jam, MET]. Di antara titik diinterpolasi linear supaya tidak ada lompatan di batas kecepatan.
+ */
+const RUN_MET: ReadonlyArray<readonly [number, number]> = [
+  [4.0, 3.0], // berjalan lambat
+  [6.4, 6.0],
+  [8.0, 8.3],
+  [9.7, 9.8],
+  [11.3, 11.0],
+  [12.9, 11.8],
+  [14.5, 12.8],
+  [16.1, 14.5],
+  [17.7, 16.0],
+  [19.3, 19.0],
+];
+const BIKE_MET: ReadonlyArray<readonly [number, number]> = [
+  [8.0, 3.5],
+  [16.0, 4.0],
+  [19.0, 6.8],
+  [22.0, 8.0],
+  [25.7, 10.0],
+  [30.6, 12.0],
+  [35.0, 15.8],
+];
+
+function interpolate(table: ReadonlyArray<readonly [number, number]>, x: number): number {
+  if (x <= table[0][0]) return table[0][1];
+  for (let i = 1; i < table.length; i++) {
+    const [x1, y1] = table[i];
+    if (x <= x1) {
+      const [x0, y0] = table[i - 1];
+      return y0 + ((y1 - y0) * (x - x0)) / (x1 - x0);
+    }
+  }
+  return table[table.length - 1][1];
+}
+
+/** MET untuk jenis aktivitas dan kecepatan rata-rata (km/jam). */
+export function metFor(type: ActivityType, speedKmh: number): number {
+  return interpolate(type === 'run' ? RUN_MET : BIKE_MET, Math.max(0, speedKmh));
+}
+
+/** Berat badan valid (kg), selain itu kembali ke bawaan. */
+export function sanitizeWeightKg(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) && n >= WEIGHT_RANGE_KG[0] && n <= WEIGHT_RANGE_KG[1] ? n : DEFAULT_WEIGHT_KG;
+}
+
+/**
+ * Kalori (kkal) = MET × berat badan (kg) × durasi AKTIF (jam). MET mengikuti kecepatan rata-rata selama bergerak,
+ * jadi lari cepat membakar lebih banyak per jam daripada jogging. Durasi aktif tidak menghitung waktu Pause.
+ */
+export function estimateCalories(
+  distanceKm: number,
+  type: ActivityType,
+  durationSec: number,
+  weightKg: number = DEFAULT_WEIGHT_KG,
+): number {
+  if (!(distanceKm > 0) || !(durationSec > 0)) return 0;
+  const hours = durationSec / 3600;
+  const met = metFor(type, distanceKm / hours);
+  return Math.round(met * sanitizeWeightKg(weightKg) * hours);
 }
 
 /**

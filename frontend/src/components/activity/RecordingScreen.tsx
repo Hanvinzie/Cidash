@@ -2,7 +2,8 @@ import { Suspense, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import Icon from '../ui/Icon';
 import { RouteMap } from '../../lazyScreens';
-import { estimateCalories, formatDuration, formatPace } from '../../lib/geo';
+import { caloriesFor } from '../../lib/calories';
+import { formatDuration, formatPace, formatPaceSec } from '../../lib/geo';
 import type { MapFriend } from '../map/RouteMap';
 import type { SyncState } from '../../hooks/useGeoTracker';
 import type { ActivityType, GeoPoint } from '../../types';
@@ -14,6 +15,8 @@ interface RecordingScreenProps {
   distanceKm: number;
   elapsedSec: number;
   elevationGain: number;
+  /** Pace halus saat ini (detik/km) dari waktu aktif; null = belum cukup data, tampilkan rata-rata. */
+  paceSecPerKm: number | null;
   accuracyMeters: number | null;
   simulated: boolean;
   syncState: SyncState;
@@ -39,6 +42,7 @@ export default function RecordingScreen({
   distanceKm,
   elapsedSec,
   elevationGain,
+  paceSecPerKm,
   accuracyMeters,
   simulated,
   syncState,
@@ -131,10 +135,10 @@ export default function RecordingScreen({
 
         <dl className="mt-4 flex divide-x divide-line rounded-2xl bg-inset py-3">
           {metric('Time', formatDuration(elapsedSec))}
-          {metric('Pace', formatPace(elapsedSec, distanceKm), '/km')}
+          {metric('Pace', paceSecPerKm !== null ? formatPaceSec(paceSecPerKm) : formatPace(elapsedSec, distanceKm), '/km')}
           {elevationGain > 0
             ? metric('Elevation', Math.round(elevationGain), 'm')
-            : metric('Calories', estimateCalories(distanceKm, type), 'kcal')}
+            : metric('Calories', caloriesFor(distanceKm, type, elapsedSec), 'kcal')}
         </dl>
 
         <div className="mt-4 flex gap-3">
