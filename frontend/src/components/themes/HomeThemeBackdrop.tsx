@@ -1,420 +1,394 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useId } from 'react';
 import { useHomeTheme, type HomeThemeId } from '../../hooks/useHomeTheme';
 
 /* ────────────────────────────── Util ────────────────────────────── */
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-const smooth = (a: number, b: number, v: number) => {
-  const t = clamp01((v - a) / (b - a));
-  return t * t * (3 - 2 * t);
-};
 
-/** Hash deterministik → [0,1). Tidak ada Math.random, jadi tidak berkedip saat resize. */
+/** Hash deterministik → [0,1). Tidak ada Math.random, sehingga posisi bintang/bunga/pohon konsisten. */
 function hash(x: number, y: number, seed = 0): number {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 1274126177);
   h = Math.imul(h ^ (h >>> 13), 1274126177);
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
-function vnoise(x: number, y: number, seed: number): number {
-  const xi = Math.floor(x);
-  const yi = Math.floor(y);
-  const xf = x - xi;
-  const yf = y - yi;
-  const u = xf * xf * (3 - 2 * xf);
-  const v = yf * yf * (3 - 2 * yf);
-  const a = hash(xi, yi, seed);
-  const b = hash(xi + 1, yi, seed);
-  const c = hash(xi, yi + 1, seed);
-  const d = hash(xi + 1, yi + 1, seed);
-  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-}
-
-const fbm = (x: number, y: number, seed: number) =>
-  vnoise(x, y, seed) * 0.55 + vnoise(x * 2.1, y * 2.1, seed + 7) * 0.3 + vnoise(x * 4.3, y * 4.3, seed + 13) * 0.15;
-
-function mix(a: string, b: string, t: number): string {
-  const pa = parseInt(a.slice(1), 16);
-  const pb = parseInt(b.slice(1), 16);
-  const k = clamp01(t);
-  const ch = (s: number) => {
-    const va = (pa >> s) & 255;
-    const vb = (pb >> s) & 255;
-    return Math.round(va + (vb - va) * k).toString(16).padStart(2, '0');
-  };
-  return `#${ch(16)}${ch(8)}${ch(0)}`;
-}
-
-/* ─────────────────────── Kanvas ASCII prosedural ─────────────────────── */
-
-interface Cell {
-  ch: string;
-  fg: string;
-  bg?: string;
-}
-type Grid = (Cell | undefined)[][];
-interface Env {
-  cols: number;
-  rows: number;
-  charW: number;
-}
-interface Layer {
-  grid: Grid;
-  glow?: string;
-}
-
-const FONT_PX = 9;
-const LINE_PX = 9;
-
-const newGrid = (env: Env): Grid =>
-  Array.from({ length: env.rows }, () => new Array<Cell | undefined>(env.cols));
-
-const put = (g: Grid, x: number, y: number, cell: Cell) => {
-  if (y >= 0 && y < g.length && x >= 0 && x < g[0].length) g[y][x] = cell;
-};
-
-function renderRow(row: (Cell | undefined)[], cols: number): ReactNode[] {
-  const out: ReactNode[] = [];
-  let buf = '';
-  let fg: string | null = null;
-  let bg: string | undefined;
-  let key = 0;
-  const flush = () => {
-    if (!buf) return;
-    out.push(
-      fg ? (
-        <span key={key++} style={{ color: fg, backgroundColor: bg }}>
-          {buf}
-        </span>
-      ) : (
-        buf
-      ),
-    );
-    buf = '';
-  };
-  for (let x = 0; x < cols; x++) {
-    const cell = row[x];
-    if (!cell) {
-      if (bg !== undefined) {
-        flush();
-        fg = null;
-        bg = undefined;
-      }
-      buf += ' ';
-    } else {
-      if (cell.fg !== fg || cell.bg !== bg) {
-        flush();
-        fg = cell.fg;
-        bg = cell.bg;
-      }
-      buf += cell.ch;
-    }
-  }
-  flush();
-  return out;
-}
-
-function AsciiCanvas({ build }: { build: (env: Env) => Layer[] }) {
-  const hostRef = useRef<HTMLDivElement>(null);
-  const probeRef = useRef<HTMLSpanElement>(null);
-  const [env, setEnv] = useState<Env | null>(null);
-
-  useEffect(() => {
-    const host = hostRef.current;
-    const probe = probeRef.current;
-    if (!host || !probe) return;
-    const measure = () => {
-      // offsetWidth/Height tidak terpengaruh transform scale (dipakai di preview mini).
-      const charW = probe.offsetWidth / 100 || FONT_PX * 0.6;
-      const cols = Math.ceil(host.offsetWidth / charW) + 1;
-      const rows = Math.floor(host.offsetHeight / LINE_PX);
-      if (cols < 8 || rows < 4) return;
-      setEnv((prev) =>
-        prev && prev.cols === cols && prev.rows === rows && Math.abs(prev.charW - charW) < 0.01
-          ? prev
-          : { cols, rows, charW },
-      );
-    };
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(host);
-    return () => ro.disconnect();
-  }, []);
-
-  const layers = useMemo(() => (env ? build(env) : []), [env, build]);
-
-  return (
-    <div ref={hostRef} className="absolute inset-0 overflow-hidden">
-      <span
-        ref={probeRef}
-        aria-hidden="true"
-        className="invisible absolute left-0 top-0 whitespace-pre font-mono"
-        style={{ fontSize: FONT_PX }}
-      >
-        {'0'.repeat(100)}
-      </span>
-      {env &&
-        layers.map((layer, i) => (
-          <div
-            key={i}
-            className="absolute bottom-0 left-0 overflow-hidden font-mono"
-            style={{
-              width: '100%',
-              height: env.rows * LINE_PX,
-              fontSize: FONT_PX,
-              lineHeight: `${LINE_PX}px`,
-              fontVariantLigatures: 'none',
-              filter: layer.glow ? `drop-shadow(0 0 3px ${layer.glow})` : undefined,
-            }}
-          >
-            {layer.grid.map((row, y) => (
-              <div key={y} className="whitespace-pre" style={{ height: LINE_PX }}>
-                {renderRow(row, env.cols)}
-              </div>
-            ))}
-          </div>
-        ))}
-    </div>
-  );
-}
-
-function drawPine(g: Grid, cx: number, baseY: number, ht: number, bg: string, edge: string) {
-  const maxHalf = Math.max(2, Math.round(ht * 0.38));
-  for (let r = 0; r < ht; r++) {
-    const half = Math.floor((r / ht) * maxHalf) + (r % 3 === 0 && r > 0 ? 1 : 0); // tingkat bergerigi
-    const y = baseY - ht + 1 + r;
-    for (let dx = -half; dx <= half; dx++) {
-      const isEdge = Math.abs(dx) === half;
-      const ch = r === 0 ? '^' : isEdge ? (dx < 0 ? '/' : '\\') : '#';
-      put(g, cx + dx, y, { ch, fg: isEdge ? edge : bg, bg });
-    }
-  }
-  put(g, cx, baseY + 1, { ch: '|', fg: edge, bg });
-}
-
-interface TreeLineOpts {
-  seed: number;
-  step: number;
-  spread: number;
-  min: number;
-  vary: number;
-  bg: string;
-  edge: string;
-}
-function treeLine(g: Grid, cols: number, rows: number, baseY: number, o: TreeLineOpts) {
-  for (let x = -2; x < cols + 2; x += o.step + Math.floor(hash(x, 1, o.seed) * o.spread)) {
-    const mid = 0.7 + 0.3 * Math.sin((Math.min(cols, Math.max(0, x)) / cols) * Math.PI);
-    const ht = Math.max(4, Math.round(rows * (o.min + o.vary * hash(x, 2, o.seed)) * mid));
-    drawPine(g, x, baseY, ht, o.bg, o.edge);
-  }
-}
-
-/* ───────────────────────── Midnight Meadow ───────────────────────── */
-
-function buildMeadow(env: Env): Layer[] {
-  const { cols, rows, charW } = env;
-  const g = newGrid(env);
-  const horizon = Math.floor(rows * 0.52);
-
-  // Pusat & radius bulan (harus sinkron dengan elemen CSS bulan)
-  const moonR = 0.17 * rows * LINE_PX;
-  const moonX = cols * 0.92 - moonR / charW;
-  const moonY = rows * 0.25;
-
-  // Awan: kisi karakter 8 B 0 : .
-  for (let y = 0; y < horizon - 1; y++) {
-    const band = smooth(0, 0.12, y / horizon) * (1 - smooth(0.62, 0.95, y / horizon));
-    for (let x = 0; x < cols; x++) {
-      const ux = (x * charW) / LINE_PX;
-      const n = fbm(ux * 0.085, y * 0.13, 3);
-      let v = clamp01((n - 0.54) / 0.18) * band;
-      const dist = Math.hypot((x - moonX) * charW, (y - moonY) * LINE_PX) / moonR;
-      v *= smooth(1.0, 2.2, dist); // jaga area bulan tetap bersih
-      if (v < 0.12) continue;
-      const ch = v > 0.8 ? '8' : v > 0.6 ? 'B' : v > 0.42 ? '0' : v > 0.26 ? ':' : '.';
-      put(g, x, y, { ch, fg: mix('#5B84E0', '#EAF2FF', v) });
-    }
-  }
-
-  // Padang rumput + bunga aster (@ o *)
-  for (let y = horizon; y < rows; y++) {
-    const t = (y - horizon) / Math.max(1, rows - horizon);
-    const bg = mix('#0F4A25', '#052E16', t);
-    const flowerChance = 0.03 + 0.06 * t;
-    for (let x = 0; x < cols; x++) {
-      const r = hash(x, y, 31);
-      if (r < flowerChance) {
-        const k = hash(x, y, 32);
-        const ch = k < 0.4 ? '@' : k < 0.75 ? 'o' : '*';
-        const fg = k < 0.4 ? '#FFFFFF' : k < 0.75 ? '#FDE68A' : '#FEF08A';
-        g[y][x] = { ch, fg, bg };
-      } else {
-        const k = hash(x, y, 33);
-        const ch = k < 0.3 ? '"' : k < 0.55 ? ',' : k < 0.75 ? "'" : k < 0.9 ? ';' : '.';
-        g[y][x] = { ch, fg: mix('#1F8A41', '#0E5A28', hash(x, y, 34)), bg };
-      }
-    }
-  }
-
-  // Barisan pinus: belakang (biru tua) lalu depan (hitam)
-  const baseY = horizon - 1;
-  treeLine(g, cols, rows, baseY, { seed: 21, step: 3, spread: 4, min: 0.16, vary: 0.12, bg: '#0A1F63', edge: '#173596' });
-  treeLine(g, cols, rows, baseY, { seed: 22, step: 5, spread: 5, min: 0.2, vary: 0.14, bg: '#02050F', edge: '#0D1638' });
-
-  return [{ grid: g }];
-}
-
-function MidnightMeadow() {
-  return (
-    <>
-      <div
-        className="absolute inset-0"
-        style={{ background: 'linear-gradient(to bottom, #0B1A4A 0%, #1D4ED8 100%)' }}
-      />
-      <div
-        className="absolute right-[8%] top-[8%] aspect-square rounded-full"
-        style={{
-          height: '34%',
-          background:
-            'radial-gradient(circle at 62% 58%, rgba(160,178,230,.35) 0 9%, transparent 10%), radial-gradient(circle at 38% 68%, rgba(160,178,230,.28) 0 6%, transparent 7%), radial-gradient(circle at 70% 28%, rgba(160,178,230,.25) 0 5%, transparent 6%), radial-gradient(circle at 32% 30%, #fff 0%, #F6F8FF 45%, #DCE5FF 100%)',
-          boxShadow: '0 0 24px 8px rgba(220,232,255,.55), 0 0 80px 24px rgba(147,180,255,.35)',
-        }}
-      />
-      <AsciiCanvas build={buildMeadow} />
-    </>
-  );
-}
-
-/* ───────────────────────── Cyber Aurora ───────────────────────── */
-
-const SKY_BG = '#071A3A';
-const SIL = '#02050F';
-
-interface Ribbon {
-  y0: number;
-  a1: number;
-  f1: number;
-  p1: number;
-  a2: number;
-  f2: number;
-  p2: number;
-  len: number;
-  c0: string;
-  c1: string;
-  seed: number;
-}
-const RIBBONS: Ribbon[] = [
-  { y0: 0.62, a1: 0.1, f1: 0.18, p1: 0.8, a2: 0.05, f2: 0.43, p2: 2.0, len: 0.58, c0: '#00F5D4', c1: '#38BDF8', seed: 41 },
-  { y0: 0.44, a1: 0.09, f1: 0.14, p1: 3.0, a2: 0.04, f2: 0.47, p2: 0.4, len: 0.42, c0: '#00BBF9', c1: '#00F5D4', seed: 57 },
-];
-
-function buildAurora(env: Env): Layer[] {
-  const { cols, rows, charW } = env;
-  const base = newGrid(env);
-  const glow = newGrid(env);
-  const horizon = Math.floor(rows * 0.56);
-
-  /** Intensitas tirai aurora di (x,y) — tirai vertikal, terang di tepi bawah, memudar ke atas. */
-  const aurora = (x: number, y: number): { v: number; color: string } | null => {
-    const ux = (x * charW) / LINE_PX;
-    let best = 0;
-    let color = '#00F5D4';
-    for (const rb of RIBBONS) {
-      const by = horizon * (rb.y0 + rb.a1 * Math.sin(ux * rb.f1 + rb.p1) + rb.a2 * Math.sin(ux * rb.f2 + rb.p2));
-      const len = horizon * rb.len * (0.65 + 0.35 * vnoise(ux * 0.15, 5, rb.seed));
-      const dy = by - y;
-      if (dy < -1 || dy > len) continue;
-      const t = clamp01(dy / len);
-      const ray = 0.3 + 0.7 * vnoise(x * 0.45, rb.seed, rb.seed); // garis vertikal
-      const v = Math.pow(1 - t, 1.3) * smooth(-1.2, 1.5, dy) * ray;
-      if (v > best) {
-        best = v;
-        color = mix(rb.c0, rb.c1, t);
-      }
-    }
-    return best >= 0.12 ? { v: best, color } : null;
-  };
-
-  // Bintang + tirai aurora
-  for (let y = 0; y < horizon; y++) {
-    for (let x = 0; x < cols; x++) {
-      const a = aurora(x, y);
-      if (a) {
-        const ch = a.v > 0.72 ? '|' : a.v > 0.52 ? 'I' : a.v > 0.36 ? '1' : a.v > 0.22 ? ':' : '.';
-        glow[y][x] = { ch, fg: mix(SKY_BG, a.color, 0.3 + a.v * 0.9) };
-      } else {
-        const r = hash(x, y, 61);
-        if (r > 0.988) base[y][x] = { ch: '*', fg: '#F1F5F9' };
-        else if (r > 0.978) base[y][x] = { ch: '+', fg: '#CBD5E1' };
-        else if (r > 0.945) base[y][x] = { ch: '.', fg: '#64748B' };
-      }
-    }
-  }
-
-  // Pulau berhutan pinus (siluet hitam)
-  const cx = cols * 0.5;
-  const half = cols * 0.3;
-  const mound = (x: number) => {
-    const u = (x - cx) / half;
-    return Math.abs(u) >= 1 ? 0 : Math.round(Math.pow(1 - u * u, 0.7) * rows * 0.07);
-  };
-  for (let x = Math.floor(cx - half); x <= Math.ceil(cx + half); x++) {
-    for (let y = horizon - mound(x); y <= horizon + 1; y++) {
-      put(base, x, y, { ch: '#', fg: '#0B1424', bg: SIL });
-    }
-  }
-  for (let x = Math.floor(cx - half); x <= Math.ceil(cx + half); x += 2 + Math.floor(hash(x, 7, 62) * 3)) {
-    const u = (x - cx) / half;
-    const shape = Math.sqrt(Math.max(0, 1 - u * u));
-    if (shape < 0.1) continue;
-    const ht = Math.max(3, Math.round(rows * (0.1 + 0.14 * hash(x, 3, 62)) * (0.5 + 0.5 * shape)));
-    drawPine(base, x, horizon - mound(x), ht, SIL, '#0E1B30');
-  }
-
-  // Danau: riak + pantulan aurora + pantulan pulau
-  const waterTop = horizon + 2;
-  for (let y = waterTop; y < rows; y++) {
-    const t = (y - waterTop) / Math.max(1, rows - waterTop);
-    const bg = mix('#0A1D3D', '#030814', t);
-    const mirrorY = Math.round(horizon - (y - waterTop + 1) * 1.4);
-    const islandY = horizon + 1 - (y - waterTop);
-    for (let x = 0; x < cols; x++) {
-      const ripple = Math.round(Math.sin(y * 1.9 + x * 0.12) * 1.5);
-      base[y][x] = hash(x, y, 63) > 0.93 ? { ch: '~', fg: '#1E3A5F', bg } : { ch: ' ', fg: bg, bg };
-
-      const src = islandY >= 0 ? base[islandY]?.[x] : undefined;
-      if (src && src.bg === SIL && y % 2 === 0) base[y][x] = { ch: ':', fg: '#0A1A30', bg: '#040B18' };
-
-      const a = mirrorY >= 0 ? aurora(x + ripple, mirrorY) : null;
-      if (a) {
-        const v = a.v * 0.6;
-        if (v > 0.1) {
-          const ch = v > 0.35 ? '=' : v > 0.22 ? '~' : '-';
-          glow[y][x] = { ch, fg: mix(bg, a.color, 0.35 + v * 0.9) };
-        }
-      }
-    }
-  }
-
-  return [{ grid: base }, { grid: glow, glow: 'rgba(0,245,212,0.75)' }];
-}
-
-function CyberAurora() {
-  return (
-    <>
-      <div
-        className="absolute inset-0"
-        style={{ background: 'linear-gradient(to bottom, #020617 0%, #071A3A 55%, #0C3558 100%)' }}
-      />
-      <AsciiCanvas build={buildAurora} />
-    </>
-  );
-}
-
-/* ───────────────────────── Vice Sunset ───────────────────────── */
-
 const rad = (d: number) => (d * Math.PI) / 180;
 const f1 = (n: number) => n.toFixed(1);
+
+/** Menghasilkan path siluet barisan hutan pohon pinus yang rapat dan organik. */
+function buildPineForestPath(
+  width: number,
+  baseY: number,
+  minH: number,
+  maxH: number,
+  step: number,
+  seed: number,
+): string {
+  const parts: string[] = [`M 0 ${f1(baseY + 8)}`, `L 0 ${f1(baseY)}`];
+
+  for (let x = -4; x <= width + 6; x += step) {
+    const jitterX = (hash(x, 1, seed) - 0.5) * step * 0.65;
+    const cx = x + jitterX;
+    const h = minH + hash(x, 2, seed) * (maxH - minH);
+    const w = h * (0.28 + 0.1 * hash(x, 3, seed));
+    const topY = baseY - h;
+
+    // 3 tingkat cabang cemara melengkung halus agar terlihat alami, bukan segitiga kaku
+    const t1Y = topY + h * 0.34;
+    const t1W = w * 0.42;
+    const t2Y = topY + h * 0.68;
+    const t2W = w * 0.74;
+
+    parts.push(
+      `L ${f1(cx - w)} ${f1(baseY)}`,
+      `Q ${f1(cx - t2W * 0.85)} ${f1(t2Y + 2)} ${f1(cx - t2W)} ${f1(t2Y)}`,
+      `L ${f1(cx - t2W * 0.55)} ${f1(t2Y - 1)}`,
+      `Q ${f1(cx - t1W * 0.85)} ${f1(t1Y + 2)} ${f1(cx - t1W)} ${f1(t1Y)}`,
+      `L ${f1(cx - t1W * 0.45)} ${f1(t1Y - 1)}`,
+      `L ${f1(cx)} ${f1(topY)}`,
+      `L ${f1(cx + t1W * 0.45)} ${f1(t1Y - 1)}`,
+      `Q ${f1(cx + t1W * 0.85)} ${f1(t1Y + 2)} ${f1(cx + t1W)} ${f1(t1Y)}`,
+      `L ${f1(cx + t2W * 0.55)} ${f1(t2Y - 1)}`,
+      `Q ${f1(cx + t2W * 0.85)} ${f1(t2Y + 2)} ${f1(cx + t2W)} ${f1(t2Y)}`,
+      `L ${f1(cx + w)} ${f1(baseY)}`,
+    );
+  }
+
+  parts.push(`L ${width} ${f1(baseY)}`, `L ${width} ${f1(baseY + 8)}`, 'Z');
+  return parts.join(' ');
+}
+
+/* ───────────────────────── Midnight Meadow (Painted) ───────────────────────── */
+
+const MEADOW_STARS = Array.from({ length: 42 }, (_, i) => ({
+  x: hash(i, 11, 101) * 400,
+  y: hash(i, 12, 101) * 118,
+  r: 0.6 + hash(i, 13, 101) * 1.1,
+  o: 0.35 + hash(i, 14, 101) * 0.6,
+}));
+
+const MEADOW_FLOWERS = Array.from({ length: 46 }, (_, i) => {
+  // t = 0 dekat cakrawala (kecil), t = 1 di depan bawah (lebih besar)
+  const t = Math.pow(hash(i, 21, 202), 0.78);
+  return {
+    x: 8 + hash(i, 22, 202) * 384,
+    y: 138 + t * 114,
+    scale: 0.45 + t * 0.95,
+    rot: hash(i, 23, 202) * 360,
+    warm: hash(i, 24, 202) > 0.65,
+  };
+});
+
+function MidnightMeadow() {
+  const uid = useId().replace(/:/g, '');
+  const backTrees = buildPineForestPath(400, 134, 14, 28, 7, 301);
+  const frontTrees = buildPineForestPath(400, 136, 16, 34, 9, 302);
+
+  return (
+    <>
+      {/* 1. Langit Malam Biru Kobalt */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(to bottom, #071338 0%, #102A71 32%, #1D4ED8 54%, #0B2518 55%)',
+        }}
+      />
+
+      {/* 2. Bulan Purnama Bercahaya dengan Detail Kawah */}
+      <div
+        className="absolute right-[9%] top-[8%] aspect-square rounded-full"
+        style={{
+          height: '32%',
+          background:
+            'radial-gradient(circle at 62% 58%, rgba(160,178,230,.32) 0 9%, transparent 10%), radial-gradient(circle at 38% 68%, rgba(160,178,230,.25) 0 6%, transparent 7%), radial-gradient(circle at 70% 28%, rgba(160,178,230,.22) 0 5%, transparent 6%), radial-gradient(circle at 32% 30%, #FFFFFF 0%, #F4F7FF 48%, #D6E2FF 100%)',
+          boxShadow: '0 0 28px 8px rgba(224,236,255,.55), 0 0 85px 26px rgba(147,197,253,.35)',
+        }}
+      />
+
+      {/* 3. Ilustrasi Painted SVG: Bintang, Awan Malam, Hutan Pinus & Padang Bunga Aster */}
+      <svg
+        viewBox="0 0 400 260"
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full"
+      >
+        <defs>
+          <filter id={`${uid}-cloud-blur`} x="-15%" y="-15%" width="130%" height="130%">
+            <feGaussianBlur stdDeviation="5.5" />
+          </filter>
+
+          <linearGradient id={`${uid}-cloud`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#93C5FD" stopOpacity="0.42" />
+            <stop offset="100%" stopColor="#1E3A8A" stopOpacity="0.08" />
+          </linearGradient>
+
+          <linearGradient id={`${uid}-grass`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#14532D" />
+            <stop offset="45%" stopColor="#0F3F22" />
+            <stop offset="100%" stopColor="#062412" />
+          </linearGradient>
+
+          <radialGradient id={`${uid}-mist`} cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#60A5FA" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#1D4ED8" stopOpacity="0" />
+          </radialGradient>
+        </defs>
+
+        {/* Bintang-bintang kecil */}
+        {MEADOW_STARS.map((s, i) => (
+          <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="#EFF6FF" opacity={s.o} />
+        ))}
+
+        {/* Gumpalan awan malam lembut */}
+        <g filter={`url(#${uid}-cloud-blur)`}>
+          <ellipse cx="78" cy="46" rx="68" ry="14" fill={`url(#${uid}-cloud)`} />
+          <ellipse cx="122" cy="54" rx="54" ry="11" fill={`url(#${uid}-cloud)`} />
+          <ellipse cx="228" cy="76" rx="76" ry="13" fill={`url(#${uid}-cloud)`} />
+          <ellipse cx="52" cy="96" rx="64" ry="10" fill={`url(#${uid}-cloud)`} />
+          <ellipse cx="332" cy="98" rx="58" ry="11" fill={`url(#${uid}-cloud)`} />
+        </g>
+
+        {/* Kabut tipis di atas garis hutan */}
+        <ellipse cx="200" cy="132" rx="220" ry="18" fill={`url(#${uid}-mist)`} />
+
+        {/* Siluet hutan pinus lapisan belakang (biru malam) */}
+        <path d={backTrees} fill="#0D256E" opacity="0.85" />
+
+        {/* Siluet hutan pinus lapisan depan (gelap tajam) */}
+        <path d={frontTrees} fill="#030712" />
+
+        {/* Padang rumput malam */}
+        <rect x="0" y="135" width="400" height="125" fill={`url(#${uid}-grass)`} />
+
+        {/* Tekstur alur rumput halus */}
+        {Array.from({ length: 65 }).map((_, i) => {
+          const gx = hash(i, 41, 404) * 400;
+          const gy = 142 + hash(i, 42, 404) * 112;
+          const gh = 5 + hash(i, 43, 404) * 8;
+          return (
+            <path
+              key={i}
+              d={`M ${f1(gx)} ${f1(gy)} Q ${f1(gx + 1.5)} ${f1(gy - gh * 0.5)} ${f1(gx - 1)} ${f1(gy - gh)}`}
+              stroke="#1E6B3B"
+              strokeWidth="1"
+              fill="none"
+              opacity="0.45"
+            />
+          );
+        })}
+
+        {/* Taburan bunga aster (daisy) putih & kuning lembut */}
+        {MEADOW_FLOWERS.map((fl, i) => (
+          <g
+            key={i}
+            transform={`translate(${f1(fl.x)}, ${f1(fl.y)}) scale(${fl.scale.toFixed(2)}) rotate(${f1(fl.rot)})`}
+          >
+            {/* Daun/bayangan dasar bunga */}
+            <ellipse cx="0" cy="1.5" rx="4.5" ry="2.2" fill="#052E16" opacity="0.6" />
+            {/* 6 kelopak bunga aster */}
+            {[0, 60, 120].map((deg) => (
+              <ellipse
+                key={deg}
+                cx="0"
+                cy="0"
+                rx="4.4"
+                ry="1.35"
+                transform={`rotate(${deg})`}
+                fill={fl.warm ? '#FEF9C3' : '#F8FAFC'}
+                opacity="0.92"
+              />
+            ))}
+            {/* Putik tengah */}
+            <circle cx="0" cy="0" r="1.45" fill="#FBBF24" />
+          </g>
+        ))}
+      </svg>
+    </>
+  );
+}
+
+/* ───────────────────────── Cyber Aurora (Painted) ───────────────────────── */
+
+const AURORA_STARS = Array.from({ length: 55 }, (_, i) => ({
+  x: hash(i, 51, 505) * 400,
+  y: hash(i, 52, 505) * 136,
+  r: 0.5 + hash(i, 53, 505) * 1.15,
+  o: 0.3 + hash(i, 54, 505) * 0.65,
+  sparkle: hash(i, 55, 505) > 0.86,
+}));
+
+function CyberAurora() {
+  const uid = useId().replace(/:/g, '');
+  const leftIslandTrees = buildPineForestPath(165, 144, 10, 22, 6, 601);
+  const rightIslandTrees = buildPineForestPath(195, 144, 11, 25, 6, 602);
+
+  return (
+    <>
+      {/* 1. Langit Malam Kutub & Permukaan Danau */}
+      <div
+        className="absolute inset-0"
+        style={{
+          background:
+            'linear-gradient(to bottom, #020617 0%, #071938 36%, #0B2948 55%, #071E3D 56%, #030917 100%)',
+        }}
+      />
+
+      {/* 2. Ilustrasi Painted SVG: Pita Aurora Borealis, Pulau Pinus & Pantulan Air */}
+      <svg
+        viewBox="0 0 400 260"
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full"
+      >
+        <defs>
+          {/* Blur lembut untuk pendaran aurora */}
+          <filter id={`${uid}-aurora-glow`} x="-20%" y="-30%" width="140%" height="160%">
+            <feGaussianBlur stdDeviation="7" />
+          </filter>
+
+          <filter id={`${uid}-aurora-core`} x="-10%" y="-20%" width="120%" height="140%">
+            <feGaussianBlur stdDeviation="2.2" />
+          </filter>
+
+          <filter id={`${uid}-water-blur`} x="-10%" y="-10%" width="120%" height="120%">
+            <feGaussianBlur stdDeviation="3.5" />
+          </filter>
+
+          {/* Gradasi tirai aurora atas (emerald → cyan → semburat ungu) */}
+          <linearGradient id={`${uid}-curtain-1`} x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="#00F5D4" stopOpacity="0.95" />
+            <stop offset="40%" stopColor="#00BBF9" stopOpacity="0.62" />
+            <stop offset="80%" stopColor="#818CF8" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="#312E81" stopOpacity="0" />
+          </linearGradient>
+
+          {/* Gradasi tirai aurora kedua (cyan terang → toska) */}
+          <linearGradient id={`${uid}-curtain-2`} x1="0" y1="1" x2="0" y2="0">
+            <stop offset="0%" stopColor="#5EEAD4" stopOpacity="0.9" />
+            <stop offset="50%" stopColor="#38BDF8" stopOpacity="0.48" />
+            <stop offset="100%" stopColor="#0EA5E9" stopOpacity="0" />
+          </linearGradient>
+
+          {/* Gradasi air danau */}
+          <linearGradient id={`${uid}-lake`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#0B2A4A" />
+            <stop offset="50%" stopColor="#071B34" />
+            <stop offset="100%" stopColor="#030816" />
+          </linearGradient>
+        </defs>
+
+        {/* Bintang-bintang malam */}
+        {AURORA_STARS.map((s, i) => (
+          <g key={i} opacity={s.o}>
+            <circle cx={s.x} cy={s.y} r={s.r} fill="#F8FAFC" />
+            {s.sparkle && (
+              <path
+                d={`M ${f1(s.x - 3)} ${f1(s.y)} L ${f1(s.x + 3)} ${f1(s.y)} M ${f1(s.x)} ${f1(s.y - 3)} L ${f1(s.x)} ${f1(s.y + 3)}`}
+                stroke="#E0F2FE"
+                strokeWidth="0.6"
+              />
+            )}
+          </g>
+        ))}
+
+        {/* Pita Aurora 1 (Lapisan belakang atas, melengkung dari kiri atas ke kanan tengah) */}
+        <g filter={`url(#${uid}-aurora-glow)`}>
+          <path
+            d="M -20 42 C 65 24, 145 58, 225 64 C 295 69, 355 52, 420 58 L 420 0 L -20 0 Z"
+            fill={`url(#${uid}-curtain-1)`}
+          />
+        </g>
+        {/* Inti garis terang pita aurora 1 */}
+        <path
+          d="M -20 42 C 65 24, 145 58, 225 64 C 295 69, 355 52, 420 58"
+          stroke="#99F6E4"
+          strokeWidth="2.8"
+          fill="none"
+          opacity="0.85"
+          filter={`url(#${uid}-aurora-core)`}
+        />
+
+        {/* Pita Aurora 2 (Lapisan depan melengkung menyapu di atas cakrawala) */}
+        <g filter={`url(#${uid}-aurora-glow)`}>
+          <path
+            d="M -20 112 C 55 82, 145 78, 235 94 C 310 107, 360 116, 420 104 L 420 32 C 350 44, 295 36, 225 24 C 140 10, 55 18, -20 45 Z"
+            fill={`url(#${uid}-curtain-2)`}
+          />
+        </g>
+        {/* Inti pita cahaya bawah aurora 2 */}
+        <path
+          d="M -20 112 C 55 82, 145 78, 235 94 C 310 107, 360 116, 420 104"
+          stroke="#5EEAD4"
+          strokeWidth="3.2"
+          fill="none"
+          opacity="0.92"
+          filter={`url(#${uid}-aurora-core)`}
+        />
+
+        {/* Pendaran cahaya aurora tipis di dekat cakrawala */}
+        <path
+          d="M 20 132 Q 190 124 380 134"
+          stroke="#2DD4BF"
+          strokeWidth="4"
+          fill="none"
+          opacity="0.45"
+          filter={`url(#${uid}-aurora-glow)`}
+        />
+
+        {/* Siluet Pulau & Hutan Pinus di Cakrawala */}
+        <g fill="#020617">
+          {/* Pulau kiri */}
+          <path d="M 12 145 Q 85 136 162 145 Z" />
+          <g transform="translate(8, 0)">
+            <path d={leftIslandTrees} />
+          </g>
+
+          {/* Pulau kanan */}
+          <path d="M 195 145 Q 295 133 392 145 Z" />
+          <g transform="translate(198, 0)">
+            <path d={rightIslandTrees} />
+          </g>
+        </g>
+
+        {/* Permukaan Danau Malam */}
+        <rect x="0" y="145" width="400" height="115" fill={`url(#${uid}-lake)`} />
+
+        {/* Pantulan Aurora di Permukaan Air Danau */}
+        <g filter={`url(#${uid}-water-blur)`} opacity="0.65">
+          <ellipse cx="115" cy="176" rx="88" ry="14" fill="#14B8A6" opacity="0.45" />
+          <ellipse cx="265" cy="194" rx="115" ry="18" fill="#0EA5E9" opacity="0.42" />
+          <ellipse cx="185" cy="222" rx="135" ry="16" fill="#2DD4BF" opacity="0.32" />
+        </g>
+
+        {/* Bayangan gelap pulau di air */}
+        <path d="M 18 146 Q 85 154 156 146 Z" fill="#020617" opacity="0.7" />
+        <path d="M 202 146 Q 295 156 388 146 Z" fill="#020617" opacity="0.7" />
+
+        {/* Riak air horizontal halus */}
+        {Array.from({ length: 34 }).map((_, i) => {
+          const rx = hash(i, 71, 707) * 360;
+          const ry = 152 + hash(i, 72, 707) * 98;
+          const rw = 16 + hash(i, 73, 707) * 38;
+          const isLit = hash(i, 74, 707) > 0.45;
+          return (
+            <line
+              key={i}
+              x1={f1(rx)}
+              y1={f1(ry)}
+              x2={f1(rx + rw)}
+              y2={f1(ry)}
+              stroke={isLit ? '#5EEAD4' : '#1E3A5F'}
+              strokeWidth={isLit ? '1.1' : '0.9'}
+              strokeLinecap="round"
+              opacity={isLit ? 0.34 : 0.45}
+            />
+          );
+        })}
+      </svg>
+    </>
+  );
+}
+
+/* ───────────────────────── Vice Sunset (Painted) ───────────────────────── */
 
 function frondPath(cx: number, cy: number, angleDeg: number, len: number, droop: number, width: number) {
   const a = rad(angleDeg);
@@ -426,7 +400,7 @@ function frondPath(cx: number, cy: number, angleDeg: number, len: number, droop:
   const my = cy + dy * len * 0.55 - len * 0.18;
   const nx = -dy;
   const ny = dx;
-  return `M${f1(cx)} ${f1(cy)} Q${f1(mx + nx * width)} ${f1(my + ny * width)} ${f1(tx)} ${f1(ty)} Q${f1(mx - nx * width)} ${f1(my - ny * width)} ${f1(cx)} ${f1(cy)}Z`;
+  return `M${f1(cx)} ${f1(cy)}Q${f1(mx + nx * width)} ${f1(my + ny * width)} ${f1(tx)} ${f1(ty)}Q${f1(mx - nx * width)} ${f1(my - ny * width)} ${f1(cx)} ${f1(cy)}Z`;
 }
 
 function trunkPath(x0: number, y0: number, x1: number, y1: number, bend: number, w0: number, w1: number) {
@@ -451,37 +425,37 @@ interface PalmSpec {
   bend: number;
   fill: string;
   seed: number;
+  baseY?: number;
 }
-const FROND_ANGLES = [-170, -146, -122, -98, -74, -50, -26, -4, 16, 164];
+const FROND_ANGLES = [-172, -148, -124, -100, -76, -52, -28, -4, 18, 162];
 
-function Palm({ x, h, lean, bend, fill, seed }: PalmSpec) {
-  const base = 260;
+function Palm({ x, h, lean, bend, fill, seed, baseY = 212 }: PalmSpec) {
   const cx = x + lean;
-  const cy = base - h;
-  const len = h * 0.27;
+  const cy = baseY - h;
+  const len = h * 0.28;
   return (
     <g fill={fill}>
-      <path d={trunkPath(x, base, cx, cy, bend, 9, 5)} />
+      <path d={trunkPath(x, baseY, cx, cy, bend, 8, 4.5)} />
       {FROND_ANGLES.map((deg, i) => {
-        const L = len * (0.75 + 0.5 * hash(i, seed, 9));
-        const droop = L * 0.45 * (1 - Math.abs(Math.sin(rad(deg))));
+        const L = len * (0.78 + 0.45 * hash(i, seed, 9));
+        const droop = L * 0.46 * (1 - Math.abs(Math.sin(rad(deg))));
         return <path key={deg} d={frondPath(cx, cy, deg, L, droop, L * 0.13)} />;
       })}
-      <circle cx={cx - 3} cy={cy + 4} r="3" />
-      <circle cx={cx + 3} cy={cy + 5} r="3" />
+      <circle cx={cx - 2.5} cy={cy + 3.5} r="2.8" />
+      <circle cx={cx + 2.5} cy={cy + 4.5} r="2.8" />
     </g>
   );
 }
 
 const LEFT_PALMS: PalmSpec[] = [
-  { x: 100, h: 150, lean: 24, bend: -9, fill: '#3B1366', seed: 1 },
-  { x: 44, h: 190, lean: 40, bend: -14, fill: '#240A42', seed: 2 },
-  { x: 12, h: 120, lean: 20, bend: -7, fill: '#12041F', seed: 3 },
+  { x: 96, h: 124, lean: 22, bend: -8, fill: '#6C3BA8', seed: 1, baseY: 208 },
+  { x: 38, h: 158, lean: 34, bend: -12, fill: '#562C8E', seed: 2, baseY: 212 },
+  { x: 10, h: 102, lean: 18, bend: -6, fill: '#45207A', seed: 3, baseY: 214 },
 ];
 const RIGHT_PALMS: PalmSpec[] = [
-  { x: 60, h: 140, lean: 26, bend: -10, fill: '#3B1366', seed: 4 },
-  { x: 20, h: 180, lean: 36, bend: -12, fill: '#240A42', seed: 5 },
-  { x: 92, h: 100, lean: 16, bend: -6, fill: '#12041F', seed: 6 },
+  { x: 64, h: 132, lean: 24, bend: -9, fill: '#6C3BA8', seed: 4, baseY: 208 },
+  { x: 22, h: 164, lean: 32, bend: -11, fill: '#562C8E', seed: 5, baseY: 212 },
+  { x: 95, h: 96, lean: 14, bend: -5, fill: '#45207A', seed: 6, baseY: 214 },
 ];
 
 function PalmCluster({ side }: { side: 'left' | 'right' }) {
@@ -490,7 +464,7 @@ function PalmCluster({ side }: { side: 'left' | 'right' }) {
     <svg
       viewBox="0 0 160 260"
       preserveAspectRatio="xMinYMax meet"
-      className={`absolute bottom-0 h-full w-[48%] ${side === 'left' ? 'left-0' : 'right-0'}`}
+      className={`pointer-events-none absolute bottom-0 h-full w-[48%] ${side === 'left' ? 'left-0' : 'right-0'}`}
       style={{ overflow: 'visible', transform: side === 'right' ? 'scaleX(-1)' : undefined }}
     >
       {palms.map((p) => (
@@ -500,85 +474,142 @@ function PalmCluster({ side }: { side: 'left' | 'right' }) {
   );
 }
 
-const CLOUDS = [
-  { top: '16%', left: '6%', w: '38%', h: 5, c: '#FF7A59', o: 0.35 },
-  { top: '24%', left: '52%', w: '42%', h: 6, c: '#FFB38A', o: 0.4 },
-  { top: '34%', left: '18%', w: '30%', h: 4, c: '#FFD166', o: 0.45 },
-  { top: '42%', left: '58%', w: '26%', h: 4, c: '#FFE3A3', o: 0.4 },
-  { top: '52%', left: '2%', w: '34%', h: 3, c: '#FFD166', o: 0.5 },
+interface TowerSpec {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  hasWindows?: boolean;
+  crown?: boolean;
+}
+
+const MIAMI_TOWERS: TowerSpec[] = [
+  { x: 56, y: 112, w: 34, h: 98, hasWindows: true },
+  { x: 106, y: 92, w: 30, h: 118 },
+  { x: 152, y: 68, w: 42, h: 142, hasWindows: true, crown: true },
+  { x: 204, y: 122, w: 28, h: 88 },
+  { x: 268, y: 116, w: 36, h: 94, hasWindows: true },
+  { x: 312, y: 102, w: 32, h: 108 },
 ];
 
 function ViceSunset() {
   const uid = useId().replace(/:/g, '');
-  const cuts: [number, number][] = [[110, 1.5], [119, 2.5], [128, 3.5], [137, 4.5], [146, 5.5]];
+
   return (
     <>
-      {/* Langit senja */}
+      {/* 1. Langit Senja Vice City */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            'linear-gradient(to bottom, #1E0B36 0%, #6B1D7B 24%, #E83E8C 46%, #FF7A59 66%, #FFD166 80%)',
+            'linear-gradient(to bottom, #FF5CA8 0%, #FF7EB3 34%, #FF9E9D 64%, #FFC482 82%)',
         }}
       />
-      {/* Pendar matahari */}
+
+      {/* 2. Pendaran Matahari Hangat di Cakrawala */}
       <div
         className="absolute inset-0"
         style={{
           background:
-            'radial-gradient(ellipse 45% 70% at 50% 78%, rgba(255,209,102,.55), rgba(255,122,89,.25) 45%, transparent 70%)',
+            'radial-gradient(ellipse 68% 58% at 50% 76%, rgba(255, 229, 165, 0.78) 0%, rgba(255, 182, 133, 0.36) 45%, transparent 74%)',
         }}
       />
-      {/* Matahari dengan garis retro */}
-      <div className="absolute bottom-[22%] left-1/2 h-[66%] -translate-x-1/2" style={{ aspectRatio: '4 / 3' }}>
-        <svg viewBox="0 0 200 150" preserveAspectRatio="xMidYMax meet" className="h-full w-full">
-          <defs>
-            <linearGradient id={`${uid}-sun`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#FFD166" />
-              <stop offset="0.5" stopColor="#FF7A59" />
-              <stop offset="1" stopColor="#E83E8C" />
-            </linearGradient>
-            <mask id={`${uid}-cut`}>
-              <rect width="200" height="150" fill="#fff" />
-              {cuts.map(([y, h]) => (
-                <rect key={y} x="0" y={y} width="200" height={h} fill="#000" />
-              ))}
-            </mask>
-          </defs>
-          <g mask={`url(#${uid}-cut)`}>
-            <circle cx="100" cy="92" r="70" fill={`url(#${uid}-sun)`} />
+
+      {/* 3. Siluet Gedung Pencakar Langit Miami & Garis Pantai Teluk */}
+      <svg
+        viewBox="0 0 400 260"
+        preserveAspectRatio="none"
+        className="absolute inset-0 h-full w-full"
+      >
+        <defs>
+          <linearGradient id={`${uid}-tower`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8E54C1" stopOpacity="0.9" />
+            <stop offset="55%" stopColor="#B873D1" stopOpacity="0.72" />
+            <stop offset="100%" stopColor="#F598B8" stopOpacity="0.28" />
+          </linearGradient>
+
+          <linearGradient id={`${uid}-treeline`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#65349E" />
+            <stop offset="100%" stopColor="#48217D" />
+          </linearGradient>
+
+          <linearGradient id={`${uid}-sand`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#FFC88A" />
+            <stop offset="55%" stopColor="#FFAE8F" />
+            <stop offset="100%" stopColor="#F78FB3" />
+          </linearGradient>
+
+          <linearGradient id={`${uid}-bay`} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor="#A55EEA" stopOpacity="0.88" />
+            <stop offset="50%" stopColor="#C471ED" stopOpacity="0.92" />
+            <stop offset="100%" stopColor="#9B5DE5" stopOpacity="0.95" />
+          </linearGradient>
+        </defs>
+
+        {MIAMI_TOWERS.map((t, idx) => (
+          <g key={idx}>
+            {t.crown && (
+              <rect
+                x={t.x + 6}
+                y={t.y - 5}
+                width={t.w - 12}
+                height={6}
+                rx={1.5}
+                fill={`url(#${uid}-tower)`}
+              />
+            )}
+            <rect
+              x={t.x}
+              y={t.y}
+              width={t.w}
+              height={t.h}
+              rx={2}
+              fill={`url(#${uid}-tower)`}
+            />
+            {t.hasWindows &&
+              Array.from({ length: Math.floor((t.h - 18) / 8) }).map((_, r) =>
+                Array.from({ length: Math.floor((t.w - 8) / 6) }).map((__, c) => {
+                  const lit = hash(r + idx * 7, c + idx * 3, 19) > 0.28;
+                  if (!lit) return null;
+                  return (
+                    <rect
+                      key={`${r}-${c}`}
+                      x={t.x + 5 + c * 6}
+                      y={t.y + 8 + r * 8}
+                      width={3}
+                      height={4}
+                      rx={0.6}
+                      fill="#FFD8A8"
+                      opacity={0.45 + 0.35 * hash(r, c, 23)}
+                    />
+                  );
+                }),
+              )}
           </g>
-        </svg>
-      </div>
-      {/* Awan tipis */}
-      {CLOUDS.map((c) => (
-        <div
-          key={c.top + c.left}
-          className="absolute rounded-full"
-          style={{
-            top: c.top,
-            left: c.left,
-            width: c.w,
-            height: c.h,
-            opacity: c.o,
-            filter: 'blur(1px)',
-            background: `linear-gradient(90deg, transparent, ${c.c}, transparent)`,
-          }}
+        ))}
+
+        <path
+          d="M0 212 L0 194 Q18 184 36 193 Q55 180 78 192 Q102 183 125 194 Q150 182 178 193 Q205 184 232 195 Q258 181 285 193 Q312 183 340 194 Q370 182 400 192 L400 212 Z"
+          fill={`url(#${uid}-treeline)`}
         />
-      ))}
-      {/* Laut + pantulan matahari bergaris */}
-      <div
-        className="absolute inset-x-0 bottom-0 h-[22%]"
-        style={{
-          background:
-            'repeating-linear-gradient(to bottom, rgba(30,11,54,0) 0 3px, rgba(30,11,54,.5) 3px 5px), radial-gradient(ellipse 22% 100% at 50% 0%, rgba(255,209,102,.7), rgba(255,122,89,0) 100%), linear-gradient(to bottom, #E83E8C 0%, #6B1D7B 55%, #1E0B36 100%)',
-        }}
-      />
-      <div
-        className="absolute inset-x-0 bottom-[22%] h-px"
-        style={{ background: 'linear-gradient(90deg, transparent, #FFD166, transparent)' }}
-      />
-      {/* Siluet palem berlapis */}
+
+        <rect x="0" y="210" width="400" height="50" fill={`url(#${uid}-sand)`} />
+
+        <path
+          d="M400 212 L145 212 C75 216 68 228 158 235 C235 241 325 243 400 245 Z"
+          fill={`url(#${uid}-bay)`}
+        />
+
+        <ellipse cx="322" cy="225" rx="34" ry="7" fill="#FFD6E0" opacity="0.48" />
+        <ellipse cx="220" cy="227" rx="52" ry="3.5" fill="#FFC8DD" opacity="0.35" />
+        <path
+          d="M95 246 Q180 243 265 247 T400 249 L400 260 L0 260 L0 250 Q48 248 95 246 Z"
+          fill="#E066B8"
+          opacity="0.45"
+        />
+      </svg>
+
+      {/* 4. Siluet Pohon Palem Ungu Indigo di Depan */}
       <PalmCluster side="left" />
       <PalmCluster side="right" />
     </>
