@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/ui/Button';
-import Card from '../components/ui/Card';
+import Card, { GlassScope } from '../components/ui/Card';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import Icon from '../components/ui/Icon';
 import SectionTitle from '../components/ui/SectionTitle';
@@ -14,6 +14,7 @@ import Picker, { InitialAvatar } from '../components/ui/Picker';
 import { useApp } from '../store/AppContext';
 import { useToast } from '../store/ToastContext';
 import { useLiveRooms } from '../hooks/useGroupRun';
+import { useHomeTheme } from '../hooks/useHomeTheme';
 import { activityFor, groupRunFor, joinLink, ROUTES } from '../routes';
 
 const TOP_COUNT = 3;
@@ -31,9 +32,16 @@ export default function Dashboard() {
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const liveRooms = useLiveRooms(activeCircle?.id);
   const liveRoom = liveRooms.find((r) => r.status === 'live') ?? liveRooms[0];
+  const { homeTheme } = useHomeTheme();
+  const themed = homeTheme !== 'none';
+  const inset = themed ? 'bg-inset/60' : 'bg-inset';
 
   if (!activeCircle) {
-    return <NoCircleCard />;
+    return (
+      <GlassScope enabled={themed}>
+        <NoCircleCard />
+      </GlassScope>
+    );
   }
 
   const maxMembers = activeCircle.maxMembers ?? (activeCircle.isPremium ? 25 : 5);
@@ -73,96 +81,107 @@ export default function Dashboard() {
     <div className="space-y-7">
       {/* Greeting */}
       <div>
-        <p className="text-sm text-muted">{greeting()},</p>
-        <h1 className="text-2xl font-extrabold tracking-tight">@{user.username}</h1>
+        <p className={`text-sm ${themed ? 'text-white/85 [text-shadow:0_1px_8px_rgba(0,0,0,0.5)]' : 'text-muted'}`}>
+          {greeting()},
+        </p>
+        <h1
+          className={`text-2xl font-extrabold tracking-tight ${
+            themed ? 'text-white [text-shadow:0_1px_10px_rgba(0,0,0,0.5)]' : ''
+          }`}
+        >
+          @{user.username}
+        </h1>
       </div>
 
-      <InstallBanner />
+      {/* Kartu di area ilustrasi Home: kaca saat tema aktif */}
+      <GlassScope enabled={themed}>
+        <InstallBanner />
 
-      {/* Circle + stats */}
-      <Card className="space-y-5 p-5">
-        {/* Nama circle & jumlah anggota */}
-        <div className="space-y-2">
-          <Picker
-            variant="title"
-            label="Active circle"
-            sheetTitle="Switch circle"
-            value={activeCircle.id}
-            onChange={setActiveCircle}
-            options={circles.map((c) => {
-              const cap = c.maxMembers ?? (c.isPremium ? 25 : 5);
-              const sport = c.activityType === 'bike' ? 'Cycling' : 'Running';
-              return {
-                value: c.id,
-                label: c.name,
-                description: `${sport} · ${c.memberCount}/${cap} members (${c.isPremium ? 'Premium' : 'Free'}) · ${c.code}`,
-                leading: <InitialAvatar text={c.name} />,
-              };
-            })}
-          />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge tone="neutral">{activeCircle.activityType === 'bike' ? 'Cycling' : 'Running'}</Badge>
-            <Badge tone={activeCircle.isPremium ? 'primary' : 'neutral'}>
-              {activeCircle.isPremium ? 'Premium' : 'Free'}
-            </Badge>
-            <button
-              type="button"
-              onClick={() => setShowMembers(true)}
-              className="flex items-center gap-1 rounded-full py-1 pl-1 text-xs font-semibold text-muted transition active:opacity-60"
-              aria-label={`${activeCircle.memberCount} of ${maxMembers} members. View members`}
-            >
-              <Icon name="users" size={14} />
-              {activeCircle.memberCount}/{maxMembers} members
-              <Icon name="chevronRight" size={13} className="text-subtle" />
-            </button>
-          </div>
-        </div>
-
-        {/* Undangan: kode besar yang mudah dibaca + satu tombol aksi utama */}
-        <div className="rounded-2xl bg-inset p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle">Invite code</p>
-              <p className="mt-0.5 font-mono text-2xl font-extrabold leading-none tracking-[0.22em] text-cidash-primary">
-                {activeCircle.code}
-              </p>
+        {/* Circle + stats */}
+        <Card className="space-y-5 p-5">
+          {/* Nama circle & jumlah anggota */}
+          <div className="space-y-2">
+            <Picker
+              variant="title"
+              label="Active circle"
+              sheetTitle="Switch circle"
+              value={activeCircle.id}
+              onChange={setActiveCircle}
+              options={circles.map((c) => {
+                const cap = c.maxMembers ?? (c.isPremium ? 25 : 5);
+                const sport = c.activityType === 'bike' ? 'Cycling' : 'Running';
+                return {
+                  value: c.id,
+                  label: c.name,
+                  description: `${sport} · ${c.memberCount}/${cap} members (${c.isPremium ? 'Premium' : 'Free'}) · ${c.code}`,
+                  leading: <InitialAvatar text={c.name} />,
+                };
+              })}
+            />
+            <div className="flex flex-wrap items-center gap-1.5">
+              <Badge tone="neutral">{activeCircle.activityType === 'bike' ? 'Cycling' : 'Running'}</Badge>
+              <Badge tone={activeCircle.isPremium ? 'primary' : 'neutral'}>
+                {activeCircle.isPremium ? 'Premium' : 'Free'}
+              </Badge>
+              <button
+                type="button"
+                onClick={() => setShowMembers(true)}
+                className="flex items-center gap-1 rounded-full py-1 pl-1 text-xs font-semibold text-muted transition active:opacity-60"
+                aria-label={`${activeCircle.memberCount} of ${maxMembers} members. View members`}
+              >
+                <Icon name="users" size={14} />
+                {activeCircle.memberCount}/{maxMembers} members
+                <Icon name="chevronRight" size={13} className="text-subtle" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void copy(activeCircle.code, 'Code copied')}
-              aria-label={`Copy invite code ${activeCircle.code}`}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface text-muted shadow-card transition active:scale-90"
-            >
-              <Icon name="copy" size={18} />
-            </button>
           </div>
-          <Button fullWidth className="mt-3" onClick={() => void handleShare()}>
-            <Icon name="share" size={16} /> Share invite link
-          </Button>
-        </div>
 
-        {/* Rank Points & Season rank membuka leaderboard lengkap */}
-        <dl className="grid grid-cols-2 divide-x divide-line rounded-2xl bg-inset">
-          {stats.map((s) => (
-            <button
-              key={s.label}
-              type="button"
-              onClick={() => setShowLeaderboard(true)}
-              aria-haspopup="dialog"
-              aria-label={`${s.label}: ${s.value}. Open leaderboard`}
-              className="flex flex-col items-center gap-1 px-1 py-4 text-center transition first:rounded-l-2xl last:rounded-r-2xl active:bg-line/60"
-            >
-              <dd className="flex items-center gap-1.5 text-xl font-extrabold">
-                <Icon name={s.icon} size={17} className="text-cidash-primary" />
-                {s.value}
-              </dd>
-              <dt className="flex items-center gap-0.5 text-[11px] font-medium text-subtle">
-                {s.label} <Icon name="chevronRight" size={11} />
-              </dt>
-            </button>
-          ))}
-        </dl>
-      </Card>
+          {/* Undangan: kode besar yang mudah dibaca + satu tombol aksi utama */}
+          <div className={`rounded-2xl p-4 ${inset}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle">Invite code</p>
+                <p className="mt-0.5 font-mono text-2xl font-extrabold leading-none tracking-[0.22em] text-cidash-primary">
+                  {activeCircle.code}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void copy(activeCircle.code, 'Code copied')}
+                aria-label={`Copy invite code ${activeCircle.code}`}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface text-muted shadow-card transition active:scale-90"
+              >
+                <Icon name="copy" size={18} />
+              </button>
+            </div>
+            <Button fullWidth className="mt-3" onClick={() => void handleShare()}>
+              <Icon name="share" size={16} /> Share invite link
+            </Button>
+          </div>
+
+          {/* Rank Points & Season rank membuka leaderboard lengkap */}
+          <dl className={`grid grid-cols-2 divide-x divide-line rounded-2xl ${inset}`}>
+            {stats.map((s) => (
+              <button
+                key={s.label}
+                type="button"
+                onClick={() => setShowLeaderboard(true)}
+                aria-haspopup="dialog"
+                aria-label={`${s.label}: ${s.value}. Open leaderboard`}
+                className="flex flex-col items-center gap-1 px-1 py-4 text-center transition first:rounded-l-2xl last:rounded-r-2xl active:bg-line/60"
+              >
+                <dd className="flex items-center gap-1.5 text-xl font-extrabold">
+                  <Icon name={s.icon} size={17} className="text-cidash-primary" />
+                  {s.value}
+                </dd>
+                <dt className="flex items-center gap-0.5 text-[11px] font-medium text-subtle">
+                  {s.label} <Icon name="chevronRight" size={11} />
+                </dt>
+              </button>
+            ))}
+          </dl>
+        </Card>
+      </GlassScope>
 
       {/* Quick start */}
       <section aria-label="Start an activity" className="grid grid-cols-2 gap-3">

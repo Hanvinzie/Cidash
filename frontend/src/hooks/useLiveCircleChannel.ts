@@ -4,8 +4,6 @@ import { isRealtimeConfigured } from '../services/supabase';
 import type { GeoPoint } from '../types';
 
 // ============================================================
-// Live circle tracking lewat Supabase Realtime BROADCAST di channel circle bersama (Rule 3).
-//
 // Posisi hanya lewat WebSocket dan hidup di memori: TIDAK ada INSERT ke tabel dan TIDAK ada
 // `postgres_changes`, jadi PostgreSQL tidak tersentuh sama sekali oleh pergerakan live.
 // Setiap pengguna aktif memancarkan paling sering sekali per BROADCAST_INTERVAL_MS.

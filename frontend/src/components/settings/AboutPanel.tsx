@@ -6,7 +6,8 @@ import Wordmark from '../ui/Wordmark';
 import { useAppUpdate } from '../../lib/appUpdate';
 import { DEV_TAPS_REQUIRED, SETTING_KEYS, useBooleanSetting } from '../../lib/settings';
 import { useToast } from '../../store/ToastContext';
-import { fetchContributors, GITHUB_REPO, GITHUB_URL, type Contributor } from '../../lib/github';
+import { fetchContributors, type Contributor } from '../../lib/github';
+// import { GITHUB_REPO, GITHUB_URL } from '../../lib/github';
 
 const formatTime = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -192,7 +193,7 @@ export default function AboutPanel() {
       <UpdateCard />
       <Contributors />
 
-      <a
+      {/* <a
         href={GITHUB_URL}
         target="_blank"
         rel="noreferrer noopener"
@@ -202,7 +203,7 @@ export default function AboutPanel() {
           View on GitHub <span className="font-normal text-subtle">· {GITHUB_REPO}</span>
         </span>
         <Icon name="external" size={16} className="text-subtle" />
-      </a>
+      </a> */}
     </div>
   );
 }

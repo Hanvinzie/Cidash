@@ -10,6 +10,7 @@ import NotificationsModal from '../notifications/NotificationsModal';
 import Icon, { type IconName } from '../ui/Icon';
 import RunnerLoader from '../ui/RunnerLoader';
 import Wordmark from '../ui/Wordmark';
+import HomeThemeBackdrop from '../themes/HomeThemeBackdrop';
 
 const navItems: { to: string; label: string; icon: IconName; title: string }[] = [
   { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'CIDASH' },
@@ -127,10 +128,19 @@ export default function AppLayout() {
         </header>
 
         {/* overflow-x-clip: animasi geser antar-tab (translateX 16px) tidak boleh melebarkan dokumen — di ponsel itu memperbesar viewport & mendorong nav keluar layar. */}
-        <main className="min-h-[100dvh] overflow-x-clip pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[calc(3.5rem+env(safe-area-inset-top))]">
+        <main className="relative min-h-[100dvh] overflow-x-clip pb-[calc(4rem+env(safe-area-inset-bottom))] pt-[calc(3.5rem+env(safe-area-inset-top))]">
+          {/* Ilustrasi Home: mulai tepat di bawah header fixed dan ikut ter-scroll bersama halaman. */}
+          {current.to === ROUTES.dashboard && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] h-[28vh]"
+            >
+              <HomeThemeBackdrop className="h-full" />
+            </div>
+          )}
           <div
             key={pathname}
-            className="animate-page mx-auto w-full max-w-md px-4 pb-8 pt-5"
+            className="animate-page relative mx-auto w-full max-w-md px-4 pb-8 pt-5"
             style={{ '--page-dir': dir } as CSSProperties}
           >
             <Suspense
