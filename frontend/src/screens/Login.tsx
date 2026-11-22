@@ -24,7 +24,7 @@ const ONBOARDED_KEY = 'cidash_onboarded';
 
 const FEATURES = [
   { icon: 'users', title: 'Private circles', text: 'Train with friends in invite-only groups.' },
-  { icon: 'quest', title: 'Bomb Missions', text: 'Dare a friend to a run or ride and put coins on the line.' },
+  { icon: 'quest', title: 'Bomb Challenges', text: 'Dare a friend to a run or ride and put coins on the line.' },
   { icon: 'trophy', title: 'Season leaderboard', text: 'Earn Rank Points and climb a fresh ranking every season.' },
 ] as const;
 
@@ -422,7 +422,7 @@ export default function Login() {
                 ]}
               />
               <p className="mt-1.5 text-[11px] text-subtle">
-                All missions and activities in this circle will be {circleType === 'bike' ? 'cycling' : 'running'}-only.
+                All goals, challenges and activities in this circle will be {circleType === 'bike' ? 'cycling' : 'running'}-only.
               </p>
             </div>
             <Button type="submit" variant="outline" fullWidth disabled={loading || circleName.trim().length < 3}>

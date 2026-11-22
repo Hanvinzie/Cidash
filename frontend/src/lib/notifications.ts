@@ -135,9 +135,9 @@ export function diffQuests(prev: QuestSnap[] | null, next: QuestSnap[], ctx: Dif
     const old = before.get(q.id);
     if (!old) {
       if (q.targetId === ctx.meId && q.creatorId !== ctx.meId) {
-        out.push(make('bomb_received', `bomb_received:${q.id}`, ctx, `${handle(q.creatorName)} sent you a Bomb Mission`));
+        out.push(make('bomb_received', `bomb_received:${q.id}`, ctx, `${handle(q.creatorName)} sent you a Bomb Challenge`));
       } else if (!mine(q)) {
-        out.push(make('bomb_sent_to_other', `bomb_sent:${q.id}`, ctx, `${handle(q.creatorName)} sent a Bomb Mission to ${handle(q.targetName)}`));
+        out.push(make('bomb_sent_to_other', `bomb_sent:${q.id}`, ctx, `${handle(q.creatorName)} sent a Bomb Challenge to ${handle(q.targetName)}`));
       }
     }
     const finished = q.status === 'COMPLETED' || q.status === 'FAILED' || q.status === 'SHIELDED';
@@ -146,10 +146,10 @@ export function diffQuests(prev: QuestSnap[] | null, next: QuestSnap[], ctx: Dif
       const word = RESULT_WORD[q.status as 'COMPLETED' | 'FAILED' | 'SHIELDED'];
       const text =
         q.targetId === ctx.meId
-          ? `Your Bomb Mission from ${handle(q.creatorName)} was ${word}`
+          ? `Your Bomb Challenge from ${handle(q.creatorName)} was ${word}`
           : q.creatorId === ctx.meId
-            ? `${handle(q.targetName)}'s Bomb Mission from you was ${word}`
-            : `${handle(q.targetName)}'s Bomb Mission from ${handle(q.creatorName)} was ${word}`;
+            ? `${handle(q.targetName)}'s Bomb Challenge from you was ${word}`
+            : `${handle(q.targetName)}'s Bomb Challenge from ${handle(q.creatorName)} was ${word}`;
       out.push(make('bomb_result', `bomb_result:${q.id}:${q.status}`, ctx, text));
     }
   }
@@ -158,7 +158,7 @@ export function diffQuests(prev: QuestSnap[] | null, next: QuestSnap[], ctx: Dif
   for (const q of prev) {
     if (after.has(q.id) || mine(q)) continue;
     if (q.status !== 'PENDING' && q.status !== 'ACCEPTED') continue;
-    out.push(make('bomb_result', `bomb_result:${q.id}:ended`, ctx, `${handle(q.targetName)}'s Bomb Mission from ${handle(q.creatorName)} has ended`));
+    out.push(make('bomb_result', `bomb_result:${q.id}:ended`, ctx, `${handle(q.targetName)}'s Bomb Challenge from ${handle(q.creatorName)} has ended`));
   }
   return out;
 }

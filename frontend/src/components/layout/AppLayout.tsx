@@ -13,7 +13,7 @@ import Wordmark from '../ui/Wordmark';
 
 const navItems: { to: string; label: string; icon: IconName; title: string }[] = [
   { to: ROUTES.dashboard, label: 'Home', icon: 'home', title: 'CIDASH' },
-  { to: ROUTES.customQuest, label: 'Quests', icon: 'quest', title: 'Quests' },
+  { to: ROUTES.customQuest, label: 'Challenges', icon: 'quest', title: 'Challenges' },
   { to: ROUTES.activity, label: 'Activity', icon: 'activity', title: 'Activity' },
   { to: ROUTES.profile, label: 'Profile', icon: 'user', title: 'Profile' },
 ];

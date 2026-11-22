@@ -115,7 +115,7 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
                     </span>
                     {m.role === 'captain' && <Badge tone="warning">Captain</Badge>}
                     {m.availabilityStatus === 'RESTING' && <Badge tone="neutral">Resting</Badge>}
-                    {m.availabilityStatus === 'IN_MISSION' && <Badge tone="primary">In Mission</Badge>}
+                    {m.availabilityStatus === 'IN_MISSION' && <Badge tone="primary">In Challenge</Badge>}
                   </span>
                   <span className="block text-xs text-subtle">
                     {runningNow.has(m.id) ? (
@@ -214,7 +214,7 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
               onCancel={() => setKickTarget(null)}
             >
               <p>
-                <b>@{kickTarget.username}</b> will lose access to this circle's leaderboard and missions. They can join again with the
+                <b>@{kickTarget.username}</b> will lose access to this circle's leaderboard, goals and challenges. They can join again with the
                 invite code.
               </p>
             </ConfirmDialog>

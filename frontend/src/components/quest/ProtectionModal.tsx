@@ -37,14 +37,14 @@ export default function ProtectionModal({ onClose }: { onClose: () => void }) {
       <div className="space-y-4">
         <section className="space-y-3 rounded-2xl bg-inset p-4">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-bold">Bomb Mission status</p>
+            <p className="text-sm font-bold">Bomb Challenge status</p>
             <Badge tone={badge.tone}>{badge.text}</Badge>
           </div>
           <p className="text-xs text-subtle">
             {p.myStatus === 'RESTING'
-              ? 'Immunity active for 24h. You cannot receive or send Bomb Missions.'
+              ? 'Immunity active for 24h. You cannot receive or send Bomb Challenges.'
               : p.myStatus === 'IN_MISSION'
-                ? 'Protected from new bombs until you finish your active mission (max 1 at a time).'
+                ? 'Protected from new bombs until you finish your active challenge (max 1 at a time).'
                 : `Rest Mode quota: ${p.weeklyRestUsed}/${p.maxWeeklyRest} used this week (1st free, 2nd 15 coins).`}
           </p>
           {p.myStatus === 'RESTING' ? (

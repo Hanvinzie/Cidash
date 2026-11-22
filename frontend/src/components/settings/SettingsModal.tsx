@@ -174,7 +174,7 @@ function Notifications() {
   const [group, setGroup] = useBooleanSetting(SETTING_KEYS.notifyGroup, true);
   return (
     <div className="space-y-1">
-      <Toggle checked={bomb} onChange={setBomb} label="Bomb Mission alerts" description="When a Bomb Mission is sent, finished, or blocked in your circle" />
+      <Toggle checked={bomb} onChange={setBomb} label="Bomb Challenge alerts" description="When a Bomb Challenge is sent, finished, or blocked in your circle" />
       <Toggle checked={group} onChange={setGroup} label="Circle activity" description="New members, milestones, and live group runs" />
     </div>
   );
@@ -239,7 +239,7 @@ function Privacy({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-3 text-sm text-muted">
       <p>
-        <b>Invite-only Circles:</b> Only members with your 8-character circle code can view the circle leaderboard or send Bomb Missions.
+        <b>Invite-only Circles:</b> Only members with your 8-character circle code can view the circle leaderboard or send Bomb Challenges.
       </p>
       <p>
         <b>Live location:</b> Off by default. When on, your position is broadcast to your circle only while you are recording, and is never saved.
@@ -261,13 +261,16 @@ function Help({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-3 text-sm text-muted">
       <p>
-        <b>Rank Points (RP):</b> Earn 10 RP per kilometer on every verified run or ride, plus bonus stakes from completing Bomb Missions.
+        <b>Rank Points (RP):</b> Earn 10 RP per kilometer on every verified run or ride, plus bonus stakes from completing Bomb Challenges.
       </p>
       <p>
-        <b>Bomb Missions:</b> Spend coins to challenge a circle friend with a distance & time goal. If they succeed, they win the stakes RP; if they fail or expire, you win the RP!
+        <b>Circle Goals:</b> Daily and weekly distance targets that your whole circle works on together. Claim the reward once a goal is complete.
       </p>
       <p>
-        <b>Shield Tickets:</b> Use a Shield Ticket to neutralize an incoming Bomb Mission without losing any Rank Points.
+        <b>Bomb Challenges:</b> Spend coins to challenge a circle friend with a distance & time goal. If they succeed, they win the stakes RP; if they fail or expire, you win the RP!
+      </p>
+      <p>
+        <b>Shield Tickets:</b> Use a Shield Ticket to neutralize an incoming Bomb Challenge without losing any Rank Points.
       </p>
       <Button fullWidth onClick={onDone} className="mt-2">
         Close

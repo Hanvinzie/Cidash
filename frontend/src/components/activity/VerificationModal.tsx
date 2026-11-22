@@ -12,11 +12,11 @@ interface VerificationModalProps {
 }
 
 const MISSION_TEXT: Record<MissionStatus, string> = {
-  completed: 'Mission complete',
-  failed: 'Mission missed',
-  in_progress: 'Mission progress saved',
+  completed: 'Target reached',
+  failed: 'Target missed',
+  in_progress: 'Progress saved',
   pending: '',
-  shielded: 'Mission shielded',
+  shielded: 'Challenge shielded',
 };
 
 export default function VerificationModal({ result, onRetry, onDone, onShare }: VerificationModalProps) {

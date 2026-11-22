@@ -10,14 +10,14 @@ interface CircleRequiredGateProps {
 
 const COPY = {
   quests: {
-    title: 'Quests are locked',
+    title: 'Challenges are locked',
     description:
-      'Create or join a running or cycling circle first to send and receive Bomb Missions with your friends.',
+      'Create or join a running or cycling circle first to send and receive Bomb Challenges with your friends.',
   },
   activity: {
     title: 'Activity tracking is locked',
     description:
-      'Create or join a circle first so your runs or rides match your circle and count toward missions.',
+      'Create or join a circle first so your runs or rides match your circle and count toward circle goals and challenges.',
   },
 } as const;
 

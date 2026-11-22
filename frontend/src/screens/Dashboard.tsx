@@ -212,14 +212,14 @@ export default function Dashboard() {
         <SectionTitle
           action={
             <Link to={ROUTES.customQuest} className="flex items-center text-xs font-semibold text-cidash-primary">
-              Bomb Missions <Icon name="chevronRight" size={14} />
+              Challenges <Icon name="chevronRight" size={14} />
             </Link>
           }
         >
-          Circle missions
+          Circle goals
         </SectionTitle>
         {groupMissions.length === 0 ? (
-          <Card className="py-8 text-center text-sm text-subtle">No missions in this circle yet.</Card>
+          <Card className="py-8 text-center text-sm text-subtle">No circle goals yet.</Card>
         ) : (
           <ul className="space-y-3">
             {groupMissions.map((m) => {
