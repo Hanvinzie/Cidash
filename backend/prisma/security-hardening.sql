@@ -15,6 +15,8 @@ ALTER TABLE "public"."Activity" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."Quest" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."PointLedger" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "public"."CoinTransaction" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."GroupRun" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE "public"."GroupRunParticipant" ENABLE ROW LEVEL SECURITY;
 
 -- 2. Database-level CHECK constraints (idempotent DO block)
 DO $$

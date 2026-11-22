@@ -9,6 +9,8 @@ import { DatabaseModule } from './database/database.module';
 import { SquadsModule } from './squads/squads.module';
 import { QuestsModule } from './quests/quests.module';
 import { ActivitiesModule } from './activities/activities.module';
+import { GroupRunsModule } from './group-runs/group-runs.module';
+import { RealtimeModule } from './realtime/realtime.module';
 import { RateLimitGuard } from './common/guards/rate-limit.guard';
 
 @Module({
@@ -23,6 +25,8 @@ import { RateLimitGuard } from './common/guards/rate-limit.guard';
     SquadsModule,
     QuestsModule,
     ActivitiesModule,
+    GroupRunsModule,
+    RealtimeModule,
   ],
   controllers: [AppController],
   providers: [
