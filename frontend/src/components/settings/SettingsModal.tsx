@@ -9,6 +9,7 @@ import { useAppUpdate } from '../../lib/appUpdate';
 import { SETTING_KEYS, useBooleanSetting } from '../../lib/settings';
 import { useApp } from '../../store/AppContext';
 import { useTheme, type ThemePreference } from '../../store/ThemeContext';
+import { THEMES } from '../../lib/themes';
 
 type Page = 'root' | 'appearance' | 'notifications' | 'activity' | 'edit' | 'privacy' | 'help' | 'about';
 
@@ -102,20 +103,68 @@ function Root({ onOpen }: { onOpen: (p: Page) => void }) {
 }
 
 function Appearance() {
-  const { preference, setPreference } = useTheme();
+  const { preference, setPreference, themeId, setThemeId, resolved } = useTheme();
   return (
-    <div className="space-y-3">
-      <Segmented<ThemePreference>
-        ariaLabel="Theme"
-        value={preference}
-        onChange={setPreference}
-        options={[
-          { value: 'light', label: <><Icon name="sun" size={16} /> Light</> },
-          { value: 'dark', label: <><Icon name="moon" size={16} /> Dark</> },
-          { value: 'system', label: <><Icon name="monitor" size={16} /> Auto</> },
-        ]}
-      />
-      <p className="px-1 text-xs text-subtle">Auto follows your phone's appearance setting.</p>
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <p className="px-1 text-xs font-bold uppercase tracking-wider text-subtle">Mode</p>
+        <Segmented<ThemePreference>
+          ariaLabel="Light or dark mode"
+          value={preference}
+          onChange={setPreference}
+          options={[
+            { value: 'light', label: <><Icon name="sun" size={16} /> Light</> },
+            { value: 'dark', label: <><Icon name="moon" size={16} /> Dark</> },
+            { value: 'system', label: <><Icon name="monitor" size={16} /> Auto</> },
+          ]}
+        />
+        <p className="px-1 text-xs text-subtle">Auto follows your phone's appearance setting.</p>
+      </div>
+
+      {/* Daftar tema berasal dari lib/themes.ts: menambah tema di sana otomatis muncul di sini. */}
+      <div className="space-y-2">
+        <p className="px-1 text-xs font-bold uppercase tracking-wider text-subtle">Theme</p>
+        <ul role="radiogroup" aria-label="Color theme" className="space-y-2">
+          {THEMES.map((t) => {
+            const selected = t.id === themeId;
+            const [bg, surface, accent] = t.swatch[resolved];
+            return (
+              <li key={t.id}>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  onClick={() => setThemeId(t.id)}
+                  className={`flex w-full items-center gap-3 rounded-2xl border-2 bg-inset p-3 text-left transition active:scale-[0.99] ${
+                    selected ? 'border-cidash-primary' : 'border-transparent'
+                  }`}
+                >
+                  <span
+                    className="flex h-12 w-16 shrink-0 items-end justify-center gap-1 overflow-hidden rounded-xl p-1.5 ring-1 ring-line"
+                    style={{ backgroundColor: bg }}
+                    aria-hidden
+                  >
+                    <span className="h-6 w-5 rounded-md" style={{ backgroundColor: surface }} />
+                    <span className="h-4 w-5 rounded-md" style={{ backgroundColor: accent }} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-bold">{t.name}</span>
+                    <span className="block text-xs text-subtle">{t.description}</span>
+                  </span>
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                      selected ? 'bg-cidash-primary text-cidash-on-primary' : 'border-2 border-line'
+                    }`}
+                    aria-hidden
+                  >
+                    {selected && <Icon name="check" size={14} strokeWidth={3} />}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 }

@@ -41,6 +41,9 @@
         if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.indexOf('Mac') > -1 && navigator.maxTouchPoints > 1)) {
           document.documentElement.classList.add('ios');
         }
+        // Palet tema (data-theme) dipasang sebelum render; id tak dikenal otomatis memakai tema bawaan di CSS.
+        var themeId = localStorage.getItem('cidash_theme_id');
+        if (themeId) document.documentElement.setAttribute('data-theme', themeId);
         var t = localStorage.getItem('cidash_theme');
         var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
         if (dark) {

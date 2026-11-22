@@ -1,5 +1,6 @@
 import { FormEvent, useState } from 'react';
 import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import PrivacyModal from '../components/auth/PrivacyModal';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
@@ -73,6 +74,9 @@ export default function Login() {
       .replace(/[^A-Z0-9]/g, '')
       .slice(0, 8),
   );
+  /** Persetujuan Privacy & Security (wajib saat daftar). Hanya bisa dicentang setelah modalnya dibaca sampai bawah. */
+  const [agreed, setAgreed] = useState(false);
+  const [privacyOpen, setPrivacyOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   /** Email yang dicoba masuk belum terdaftar → tawarkan membuat akun. */
@@ -131,6 +135,10 @@ export default function Login() {
 
   function handleAuth(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (mode === 'register' && !agreed) {
+      setPrivacyOpen(true); // belum menyetujui: tampilkan dokumennya, jangan lanjut mendaftar
+      return;
+    }
     void runAuth({ mode, name: username, email, password });
   }
 
@@ -260,7 +268,35 @@ export default function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
-              <Button type="submit" fullWidth disabled={loading} className="!mt-5">
+              {!isLogin && (
+                <div className="flex items-start gap-3 pt-1">
+                  {/* Mencentang tanpa membaca membuka dokumennya; mencentang hanya terjadi lewat tombol Agree. Mencabut centang boleh. */}
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={agreed}
+                    aria-label="I agree to the Privacy & Security terms"
+                    onClick={() => (agreed ? setAgreed(false) : setPrivacyOpen(true))}
+                    className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-2 transition active:scale-90 ${
+                      agreed ? 'border-cidash-primary bg-cidash-primary text-cidash-on-primary' : 'border-line bg-inset'
+                    }`}
+                  >
+                    {agreed && <Icon name="check" size={16} strokeWidth={3} />}
+                  </button>
+                  <p className="text-[13px] leading-snug text-muted">
+                    I agree to the{' '}
+                    <button
+                      type="button"
+                      onClick={() => setPrivacyOpen(true)}
+                      className="font-bold text-cidash-primary underline underline-offset-2"
+                    >
+                      Privacy &amp; Security
+                    </button>{' '}
+                    terms. Cidash is a demo version.
+                  </p>
+                </div>
+              )}
+              <Button type="submit" fullWidth disabled={loading || (!isLogin && !agreed)} className="!mt-5">
                 {loading ? 'Please wait…' : isLogin ? 'Sign in' : 'Create account'}
               </Button>
             </form>
@@ -281,6 +317,16 @@ export default function Login() {
           <div className="flex-1" />
           <DevNotice />
         </div>
+
+        {privacyOpen && (
+          <PrivacyModal
+            onClose={() => setPrivacyOpen(false)}
+            onAgree={() => {
+              setAgreed(true);
+              setPrivacyOpen(false);
+            }}
+          />
+        )}
 
         {unregistered && (
           <ConfirmDialog
