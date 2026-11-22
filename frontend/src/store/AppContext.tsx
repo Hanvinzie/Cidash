@@ -57,7 +57,10 @@ const SHIELD_WEEKLY_COSTS = [25, 50] as const;
 const REST_WEEKLY_COSTS = [0, 15] as const;
 const SNOOZE_COST_COINS = 10;
 /** Selang polling data circle saat tab terlihat. */
+/** Tanpa Realtime tersambung, data circle diperbarui berkala sesering ini. */
 const REFRESH_INTERVAL_MS = 25_000;
+/** Dengan Realtime tersambung, pembaruan datang lewat sinyal; ini hanya jaring pengaman (mis. kuest kedaluwarsa oleh server). */
+const SAFETY_NET_INTERVAL_MS = 180_000;
 
 const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}`;
 const generateCircleCode = () =>
@@ -740,16 +743,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [board, quests] = await Promise.all([
       syncCircleLeaderboard(circleId, me.id, { keepOnError: true }),
       syncQuests(circleId),
+      // Circle Goals berubah ketika anggota lain menyelesaikan aktivitas; sinkronkan pada sinyal circle juga.
+      syncCircleMissions(circleId),
     ]);
     return board && quests;
-  }, [hydrateFromBackend, mapBackendUser, syncCircleLeaderboard, syncQuests]);
+  }, [hydrateFromBackend, mapBackendUser, syncCircleLeaderboard, syncCircleMissions, syncQuests]);
 
   const authedWithToken = isAuthenticated && Boolean(tokenStore.get());
-  const { refreshNow } = useAutoRefresh({ enabled: authedWithToken, intervalMs: REFRESH_INTERVAL_MS, task: refreshLive });
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const { refreshNow } = useAutoRefresh({
+    enabled: authedWithToken,
+    intervalMs: realtimeConnected ? SAFETY_NET_INTERVAL_MS : REFRESH_INTERVAL_MS,
+    task: refreshLive,
+  });
   const { notify: notifyCircle } = useCircleEvents({
     circleId: activeCircle?.id,
     enabled: authedWithToken,
     onSignal: refreshNow,
+    onConnectionChange: setRealtimeConnected,
   });
 
   const leaderboard = useMemo<LeaderboardEntry[]>(() => {

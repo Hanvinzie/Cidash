@@ -1,83 +1,74 @@
-import { useCallback, useEffect, useRef } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import { getSupabase, isRealtimeConfigured } from '../services/supabase';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { acquireCircleChannel } from '../services/circleRealtime';
+import { isRealtimeConfigured } from '../services/supabase';
 
 // ============================================================
-// Sinyal "circle berubah" lewat Supabase Realtime BROADCAST (opsional, bila VITE_SUPABASE_* terisi).
+// Sinyal "circle berubah" lewat channel Realtime bersama (services/circleRealtime.ts).
 //
 // Event TIDAK membawa data: penerima hanya memicu refresh lewat REST. Karena itu aman walau dipalsukan
-// (paling buruk satu refresh ekstra, dan refresh sudah dibatasi jeda minimum). Tidak memakai
-// `postgres_changes` karena tabel di-hardening RLS (anon tidak bisa membacanya).
+// (paling buruk satu refresh ekstra, dan refresh sudah dibatasi jeda minimum).
 // ============================================================
 
-export const CIRCLE_EVENT = 'circle_changed';
-/** Siaran keluar paling cepat sekali per detik. */
+/** Siaran keluar paling cepat sekali per detik per circle. */
 const SEND_GAP_MS = 1000;
-/** Sinyal yang menunggu channel siap dibuang setelah ini. */
-const PENDING_TTL_MS = 10_000;
+/** Beri channel waktu tersambung & mengirim antrean sebelum referensi sementara dilepas. */
+const NOTIFY_HOLD_MS = 4000;
 
 interface Options {
   circleId?: string | null;
   enabled: boolean;
-  /** Dipanggil saat anggota lain memberi sinyal. */
+  /** Dipanggil saat anggota lain memberi sinyal, dan saat koneksi pulih (untuk mengejar yang terlewat). */
   onSignal: () => void;
+  /** Dipanggil saat status koneksi Realtime berubah. */
+  onConnectionChange?: (connected: boolean) => void;
 }
 
-export function useCircleEvents({ circleId, enabled, onSignal }: Options) {
+export function useCircleEvents({ circleId, enabled, onSignal, onConnectionChange }: Options) {
   const onSignalRef = useRef(onSignal);
   onSignalRef.current = onSignal;
-  const entry = useRef<{ circleId: string; channel: RealtimeChannel; ready: boolean } | null>(null);
-  const pending = useRef(new Map<string, number>());
-  const lastSent = useRef(0);
-
-  const flush = useCallback(() => {
-    const e = entry.current;
-    if (!e?.ready) return;
-    const queuedAt = pending.current.get(e.circleId);
-    if (queuedAt === undefined) return;
-    pending.current.delete(e.circleId);
-    const now = Date.now();
-    if (now - queuedAt > PENDING_TTL_MS || now - lastSent.current < SEND_GAP_MS) return;
-    lastSent.current = now;
-    void e.channel.send({ type: 'broadcast', event: CIRCLE_EVENT, payload: { ts: now } });
-  }, []);
+  const onConnRef = useRef(onConnectionChange);
+  onConnRef.current = onConnectionChange;
+  const [connected, setConnected] = useState(false);
+  const lastSent = useRef(new Map<string, number>());
 
   useEffect(() => {
-    if (!isRealtimeConfigured || !enabled || !circleId) return;
-    let cancelled = false;
-    let channel: RealtimeChannel | null = null;
-    let supabase: Awaited<ReturnType<typeof getSupabase>> = null;
-
-    void getSupabase().then((sb) => {
-      if (cancelled || !sb) return;
-      supabase = sb;
-      channel = sb.channel(`circle-events:${circleId}`, { config: { broadcast: { self: false } } });
-      const current = { circleId, channel, ready: false };
-      entry.current = current;
-      channel
-        .on('broadcast', { event: CIRCLE_EVENT }, () => onSignalRef.current())
-        .subscribe((status) => {
-          current.ready = status === 'SUBSCRIBED';
-          if (current.ready) flush();
-        });
-    });
-
-    return () => {
-      cancelled = true;
-      entry.current = null;
-      if (channel && supabase) void supabase.removeChannel(channel);
+    if (!isRealtimeConfigured || !enabled || !circleId) {
+      setConnected(false);
+      onConnRef.current?.(false);
+      return;
+    }
+    const handle = acquireCircleChannel(circleId);
+    if (!handle) return;
+    const update = (c: boolean) => {
+      setConnected(c);
+      onConnRef.current?.(c);
     };
-  }, [circleId, enabled, flush]);
+    update(handle.connected);
+    const offSignal = handle.on('circle_changed', () => onSignalRef.current());
+    // Tersambung (pertama atau kembali setelah putus): sinkronkan, mungkin ada perubahan yang terlewat.
+    const offStatus = handle.onStatus((c) => {
+      update(c);
+      if (c) onSignalRef.current();
+    });
+    return () => {
+      offSignal();
+      offStatus();
+      handle.release();
+      update(false);
+    };
+  }, [circleId, enabled]);
 
-  /** Beri tahu anggota lain bahwa circle ini berubah. Menunggu channel siap bila perlu (mis. baru bergabung). */
-  const notify = useCallback(
-    (id: string) => {
-      if (!isRealtimeConfigured) return;
-      pending.current.set(id, Date.now());
-      flush();
-    },
-    [flush],
-  );
+  /** Beri tahu anggota lain bahwa circle ini berubah. Antre sampai channel siap (mis. baru bergabung). */
+  const notify = useCallback((id: string) => {
+    if (!isRealtimeConfigured) return;
+    const now = Date.now();
+    if (now - (lastSent.current.get(id) ?? 0) < SEND_GAP_MS) return;
+    lastSent.current.set(id, now);
+    const handle = acquireCircleChannel(id);
+    if (!handle) return;
+    handle.send('circle_changed', { ts: now });
+    setTimeout(() => handle.release(), NOTIFY_HOLD_MS);
+  }, []);
 
-  return { notify };
+  return { notify, connected };
 }

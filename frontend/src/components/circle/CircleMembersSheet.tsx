@@ -6,6 +6,9 @@ import ConfirmDialog from '../ui/ConfirmDialog';
 import Icon from '../ui/Icon';
 import { InitialAvatar } from '../ui/Picker';
 import { useApp } from '../../store/AppContext';
+import { useToast } from '../../store/ToastContext';
+import { joinLink } from '../../routes';
+import { usePresence } from '../../hooks/useCirclePresence';
 import { useLiveRooms } from '../../hooks/useGroupRun';
 import type { Circle } from '../../types';
 
@@ -22,6 +25,7 @@ interface CircleMembersSheetProps {
 /** Bottom sheet daftar anggota circle: role, status lari live, status Bomb Mission, kapasitas Free/Premium, Kick (Captain), & Leave Circle. */
 export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: CircleMembersSheetProps) {
   const { user, circles, membersOf, upgradeCircle, leaveCircle, kickMember } = useApp();
+  const toast = useToast();
   const liveCircle = circles.find((c) => c.id === circle.id) ?? circle;
   const members = membersOf(liveCircle.id);
   const myMember = members.find((m) => m.isMe);
@@ -31,24 +35,28 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
   const maxMembers = liveCircle.maxMembers ?? (isPremium ? 25 : 5);
 
   const rooms = useLiveRooms(liveCircle.id);
-  const runningNow = new Set(rooms.filter((r) => r.status === 'live').flatMap((r) => r.participants.map((p) => p.userId)));
-  const [copied, setCopied] = useState(false);
+  const present = usePresence(liveCircle.id);
+  // Presence memberi status aktif seketika; daftar room menjadi cadangan bila Realtime belum tersedia.
+  const runningNow = new Set([
+    ...rooms.filter((r) => r.status === 'live').flatMap((r) => r.participants.map((p) => p.userId)),
+    ...present.filter((p) => p.activity !== null).map((p) => p.userId),
+  ]);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [kickTarget, setKickTarget] = useState<{ id: string; username: string } | null>(null);
   const [confirmUpgrade, setConfirmUpgrade] = useState(false);
   const [busy, setBusy] = useState(false);
 
   async function shareInvite() {
-    const text = `Join my circle "${liveCircle.name}" on Cidash with code: ${liveCircle.code}`;
+    const url = joinLink(liveCircle.code);
     try {
-      if (navigator.share) await navigator.share({ title: 'Cidash Circle', text });
-      else {
-        await navigator.clipboard.writeText(liveCircle.code);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+      if (navigator.share) {
+        await navigator.share({ title: 'Cidash circle invite', text: `Join my circle "${liveCircle.name}" on Cidash!`, url });
+        return;
       }
-    } catch {
-      /* dibatalkan user */
+      await navigator.clipboard.writeText(url);
+      toast('Invite link copied', 'success');
+    } catch (err) {
+      if (!(err instanceof DOMException && err.name === 'AbortError')) toast("Couldn't share the invite link.", 'error');
     }
   }
 
@@ -152,9 +160,9 @@ export default function CircleMembersSheet({ circle, onClose, onOpenCircle }: Ci
               </Button>
             )}
 
-            <Button fullWidth variant={onOpenCircle ? 'secondary' : 'primary'} onClick={shareInvite}>
-              <Icon name={copied ? 'check' : 'plus'} size={16} />
-              {copied ? 'Code copied' : `Invite friends · ${liveCircle.code}`}
+            <Button fullWidth variant={onOpenCircle ? 'secondary' : 'primary'} onClick={() => void shareInvite()}>
+              <Icon name="share" size={16} />
+              Share invite link
             </Button>
             {onOpenCircle && (
               <Button fullWidth onClick={() => close(onOpenCircle)}>

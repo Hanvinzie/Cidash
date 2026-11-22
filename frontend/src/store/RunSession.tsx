@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 import { useGeoTracker } from '../hooks/useGeoTracker';
+import { useCirclePresence } from '../hooks/useCirclePresence';
 import { useGroupRun } from '../hooks/useGroupRun';
 import { useLiveCircleChannel } from '../hooks/useLiveCircleChannel';
 import { SETTING_KEYS, useBooleanSetting } from '../lib/settings';
@@ -28,11 +29,19 @@ export function RunSessionProvider({ children }: { children: ReactNode }) {
   const lastPoint = tracker.points[tracker.points.length - 1];
   const group = useGroupRun({
     me: { id: user.id, username: user.username },
+    circleId: activeCircle?.id,
     reporting: tracker.status === 'running', // hanya terkirim bila sedang di dalam room
     distanceKm: tracker.distanceKm,
     lastPoint,
   });
   const recording = tracker.status === 'running' || tracker.status === 'paused';
+
+  // Kehadiran di circle (Presence): online, atau sedang berlari/bersepeda saat merekam. Tanpa menyentuh database.
+  useCirclePresence({
+    circleId: activeCircle?.id,
+    me: { id: user.id, username: user.username },
+    activity: tracker.status === 'running' ? (activeCircle?.activityType ?? 'run') : null,
+  });
 
   // Posisi live hanya dibagikan bila pengguna mengizinkan di Settings, atau sedang dalam Group Run.
   const [liveShare] = useBooleanSetting(SETTING_KEYS.liveShare, false);

@@ -13,9 +13,9 @@ interface GroupRunPanelProps {
 }
 
 const STATUS = {
-  lobby: { label: 'Lobby', tone: 'warning' },
-  live: { label: 'Live', tone: 'danger' },
-  ended: { label: 'Ended', tone: 'neutral' },
+  lobby: { label: 'Waiting', tone: 'warning' },
+  live: { label: 'Active', tone: 'danger' },
+  ended: { label: 'Finished', tone: 'neutral' },
 } as const;
 
 export default function GroupRunPanel({ circleId, myId, group, tracking }: GroupRunPanelProps) {
@@ -28,7 +28,7 @@ export default function GroupRunPanel({ circleId, myId, group, tracking }: Group
       <Card className="space-y-3">
         <h2 className="font-bold">Group run lobby</h2>
         {rooms.length === 0 ? (
-          <p className="text-sm text-subtle">No sessions running in this circle yet.</p>
+          <p className="text-sm text-subtle">No Group Run sessions are open in this circle yet.</p>
         ) : (
           <ul className="space-y-2">
             {rooms.map((r) => (
@@ -106,8 +106,13 @@ export default function GroupRunPanel({ circleId, myId, group, tracking }: Group
           ) : (
             <p className="flex-1 self-center text-xs text-muted">Waiting for the host to start…</p>
           ))}
+        {room.status === 'live' && isHost && !tracking && (
+          <Button variant="outline" fullWidth disabled={busy} onClick={group.finish}>
+            End session
+          </Button>
+        )}
         <Button variant="secondary" fullWidth disabled={busy || tracking} onClick={group.leave}>
-          Leave room
+          {room.status === 'ended' ? 'Leave session' : 'Leave room'}
         </Button>
       </div>
       {error && (
