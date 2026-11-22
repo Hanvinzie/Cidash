@@ -2,8 +2,13 @@ import { toBlob } from 'html-to-image';
 import { formatDuration } from './geo';
 import type { ActivityLog } from '../types';
 
-/** Render node DOM ke PNG. pixelRatio 3 -> kartu 360x640 menjadi 1080x1920 (rasio IG Story). */
+/**
+ * Render node DOM ke PNG. pixelRatio 3 → kartu 360×640 menjadi 1080×1920 (rasio IG Story).
+ * Tanpa `backgroundColor`: area di luar border-radius kartu tetap transparan, jadi sudutnya rounded dan tidak ada
+ * sudut putih tajam. Font ditunggu dulu agar angka & wordmark tidak terekspor dengan font cadangan.
+ */
 export async function nodeToPng(node: HTMLElement, pixelRatio = 3): Promise<Blob> {
+  await document.fonts?.ready;
   const blob = await toBlob(node, { pixelRatio, cacheBust: true });
   if (!blob) throw new Error('Failed to render the share card.');
   return blob;
@@ -31,33 +36,8 @@ export async function sharePng(blob: Blob, filename: string, text: string) {
   return 'downloaded' as const;
 }
 
-/** Teks bagikan: ringkasan aktivitas + ajakan, tanpa data pribadi selain yang tampil di kartu. */
+/** Teks bagikan: ringkasan aktivitas saja (tanpa lokasi atau data circle). */
 export function shareText(log: ActivityLog): string {
   const kind = log.type === 'run' ? 'run' : 'ride';
-  const where = log.routeLabel && log.routeLabel !== 'Recorded workout' ? ` · ${log.routeLabel}` : '';
-  const invite = log.circle ? ` Join my ${log.circle.name} circle on Cidash!` : '';
-  return `${log.distanceKm} km ${kind} in ${formatDuration(log.durationSec)}${where}.${invite}`;
-}
-
-export interface SocialLink {
-  id: string;
-  label: string;
-  href: string;
-  /** Warna latar tombol (warna brand). */
-  color: string;
-}
-
-/**
- * Tautan bagikan web per platform. Intent web hanya bisa membawa teks + tautan (bukan gambar);
- * untuk gambar (termasuk Instagram Story) gunakan tombol Share bawaan perangkat (Web Share API).
- */
-export function socialLinks(text: string, url: string): SocialLink[] {
-  const t = encodeURIComponent(text);
-  const u = encodeURIComponent(url);
-  return [
-    { id: 'whatsapp', label: 'WhatsApp', href: `https://wa.me/?text=${encodeURIComponent(`${text} ${url}`)}`, color: '#25D366' },
-    { id: 'x', label: 'X', href: `https://twitter.com/intent/tweet?text=${t}&url=${u}`, color: '#111111' },
-    { id: 'telegram', label: 'Telegram', href: `https://t.me/share/url?url=${u}&text=${t}`, color: '#2AABEE' },
-    { id: 'facebook', label: 'Facebook', href: `https://www.facebook.com/sharer/sharer.php?u=${u}&quote=${t}`, color: '#1877F2' },
-  ];
+  return `${log.distanceKm} km ${kind} in ${formatDuration(log.durationSec)} on Cidash.`;
 }

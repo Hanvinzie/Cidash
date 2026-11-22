@@ -203,7 +203,7 @@ export default function Profile() {
 
       {shareLog && (
         <Suspense fallback={null}>
-          <ShareCardModal log={shareLog} username={user.username} onClose={() => setShareLog(null)} />
+          <ShareCardModal log={shareLog} onClose={() => setShareLog(null)} />
         </Suspense>
       )}
     </div>
