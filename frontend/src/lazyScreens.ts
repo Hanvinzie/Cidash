@@ -7,6 +7,7 @@ export const Dashboard = lazyWithPreload(() => import('./screens/Dashboard'));
 export const CustomQuest = lazyWithPreload(() => import('./screens/CustomQuest'));
 export const Activity = lazyWithPreload(() => import('./screens/Activity'));
 export const Profile = lazyWithPreload(() => import('./screens/Profile'));
+export const Join = lazyWithPreload(() => import('./screens/Join'));
 
 // Komponen berat yang dipakai di dalam halaman.
 export const RouteMap = lazyWithPreload(() => import('./components/map/RouteMap'));

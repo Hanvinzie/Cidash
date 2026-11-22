@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Badge, { StatusBadge } from '../components/ui/Badge';
 import Icon from '../components/ui/Icon';
@@ -11,8 +12,9 @@ import LeaderboardList from '../components/circle/LeaderboardList';
 import LeaderboardModal from '../components/circle/LeaderboardModal';
 import Picker, { InitialAvatar } from '../components/ui/Picker';
 import { useApp } from '../store/AppContext';
+import { useToast } from '../store/ToastContext';
 import { useLiveRooms } from '../hooks/useGroupRun';
-import { activityFor, groupRunFor, ROUTES } from '../routes';
+import { activityFor, groupRunFor, joinLink, ROUTES } from '../routes';
 
 const TOP_COUNT = 3;
 
@@ -24,7 +26,7 @@ function greeting() {
 export default function Dashboard() {
   const { user, circles, activeCircle, setActiveCircle, leaderboard, myRank, groupMissions, claimGroupMission } = useApp();
   const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
   const [showMembers, setShowMembers] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const liveRooms = useLiveRooms(activeCircle?.id);
@@ -36,18 +38,29 @@ export default function Dashboard() {
 
   const maxMembers = activeCircle.maxMembers ?? (activeCircle.isPremium ? 25 : 5);
 
+  /** Bagikan TAUTAN undangan (bukan sekadar kode): membuka aplikasi lalu langsung bergabung ke circle ini. */
   async function handleShare() {
-    const text = `Join my circle "${activeCircle!.name}" on Cidash with code: ${activeCircle!.code}`;
+    const circle = activeCircle!;
+    const url = joinLink(circle.code);
+    const text = `Join my circle "${circle.name}" on Cidash!`;
     try {
       if (navigator.share) {
-        await navigator.share({ title: 'Cidash Circle', text });
-      } else {
-        await navigator.clipboard.writeText(activeCircle!.code);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        await navigator.share({ title: 'Cidash circle invite', text, url });
+        return;
       }
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return; // user menutup lembar bagikan
+      // gagal selain dibatalkan → coba salin
+    }
+    await copy(url, 'Invite link copied');
+  }
+
+  async function copy(value: string, okMessage: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      toast(okMessage, 'success');
     } catch {
-      /* cancelled by the user */
+      toast("Couldn't copy. Please copy it manually.", 'error');
     }
   }
 
@@ -67,60 +80,69 @@ export default function Dashboard() {
       <InstallBanner />
 
       {/* Circle + stats */}
-      <Card className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <Picker
-              variant="title"
-              label="Active circle"
-              sheetTitle="Switch circle"
-              value={activeCircle.id}
-              onChange={setActiveCircle}
-              options={circles.map((c) => {
-                const cap = c.maxMembers ?? (c.isPremium ? 25 : 5);
-                const sport = c.activityType === 'bike' ? 'Cycling' : 'Running';
-                return {
-                  value: c.id,
-                  label: c.name,
-                  description: `${sport} · ${c.memberCount}/${cap} members (${c.isPremium ? 'Premium' : 'Free'}) · ${c.code}`,
-                  leading: <InitialAvatar text={c.name} />,
-                };
-              })}
-            />
+      <Card className="space-y-5 p-5">
+        {/* Nama circle & jumlah anggota */}
+        <div className="space-y-2">
+          <Picker
+            variant="title"
+            label="Active circle"
+            sheetTitle="Switch circle"
+            value={activeCircle.id}
+            onChange={setActiveCircle}
+            options={circles.map((c) => {
+              const cap = c.maxMembers ?? (c.isPremium ? 25 : 5);
+              const sport = c.activityType === 'bike' ? 'Cycling' : 'Running';
+              return {
+                value: c.id,
+                label: c.name,
+                description: `${sport} · ${c.memberCount}/${cap} members (${c.isPremium ? 'Premium' : 'Free'}) · ${c.code}`,
+                leading: <InitialAvatar text={c.name} />,
+              };
+            })}
+          />
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone="neutral">{activeCircle.activityType === 'bike' ? 'Cycling' : 'Running'}</Badge>
+            <Badge tone={activeCircle.isPremium ? 'primary' : 'neutral'}>
+              {activeCircle.isPremium ? 'Premium' : 'Free'}
+            </Badge>
             <button
               type="button"
               onClick={() => setShowMembers(true)}
-              className="flex flex-wrap items-center gap-1 text-xs font-semibold text-subtle transition active:opacity-60"
+              className="flex items-center gap-1 rounded-full py-1 pl-1 text-xs font-semibold text-muted transition active:opacity-60"
+              aria-label={`${activeCircle.memberCount} of ${maxMembers} members. View members`}
             >
-              <Icon name="users" size={13} />
-              <span>
-                {activeCircle.memberCount}/{maxMembers} members
-              </span>
-              <Badge tone="neutral">{activeCircle.activityType === 'bike' ? 'Cycling' : 'Running'}</Badge>
-              <Badge tone={activeCircle.isPremium ? 'primary' : 'neutral'}>
-                {activeCircle.isPremium ? 'Premium' : 'Free'}
-              </Badge>
-              <Icon name="chevronRight" size={13} />
+              <Icon name="users" size={14} />
+              {activeCircle.memberCount}/{maxMembers} members
+              <Icon name="chevronRight" size={13} className="text-subtle" />
             </button>
           </div>
-          <button
-            type="button"
-            onClick={handleShare}
-            className="flex shrink-0 items-center gap-2 rounded-xl bg-inset px-3 py-2 transition hover:bg-line active:scale-95"
-            aria-label={`Share invite code ${activeCircle.code}`}
-          >
-            <span className="font-mono text-sm font-bold tracking-widest text-cidash-primary">{activeCircle.code}</span>
-            <Icon name={copied ? 'copy' : 'share'} size={16} className="text-muted" />
-          </button>
         </div>
-        {copied && (
-          <p className="text-xs font-semibold text-success" aria-live="polite">
-            Code copied
-          </p>
-        )}
+
+        {/* Undangan: kode besar yang mudah dibaca + satu tombol aksi utama */}
+        <div className="rounded-2xl bg-inset p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-subtle">Invite code</p>
+              <p className="mt-0.5 font-mono text-2xl font-extrabold leading-none tracking-[0.22em] text-cidash-primary">
+                {activeCircle.code}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void copy(activeCircle.code, 'Code copied')}
+              aria-label={`Copy invite code ${activeCircle.code}`}
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-surface text-muted shadow-card transition active:scale-90"
+            >
+              <Icon name="copy" size={18} />
+            </button>
+          </div>
+          <Button fullWidth className="mt-3" onClick={() => void handleShare()}>
+            <Icon name="share" size={16} /> Share invite link
+          </Button>
+        </div>
 
         {/* Rank Points & Season rank membuka leaderboard lengkap */}
-        <dl className="grid grid-cols-2 divide-x divide-line rounded-xl bg-inset">
+        <dl className="grid grid-cols-2 divide-x divide-line rounded-2xl bg-inset">
           {stats.map((s) => (
             <button
               key={s.label}
@@ -128,10 +150,10 @@ export default function Dashboard() {
               onClick={() => setShowLeaderboard(true)}
               aria-haspopup="dialog"
               aria-label={`${s.label}: ${s.value}. Open leaderboard`}
-              className="flex flex-col items-center gap-0.5 px-1 py-3 text-center transition first:rounded-l-xl last:rounded-r-xl active:bg-line/60"
+              className="flex flex-col items-center gap-1 px-1 py-4 text-center transition first:rounded-l-2xl last:rounded-r-2xl active:bg-line/60"
             >
-              <dd className="flex items-center gap-1 text-lg font-extrabold">
-                <Icon name={s.icon} size={16} className="text-cidash-primary" />
+              <dd className="flex items-center gap-1.5 text-xl font-extrabold">
+                <Icon name={s.icon} size={17} className="text-cidash-primary" />
                 {s.value}
               </dd>
               <dt className="flex items-center gap-0.5 text-[11px] font-medium text-subtle">

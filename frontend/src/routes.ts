@@ -5,6 +5,7 @@ export const ROUTES = {
   customQuest: '/custom-quest',
   activity: '/activity',
   profile: '/profile',
+  join: '/join',
 } as const;
 
 /** Buka Activity dengan misi terpilih otomatis. */
@@ -21,6 +22,8 @@ export const circleOnboarding = `${ROUTES.login}?step=circle`;
 export const groupRunFor = (roomId?: string) =>
   `${ROUTES.activity}?mode=group${roomId ? `&room=${encodeURIComponent(roomId)}` : ''}`;
 
-/** URL absolut undangan circle (dipakai QR Code di Share Card). Kode terisi otomatis di Login. */
-export const joinLink = (code: string) =>
-  `${window.location.origin}${circleOnboarding}&code=${encodeURIComponent(code)}`;
+/**
+ * Tautan undangan circle: `https://<host>/join?code=ABCD1234`. Dibuka user yang sudah login = langsung bergabung;
+ * belum login = diarahkan masuk/daftar dulu dengan kode terisi otomatis (lihat screens/Join.tsx).
+ */
+export const joinLink = (code: string) => `${window.location.origin}${ROUTES.join}?code=${encodeURIComponent(code)}`;

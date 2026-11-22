@@ -4,7 +4,7 @@ import AppLayout from './components/layout/AppLayout';
 import ProtectedRoute from './components/routing/ProtectedRoute';
 import HideBoot from './components/routing/HideBoot';
 import RunnerLoader from './components/ui/RunnerLoader';
-import { Activity, CustomQuest, Dashboard, Login, Profile } from './lazyScreens';
+import { Activity, CustomQuest, Dashboard, Join, Login, Profile } from './lazyScreens';
 import { ROUTES } from './routes';
 
 function BootFallback() {
@@ -26,6 +26,17 @@ export default function App() {
             <>
               <HideBoot />
               <Login />
+            </>
+          }
+        />
+
+        {/* Tautan undangan circle: menangani sendiri kasus sudah/belum login */}
+        <Route
+          path={ROUTES.join}
+          element={
+            <>
+              <HideBoot />
+              <Join />
             </>
           }
         />
