@@ -24,13 +24,13 @@ interface Props {
 export default function MissionSuggestModal({ type, missions, onPick, onSkip, onClose }: Props) {
   const noun = type === 'run' ? 'run' : 'ride';
   return (
-    <Modal title={`Do a mission on this ${noun}?`} onClose={onClose}>
+    <Modal title={`Count this ${noun} toward a goal?`} onClose={onClose}>
       {(close) => (
         <div className="space-y-4">
           <p className="text-sm text-muted">
-            You have unfinished {noun} missions. Pick one and this {noun} counts toward it.
+            You have unfinished {noun} goals and challenges. Pick one and this {noun} counts toward it.
           </p>
-          <ul className="space-y-2" aria-label="Open missions">
+          <ul className="space-y-2" aria-label="Open goals and challenges">
             {missions.map((m) => (
               <li key={m.id}>
                 <button

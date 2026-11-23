@@ -73,7 +73,7 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
   const canAfford = user.coins >= price.coins;
 
   const unavailableReason = (s?: string) =>
-    s === 'RESTING' ? 'Resting (24h immunity)' : s === 'IN_MISSION' ? 'Busy with another mission' : null;
+    s === 'RESTING' ? 'Resting (24h immunity)' : s === 'IN_MISSION' ? 'Busy with another challenge' : null;
 
   function send(close: (after?: () => void) => void) {
     if (!target || !canAfford || resting) return;
@@ -85,7 +85,7 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
   }
 
   return (
-    <Modal title="Send a Bomb Mission" onClose={onClose} showTitle={false}>
+    <Modal title="Send a Bomb Challenge" onClose={onClose} showTitle={false}>
       {(close) => (
         <div>
           <div className="-mt-1 mb-4 flex items-center gap-1">
@@ -130,7 +130,7 @@ export default function SendBombModal({ onClose, onSent }: { onClose: () => void
                         <InitialAvatar text={m.username} />
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-sm font-bold">@{m.username}</span>
-                          <span className="block truncate text-xs text-subtle">{reason ?? 'Ready to receive a Bomb Mission'}</span>
+                          <span className="block truncate text-xs text-subtle">{reason ?? 'Ready for a Bomb Challenge'}</span>
                         </span>
                         {!reason && <Icon name="chevronRight" size={16} className="text-subtle" />}
                       </button>

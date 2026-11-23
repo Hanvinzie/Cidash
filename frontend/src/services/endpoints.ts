@@ -34,12 +34,13 @@ export const ENDPOINTS = {
     detail: 'GET /activities/:id', // [ADA]
   },
   groupRun: {
-    // [BELUM] Saat ini memakai transport mock di services/groupRun.ts.
-    // Realtime: channel `group_run:<room_id>`, event `progress` tiap 5 detik, server broadcast `state`.
+    // Status & keanggotaan di REST/Postgres; posisi/progres lewat Supabase Broadcast pada channel circle bersama.
     list: 'GET /group-runs?circleId=',
+    get: 'GET /group-runs/:id',
     create: 'POST /group-runs',
     join: 'POST /group-runs/:id/join',
     start: 'POST /group-runs/:id/start',
     leave: 'POST /group-runs/:id/leave',
+    finish: 'POST /group-runs/:id/finish',
   },
 } as const;

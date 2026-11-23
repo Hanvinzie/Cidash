@@ -160,7 +160,7 @@ function QuestsScreen() {
           <Icon name="bomb" size={26} />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-lg font-extrabold leading-tight">Send a Bomb Mission</span>
+          <span className="block text-lg font-extrabold leading-tight">Send a Bomb Challenge</span>
           <span className="block text-xs text-white/85">Dare a friend. Put coins on the line.</span>
         </span>
         <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-cidash-primary">
@@ -169,10 +169,10 @@ function QuestsScreen() {
       </button>
 
       <section>
-        <SectionTitle>Your quests</SectionTitle>
+        <SectionTitle>Your challenges</SectionTitle>
         <div className="mb-4">
           <Segmented
-            ariaLabel="Quest direction"
+            ariaLabel="Challenge direction"
             value={tab}
             onChange={(v) => {
               setTab(v);
@@ -192,7 +192,7 @@ function QuestsScreen() {
         ) : (
           <div className="space-y-5">
             {active.length > 0 && (
-              <ul className="space-y-3" aria-label="Active quests">
+              <ul className="space-y-3" aria-label="Active challenges">
                 {active.map((q) => (
                   <li key={q.id}>{renderActive(q)}</li>
                 ))}
@@ -205,7 +205,7 @@ function QuestsScreen() {
                   <h3 className="text-[11px] font-bold uppercase tracking-wide text-subtle">Finished</h3>
                   <span className="text-[11px] text-subtle">Swipe left to delete</span>
                 </div>
-                <ul className="space-y-3" aria-label="Finished quests">
+                <ul className="space-y-3" aria-label="Finished challenges">
                   {finished.map((q) => (
                     <li key={q.id}>
                       <SwipeToDelete onDelete={() => hide(q.id)} label="Delete">

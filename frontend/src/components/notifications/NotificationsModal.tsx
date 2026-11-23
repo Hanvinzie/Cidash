@@ -48,7 +48,7 @@ export default function NotificationsModal({ onClose }: { onClose: () => void })
           </span>
           <p className="font-bold">Nothing yet</p>
           <p className="mt-1 text-sm text-muted">
-            New members, Bomb Missions, and circle milestones show up here. Turn alerts on or off in Settings.
+            New members, Bomb Challenges, and circle milestones show up here. Turn alerts on or off in Settings.
           </p>
         </div>
       ) : (

@@ -235,7 +235,7 @@ export class QuestsService {
           stakesPoints: price.stakesPoints,
           wagerCoins: price.coins,
           difficulty: createQuestDto.difficulty,
-          rewardTitle: createQuestDto.rewardTitle ?? 'P2P Bomb Mission',
+          rewardTitle: createQuestDto.rewardTitle ?? 'Bomb Challenge',
           deadline: deadlineDate,
           status: QuestStatus.PENDING,
         },

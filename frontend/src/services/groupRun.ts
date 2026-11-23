@@ -1,166 +1,202 @@
-import type { GroupRunProgress, GroupRunRoom, User } from '../types';
+import { http, post } from './http';
+import { acquireCircleChannel, type CircleChannelHandle } from './circleRealtime';
+import type { GroupRunRoom, GroupRunStatus } from '../types';
 
 // ============================================================
-// Group Run (Synchronous Session) — lapisan transport realtime.
+// Group Run (Synchronous Session).
 //
-// UI hanya bergantung pada interface `GroupRunTransport`.
-// Saat backend siap, buat implementasi baru (Supabase Realtime atau
-// WebSocket NestJS) lalu ganti export `groupRunTransport` di bawah.
+// Server (REST) menyimpan STATUS sesi dan keanggotaan: WAITING → ACTIVE → FINISHED. Posisi/progres peserta lewat
+// Supabase Realtime Broadcast di channel circle (lihat circleRealtime.ts) dan tidak pernah menyentuh database.
 //
-// Saran implementasi Supabase:
-//   const ch = supabase.channel(`group_run:${roomId}`)
-//   ch.on('broadcast', { event: 'state' }, ({ payload }) => cb(payload)).subscribe()
-//   sendProgress -> ch.send({ type: 'broadcast', event: 'progress', payload })
-//   Server (NestJS) mengagregasi progress & broadcast event `state`.
+// Perubahan status sampai ke klien lain lewat dua jalur: Postgres Changes pada tabel "GroupRun" (bila token Realtime
+// aktif) dan sinyal Broadcast `group_changed`. Keduanya hanya MEMICU pemuatan ulang daftar sesi lewat REST, jadi
+// data yang tampil selalu hasil pemeriksaan server. Tidak ada polling berulang selama channel tersambung.
 // ============================================================
 
-/** Interval kirim posisi tiap client (ms) — sesuai spesifikasi: 5 detik. */
-export const PROGRESS_INTERVAL_MS = 5000;
+/** Interval kirim progres tiap klien (ms): di dalam rentang 3–5 detik, cukup halus untuk leaderboard live. */
+export const PROGRESS_INTERVAL_MS = 4000;
 
-type Me = Pick<User, 'id' | 'username'>;
-type Unsubscribe = () => void;
-
-export interface GroupRunTransport {
-  /** Pantau daftar room aktif di sebuah circle (untuk banner Dashboard). */
-  subscribeRooms(circleId: string, cb: (rooms: GroupRunRoom[]) => void): Unsubscribe;
-  createRoom(circleId: string, me: Me): Promise<GroupRunRoom>;
-  joinRoom(roomId: string, me: Me): Promise<GroupRunRoom>;
-  startRoom(roomId: string, me: Me): Promise<void>;
-  leaveRoom(roomId: string, me: Me): Promise<void>;
-  sendProgress(progress: GroupRunProgress): void;
-  /** Terima state room terbaru setiap kali server broadcast. */
-  subscribeRoom(roomId: string, cb: (room: GroupRunRoom) => void): Unsubscribe;
+interface ApiRoom {
+  id: string;
+  circleId: string;
+  hostId: string;
+  hostName: string;
+  status: 'WAITING' | 'ACTIVE' | 'FINISHED';
+  startedAt: string | null;
+  participants: { userId: string; username: string; joinedAt: string }[];
 }
 
-// ---------------- Mock in-memory (prototype) ----------------
+const STATUS: Record<ApiRoom['status'], GroupRunStatus> = { WAITING: 'lobby', ACTIVE: 'live', FINISHED: 'ended' };
 
-function createMockTransport(): GroupRunTransport {
-  const rooms = new Map<string, GroupRunRoom>();
-  const roomSubs = new Map<string, Set<(r: GroupRunRoom) => void>>();
-  const listSubs = new Set<{ circleId: string; cb: (r: GroupRunRoom[]) => void }>();
-  const botTimers = new Map<string, ReturnType<typeof setInterval>>();
-  const BOT_IDS = new Set(['usr_002', 'usr_003']);
+export function fromApiRoom(r: ApiRoom): GroupRunRoom {
+  return {
+    id: r.id,
+    circleId: r.circleId,
+    hostId: r.hostId,
+    hostName: r.hostName,
+    status: STATUS[r.status] ?? 'ended',
+    startedAt: r.startedAt ? Date.parse(r.startedAt) : undefined,
+    participants: r.participants.map((p) => ({
+      userId: p.userId,
+      username: p.username,
+      distanceKm: 0,
+      updatedAt: Date.parse(p.joinedAt),
+    })),
+  };
+}
 
-  const clone = (r: GroupRunRoom): GroupRunRoom => ({ ...r, participants: r.participants.map((p) => ({ ...p })) });
-  const activeIn = (circleId: string) =>
-    [...rooms.values()].filter((r) => r.circleId === circleId && r.status !== 'ended').map(clone);
+export const groupRunApi = {
+  list: (circleId: string) =>
+    http<{ rooms: ApiRoom[] }>(`/group-runs?circleId=${encodeURIComponent(circleId)}`).then((r) => r.rooms.map(fromApiRoom)),
+  get: (id: string) => http<{ room: ApiRoom }>(`/group-runs/${id}`).then((r) => fromApiRoom(r.room)),
+  create: (circleId: string) => post<{ room: ApiRoom }>('/group-runs', { circleId }).then((r) => fromApiRoom(r.room)),
+  join: (id: string) => post<{ room: ApiRoom }>(`/group-runs/${id}/join`).then((r) => fromApiRoom(r.room)),
+  start: (id: string) => post<{ room: ApiRoom }>(`/group-runs/${id}/start`).then((r) => fromApiRoom(r.room)),
+  finish: (id: string) => post<{ room: ApiRoom }>(`/group-runs/${id}/finish`).then((r) => fromApiRoom(r.room)),
+  leave: (id: string) =>
+    post<{ room: ApiRoom | null }>(`/group-runs/${id}/leave`).then((r) => (r.room ? fromApiRoom(r.room) : null)),
+};
 
-  function emit(roomId: string) {
-    const room = rooms.get(roomId);
-    if (!room) return;
-    roomSubs.get(roomId)?.forEach((cb) => cb(clone(room)));
-    listSubs.forEach((s) => s.circleId === room.circleId && s.cb(activeIn(s.circleId)));
+// ---------------- Penyimpanan daftar sesi per circle (dibagi semua komponen) ----------------
+
+type Listener = (rooms: GroupRunRoom[], loaded: boolean) => void;
+
+interface Store {
+  circleId: string;
+  rooms: GroupRunRoom[];
+  loaded: boolean;
+  listeners: Set<Listener>;
+  handle: CircleChannelHandle | null;
+  inFlight: boolean;
+  dirty: boolean;
+  lastFetch: number;
+  timer: ReturnType<typeof setTimeout> | null;
+  fallback: ReturnType<typeof setInterval> | null;
+  cleanups: Array<() => void>;
+}
+
+/** Sinyal beruntun digabung: satu pemuatan dalam jendela ini. */
+const DEBOUNCE_MS = 350;
+/** Jeda minimum antar dua pemuatan, apa pun pemicunya. */
+const MIN_GAP_MS = 1000;
+/** Bila Realtime mati/terputus, kembali ke pemuatan berkala yang jarang (hanya selama terputus). */
+const DEGRADED_POLL_MS = 12_000;
+
+const stores = new Map<string, Store>();
+
+function emit(s: Store) {
+  s.listeners.forEach((l) => l(s.rooms, s.loaded));
+}
+
+async function fetchRooms(s: Store) {
+  if (s.inFlight) {
+    s.dirty = true;
+    return;
   }
+  s.inFlight = true;
+  s.lastFetch = Date.now();
+  try {
+    s.rooms = await groupRunApi.list(s.circleId);
+    s.loaded = true;
+    emit(s);
+  } catch {
+    /* jaringan putus / ditolak: pertahankan daftar sebelumnya, jangan dikosongkan */
+  } finally {
+    s.inFlight = false;
+    if (s.dirty) {
+      s.dirty = false;
+      schedule(s);
+    }
+  }
+}
 
-  /** Simulasi peserta lain mengirim progress tiap 5 detik (~3 m/s). */
-  function runBots(roomId: string) {
-    if (botTimers.has(roomId)) return;
-    botTimers.set(
-      roomId,
-      setInterval(() => {
-        const room = rooms.get(roomId);
-        if (!room || room.status !== 'live') return;
-        room.participants.forEach((p) => {
-          if (!BOT_IDS.has(p.userId)) return;
-          p.distanceKm = +(p.distanceKm + 0.012 + Math.random() * 0.008).toFixed(3);
-          p.updatedAt = Date.now();
-        });
-        emit(roomId);
-      }, PROGRESS_INTERVAL_MS),
+function schedule(s: Store, delay = DEBOUNCE_MS) {
+  if (s.timer) return; // sudah terjadwal: sinyal ini ikut terbawa
+  const wait = Math.max(delay, MIN_GAP_MS - (Date.now() - s.lastFetch));
+  s.timer = setTimeout(() => {
+    s.timer = null;
+    void fetchRooms(s);
+  }, wait);
+}
+
+function openStore(circleId: string): Store {
+  const s: Store = {
+    circleId,
+    rooms: [],
+    loaded: false,
+    listeners: new Set(),
+    handle: acquireCircleChannel(circleId),
+    inFlight: false,
+    dirty: false,
+    lastFetch: 0,
+    timer: null,
+    fallback: null,
+    cleanups: [],
+  };
+  const trigger = () => schedule(s);
+  const h = s.handle;
+  if (h) {
+    s.cleanups.push(
+      h.on('group_changed', trigger),
+      h.onGroupRunRow(trigger),
+      // Tersambung (kembali): ambil keadaan terbaru, mungkin ada sinyal yang terlewat saat putus.
+      h.onStatus((connected) => connected && trigger()),
     );
   }
+  const onVisible = () => document.visibilityState === 'visible' && trigger();
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('online', trigger);
+  s.cleanups.push(
+    () => document.removeEventListener('visibilitychange', onVisible),
+    () => window.removeEventListener('online', trigger),
+  );
+  // Jaring pengaman: hanya memuat saat Realtime tidak tersambung. Saat tersambung, tidak ada polling sama sekali.
+  s.fallback = setInterval(() => {
+    if (document.visibilityState === 'visible' && !(s.handle?.connected ?? false)) schedule(s);
+  }, DEGRADED_POLL_MS);
+  schedule(s, 0);
+  return s;
+}
 
-  // Seed: satu room live di circle pertama, di-host "dika".
-  const seed: GroupRunRoom = {
-    id: 'room_demo01',
-    circleId: 'cir_001',
-    hostId: 'usr_002',
-    hostName: 'dika',
-    status: 'live',
-    startedAt: Date.now() - 4 * 60_000,
-    participants: [
-      { userId: 'usr_002', username: 'dika', distanceKm: 0.82, updatedAt: Date.now() },
-      { userId: 'usr_003', username: 'rani', distanceKm: 0.61, updatedAt: Date.now() },
-    ],
-  };
-  rooms.set(seed.id, seed);
-  runBots(seed.id);
+function closeStore(s: Store) {
+  s.cleanups.forEach((c) => c());
+  if (s.timer) clearTimeout(s.timer);
+  if (s.fallback) clearInterval(s.fallback);
+  s.handle?.release();
+  stores.delete(s.circleId);
+}
 
-  const delay = <T>(v: T) => new Promise<T>((r) => setTimeout(() => r(v), 150)); // latensi tiruan
-
-  return {
-    subscribeRooms(circleId, cb) {
-      const sub = { circleId, cb };
-      listSubs.add(sub);
-      cb(activeIn(circleId));
-      return () => listSubs.delete(sub);
-    },
-
-    async createRoom(circleId, me) {
-      const room: GroupRunRoom = {
-        id: `room_${Date.now().toString(36)}`,
-        circleId,
-        hostId: me.id,
-        hostName: me.username,
-        status: 'lobby',
-        participants: [{ userId: me.id, username: me.username, distanceKm: 0, updatedAt: Date.now() }],
-      };
-      rooms.set(room.id, room);
-      emit(room.id);
-      return delay(clone(room));
-    },
-
-    async joinRoom(roomId, me) {
-      const room = rooms.get(roomId);
-      if (!room || room.status === 'ended') throw new Error('Room not found or already ended.');
-      if (!room.participants.some((p) => p.userId === me.id)) {
-        room.participants.push({ userId: me.id, username: me.username, distanceKm: 0, updatedAt: Date.now() });
-      }
-      emit(roomId);
-      return delay(clone(room));
-    },
-
-    async startRoom(roomId, me) {
-      const room = rooms.get(roomId);
-      if (!room || room.hostId !== me.id) throw new Error('Only the host can start the session.');
-      room.status = 'live';
-      room.startedAt = Date.now();
-      emit(roomId);
-      runBots(roomId);
-      await delay(undefined);
-    },
-
-    async leaveRoom(roomId, me) {
-      const room = rooms.get(roomId);
-      if (!room) return;
-      room.participants = room.participants.filter((p) => p.userId !== me.id);
-      if (room.participants.length === 0) {
-        room.status = 'ended';
-        clearInterval(botTimers.get(roomId));
-        botTimers.delete(roomId);
-      }
-      emit(roomId);
-      await delay(undefined);
-    },
-
-    sendProgress({ roomId, userId, distanceKm, point }) {
-      const p = rooms.get(roomId)?.participants.find((x) => x.userId === userId);
-      if (!p) return;
-      p.distanceKm = distanceKm;
-      p.lastPoint = point;
-      p.updatedAt = Date.now();
-      emit(roomId);
-    },
-
-    subscribeRoom(roomId, cb) {
-      if (!roomSubs.has(roomId)) roomSubs.set(roomId, new Set());
-      roomSubs.get(roomId)!.add(cb);
-      const room = rooms.get(roomId);
-      if (room) cb(clone(room));
-      return () => roomSubs.get(roomId)?.delete(cb);
-    },
+/** Berlangganan daftar sesi terbuka sebuah circle. Penerima langsung diberi data terakhir yang diketahui. */
+export function subscribeRooms(circleId: string, listener: Listener): () => void {
+  let s = stores.get(circleId);
+  if (!s) {
+    s = openStore(circleId);
+    stores.set(circleId, s);
+  }
+  s.listeners.add(listener);
+  if (s.loaded) listener(s.rooms, true);
+  const store = s;
+  return () => {
+    store.listeners.delete(listener);
+    if (store.listeners.size === 0) closeStore(store);
   };
 }
 
-// TODO: ganti dengan createSupabaseTransport() / createSocketTransport() saat backend siap.
-export const groupRunTransport: GroupRunTransport = createMockTransport();
+/** Minta pemuatan ulang segera (mis. setelah aksi saya sendiri), tanpa menunggu sinyal. */
+export function refreshRooms(circleId: string) {
+  const s = stores.get(circleId);
+  if (s) schedule(s, 0);
+}
+
+/** Beri tahu anggota lain bahwa sesi berubah. Sinyal tanpa data: penerima memuat ulang lewat REST. */
+export function announceGroupChange(circleId: string, roomId: string) {
+  const store = stores.get(circleId);
+  if (store?.handle) {
+    store.handle.send('group_changed', { roomId, ts: Date.now() });
+    return;
+  }
+  const h = acquireCircleChannel(circleId);
+  if (!h) return;
+  h.send('group_changed', { roomId, ts: Date.now() });
+  setTimeout(() => h.release(), 4000); // beri waktu channel tersambung & mengirim antrean
+}

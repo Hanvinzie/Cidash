@@ -1,7 +1,8 @@
 import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
-import { estimateCalories, formatDuration, formatPace } from '../../lib/geo';
+import { caloriesFor } from '../../lib/calories';
+import { formatDuration, formatPace } from '../../lib/geo';
 import type { MissionStatus, VerificationResult } from '../../types';
 
 interface VerificationModalProps {
@@ -12,11 +13,11 @@ interface VerificationModalProps {
 }
 
 const MISSION_TEXT: Record<MissionStatus, string> = {
-  completed: 'Mission complete',
-  failed: 'Mission missed',
-  in_progress: 'Mission progress saved',
+  completed: 'Target reached',
+  failed: 'Target missed',
+  in_progress: 'Progress saved',
   pending: '',
-  shielded: 'Mission shielded',
+  shielded: 'Challenge shielded',
 };
 
 export default function VerificationModal({ result, onRetry, onDone, onShare }: VerificationModalProps) {
@@ -45,7 +46,7 @@ export default function VerificationModal({ result, onRetry, onDone, onShare }: 
     { label: 'Time', value: formatDuration(durationSec) },
     {
       label: 'kcal',
-      value: log ? estimateCalories(distanceKm, log.type) : '—',
+      value: log ? caloriesFor(distanceKm, log.type, durationSec) : '—',
     },
   ];
 

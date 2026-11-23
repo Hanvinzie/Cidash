@@ -10,7 +10,7 @@ import { circleOnboarding } from '../../routes';
 
 const COPY = {
   home: 'Create a private circle or join one with an invite code.',
-  quests: 'Bomb Missions are played against friends. Create a circle or join one with an invite code to unlock Quests.',
+  quests: 'Bomb Challenges are played against friends. Create a circle or join one with an invite code to unlock Challenges.',
   activity: 'Runs and rides are recorded for your circle. Create a circle or join one with an invite code to unlock Activity.',
 } as const;
 

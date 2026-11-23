@@ -43,6 +43,13 @@ enum QuestStatus {
   SHIELDED
 }
 
+// Siklus hidup sesi Group Run: menunggu peserta -> berjalan -> selesai.
+enum GroupRunStatus {
+  WAITING
+  ACTIVE
+  FINISHED
+}
+
 enum PointTxType {
   QUEST_WIN
   QUEST_PENALTY
@@ -74,6 +81,8 @@ model User {
   questsReceived   Quest[]           @relation("ReceivedQuests")
   pointLedgers     PointLedger[]
   coinTransactions CoinTransaction[]
+  groupRunsHosted  GroupRun[]        @relation("GroupRunHost")
+  groupRunMemberships GroupRunParticipant[]
 
   @@index([rankPoints(sort: Desc)])
 }
@@ -90,6 +99,7 @@ model Squad {
   createdBy    User?         @relation("SquadCreator", fields: [createdById], references: [id])
   members      SquadMember[]
   quests       Quest[]
+  groupRuns    GroupRun[]
 }
 
 model SquadMember {
@@ -190,4 +200,35 @@ model CoinTransaction {
 
   @@index([userId, createdAt(sort: Desc), reference])
   @@index([reference])
+}
+
+// Sesi Group Run. Hanya STATUS dan keanggotaan yang disimpan di database. Posisi & progres peserta tidak pernah
+// ditulis ke sini: dikirim lewat Supabase Realtime Broadcast supaya database tidak terbebani.
+model GroupRun {
+  id        String         @id @default(uuid())
+  squadId   String
+  hostId    String
+  status    GroupRunStatus @default(WAITING)
+  createdAt DateTime       @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  squad        Squad                 @relation(fields: [squadId], references: [id], onDelete: Cascade)
+  host         User                  @relation("GroupRunHost", fields: [hostId], references: [id], onDelete: Cascade)
+  participants GroupRunParticipant[]
+
+  @@index([squadId, status])
+}
+
+model GroupRunParticipant {
+  id         String   @id @default(uuid())
+  groupRunId String
+  userId     String
+  joinedAt   DateTime @default(now())
+
+  groupRun   GroupRun @relation(fields: [groupRunId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupRunId, userId])
+  @@index([userId])
 }

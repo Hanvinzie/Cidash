@@ -111,7 +111,7 @@ export default function ProfileOverviewModal({ onClose }: { onClose: () => void 
           </dl>
         </Section>
 
-        <Section title="Bomb Missions">
+        <Section title="Bomb Challenges">
           <dl className="grid grid-cols-4 gap-2 text-center">
             <Stat label="Active" value={count('pending') + count('in_progress')} />
             <Stat label="Done" value={count('completed')} />

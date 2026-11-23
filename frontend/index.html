@@ -8,7 +8,7 @@
     <meta name="theme-color" content="#F6F6F8" />
     <meta
       name="description"
-      content="Cidash — a social, gamified fitness tracker for private, invite-only circles."
+      content="Cidash - social gamified fitness tracker app"
     />
     <meta name="application-name" content="Cidash" />
     <meta name="color-scheme" content="light dark" />
@@ -32,7 +32,7 @@
     <meta name="apple-mobile-web-app-title" content="Cidash" />
     <meta name="format-detection" content="telephone=no" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <title>Cidash — Social Gamified Fitness Tracker</title>
+    <title>Cidash - Social Gamified Fitness Tracker</title>
 
     <!-- Terapkan tema sebelum render agar tidak berkedip (lihat store/ThemeContext.tsx). -->
     <script>
@@ -41,6 +41,9 @@
         if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.userAgent.indexOf('Mac') > -1 && navigator.maxTouchPoints > 1)) {
           document.documentElement.classList.add('ios');
         }
+        // Palet tema (data-theme) dipasang sebelum render; id tak dikenal otomatis memakai tema bawaan di CSS.
+        var themeId = localStorage.getItem('cidash_theme_id');
+        if (themeId) document.documentElement.setAttribute('data-theme', themeId);
         var t = localStorage.getItem('cidash_theme');
         var dark = t ? t === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
         if (dark) {

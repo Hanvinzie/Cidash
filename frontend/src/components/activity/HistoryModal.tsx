@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import Button from '../ui/Button';
-import { StatusBadge } from '../ui/Badge';
 import Icon from '../ui/Icon';
 import Modal from '../ui/Modal';
 import RouteSvg from '../share/RouteSvg';
-import { estimateCalories, formatDuration, formatPace } from '../../lib/geo';
+import { caloriesFor } from '../../lib/calories';
+import { formatDuration, formatPace } from '../../lib/geo';
 import type { ActivityLog } from '../../types';
 
 interface HistoryModalProps {
@@ -55,7 +55,7 @@ export default function HistoryModal({ logs, onClose, onShare }: HistoryModalPro
                       className="h-14 w-14 shrink-0 rounded-xl bg-cidash-primary/5 text-subtle"
                     />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-bold">{title(a)}</span>
+                      <span className="line-clamp-2 block font-bold leading-snug [overflow-wrap:anywhere]">{title(a)}</span>
                       <span className="block truncate text-xs text-subtle">
                         {subtitle(a)}
                       </span>
@@ -75,32 +75,30 @@ export default function HistoryModal({ logs, onClose, onShare }: HistoryModalPro
 
 function Detail({ log, onBack, onShare }: { log: ActivityLog; onBack: () => void; onShare: () => void }) {
   const stats = [
-    { label: 'Distance', value: `${log.distanceKm} km` },
-    { label: 'Time', value: formatDuration(log.durationSec) },
-    { label: 'Pace', value: `${formatPace(log.durationSec, log.distanceKm)} /km` },
-    log.elevationGain ? { label: 'Elevation', value: `${Math.round(log.elevationGain)} m` } : { label: 'Calories', value: `${estimateCalories(log.distanceKm, log.type)} kcal` },
+    { label: 'Distance', value: `${log.distanceKm}`, unit: 'km' },
+    { label: 'Time', value: formatDuration(log.durationSec), unit: '' },
+    { label: 'Pace', value: formatPace(log.durationSec, log.distanceKm), unit: '/km' },
+    { label: 'Elevation', value: `${Math.round(log.elevationGain ?? 0)}`, unit: 'm' },
+    { label: 'Calories', value: `${caloriesFor(log.distanceKm, log.type, log.durationSec)}`, unit: 'kcal' },
   ];
   return (
-    <div className="space-y-4">
-      <div className="-mt-1 flex items-center gap-1">
+    <div className="space-y-5">
+      {/* Baris atas: tombol kembali + jenis & tanggal. Judul panjang ada di bawahnya agar tidak berdesakan dengan tombol. */}
+      <div className="-mt-1 flex items-center gap-2">
         <button
           type="button"
           onClick={onBack}
           aria-label="Back to history"
-          className="flex h-10 w-10 items-center justify-center rounded-full text-muted transition active:scale-90 active:bg-inset"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted transition active:scale-90 active:bg-inset"
         >
           <Icon name="chevronLeft" size={20} />
         </button>
-        <div className="min-w-0">
-          <h3 className="truncate text-lg font-bold">{title(log)}</h3>
-          <p className="text-xs text-subtle">
-            {log.date} · {log.type === 'run' ? 'Run' : 'Ride'}
-          </p>
-        </div>
-        <span className="ml-auto">
-          <StatusBadge status={log.missionStatus} />
-        </span>
+        <p className="min-w-0 truncate text-xs font-semibold text-subtle">
+          {log.type === 'run' ? 'Run' : 'Ride'} · {log.date}
+        </p>
       </div>
+
+      <h3 className="px-1 text-xl font-extrabold leading-snug [overflow-wrap:anywhere] line-clamp-3">{title(log)}</h3>
 
       <RouteSvg
         points={log.route}
@@ -111,11 +109,18 @@ function Detail({ log, onBack, onShare }: { log: ActivityLog; onBack: () => void
         className="h-44 w-full rounded-2xl bg-cidash-primary/5 text-subtle"
       />
 
-      <dl className="grid grid-cols-2 gap-2">
-        {stats.map((s) => (
-          <div key={s.label} className="rounded-2xl bg-inset px-4 py-3">
-            <dd className="text-xl font-extrabold tabular-nums">{s.value}</dd>
-            <dt className="text-[11px] font-medium text-subtle">{s.label}</dt>
+      <dl className="grid grid-cols-6 gap-2.5">
+        {stats.map((s, i) => (
+          <div
+            key={s.label}
+            // 3 kartu di baris atas, 2 kartu lebar di baris bawah: angka panjang (mis. 1:02:45) tetap muat.
+            className={`rounded-2xl bg-inset px-3 py-3 ${i < 3 ? 'col-span-2' : 'col-span-3'}`}
+          >
+            <dd className="flex items-baseline gap-1 text-lg font-extrabold tabular-nums leading-tight">
+              <span className="min-w-0 truncate">{s.value}</span>
+              {s.unit && <span className="text-[11px] font-semibold text-subtle">{s.unit}</span>}
+            </dd>
+            <dt className="mt-0.5 text-[11px] font-medium text-subtle">{s.label}</dt>
           </div>
         ))}
       </dl>

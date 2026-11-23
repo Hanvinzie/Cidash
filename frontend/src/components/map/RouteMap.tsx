@@ -317,31 +317,29 @@ export default function RouteMap({ points, here, mode = 'preview', friends, clas
     <div className={`relative h-full w-full ${className}`}>
       {/* Inline style: CSS MapLibre (.maplibregl-map {position: relative}) dimuat belakangan dan menimpa kelas Tailwind → tinggi 0. */}
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      {/* Kompas di kanan atas: jarum menunjuk utara; ketuk untuk mengunci utara-di-atas / kembali searah gerak. */}
-      {recording && (
-        <button
-          type="button"
-          onClick={() => {
-            setNorthUp((v) => !v);
-            setFollow(true);
-          }}
-          aria-label={northUp ? 'North is up. Tap to rotate with your direction' : 'Map rotates with you. Tap to keep north up'}
-          aria-pressed={northUp}
-          className={`${buttonClass} absolute right-3 z-10 ${northUp ? '!bg-cidash-primary !text-cidash-on-primary' : ''}`}
-          style={{ top: 'calc(env(safe-area-inset-top) + 0.75rem)' }}
-        >
-          <span ref={needleRef} className="relative block h-8 w-8" style={{ transition: 'transform 80ms linear' }} aria-hidden>
-            <svg viewBox="0 0 32 32" className="h-8 w-8">
-              <path d="M16 3 21.5 16h-11Z" fill={northUp ? '#fff' : '#ea2845'} />
-              <path d="M16 29 10.5 16h11Z" fill="currentColor" opacity="0.35" />
-            </svg>
-            <span className="absolute left-1/2 top-[-1px] -translate-x-1/2 text-[8px] font-extrabold leading-none">N</span>
-          </span>
-        </button>
-      )}
-
-      {/* Fokus & rute lengkap di kanan bawah, tepat di atas ikon info atribusi OpenFreeMap. */}
+      {/* Kontrol peta dalam satu kolom di kanan bawah, tepat di atas ikon info atribusi: Kompas, Fokus, Rute lengkap.
+          Ketiganya memakai buttonClass yang sama (44×44, bulat) dan jarak antar-tombol yang sama. */}
       <div className="absolute right-3 z-10 flex flex-col gap-2" style={{ bottom: '3.25rem' }}>
+        {recording && (
+          <button
+            type="button"
+            onClick={() => {
+              setNorthUp((v) => !v);
+              setFollow(true);
+            }}
+            aria-label={northUp ? 'North is up. Tap to rotate with your direction' : 'Map rotates with you. Tap to keep north up'}
+            aria-pressed={northUp}
+            className={`${buttonClass} ${northUp ? '!bg-cidash-primary !text-cidash-on-primary' : ''}`}
+          >
+            <span ref={needleRef} className="relative block h-8 w-8" style={{ transition: 'transform 80ms linear' }} aria-hidden>
+              <svg viewBox="0 0 32 32" className="h-8 w-8">
+                <path d="M16 3 21.5 16h-11Z" fill={northUp ? '#fff' : '#ea2845'} />
+                <path d="M16 29 10.5 16h11Z" fill="currentColor" opacity="0.35" />
+              </svg>
+              <span className="absolute left-1/2 top-[-1px] -translate-x-1/2 text-[8px] font-extrabold leading-none">N</span>
+            </span>
+          </button>
+        )}
         <button
           type="button"
           onClick={recenter}

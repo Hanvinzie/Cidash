@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { haversineKm } from '../lib/geo';
+import { createElevationTracker, type ElevationTracker } from '../lib/elevation';
+import { createPaceSmoother } from '../lib/pace';
+import { useScreenWakeLock } from './useScreenWakeLock';
 import { setGeocodeLocked } from '../lib/geocode';
 import { createDemoRunner } from '../lib/demoRoute';
 import { issueFromError, type LocationIssue } from '../lib/location';
@@ -16,16 +19,21 @@ import type { ActivityType, GeoPoint } from '../types';
 
 export type TrackStatus = 'idle' | 'running' | 'paused' | 'finished';
 
-/** Batas akurasi maksimum saat sudah mendapat lock satelit (di atas ini diabaikan agar rute tidak melompat). */
-const MAX_TRACKING_ACCURACY_M = 55;
-/** Batas akurasi awal maksimum untuk menerima titik pertama sebelum lock GPS penuh. */
-const MAX_INITIAL_ACCURACY_M = 120;
+/**
+ * Batas akurasi maksimum (m) setelah mendapat lock satelit. Sampel yang lebih buruk diabaikan: di kota, pantulan sinyal
+ * (multipath) sering melaporkan ±30–50 m dan itulah yang menggambar zig-zag serta menambah jarak palsu.
+ */
+const MAX_TRACKING_ACCURACY_M = 25;
+/** Batas akurasi awal untuk titik pertama sebelum lock penuh; fix yang jauh lebih tajam kemudian menggantikannya. */
+const MAX_INITIAL_ACCURACY_M = 50;
 /** Rule 1 — sampel GPS diproses paling sering sekali per detik (1–3 detik). */
 const MIN_SAMPLE_INTERVAL_MS = 1000;
-/** Rule 1 — perpindahan di bawah ini DAN kecepatan ≈ 0 dianggap jitter (berhenti di lampu merah, dsb.). */
-const JITTER_DISTANCE_M = 3;
-/** Rule 1 — di bawah kecepatan ini (m/s) pengguna dianggap diam. */
-const STILL_SPEED_MPS = 0.5;
+/** Perpindahan di bawah ini DAN hampir diam dianggap jitter (berhenti di lampu merah, goyangan saat berdiri). */
+const JITTER_DISTANCE_M = 5;
+/** Batas atas ambang jitter yang melebar mengikuti akurasi sinyal (ambang = 50% akurasi, dibatasi ini). */
+const JITTER_MAX_M = 15;
+/** Di bawah kecepatan ini (m/s, ≈ 2,9 km/jam) pengguna dianggap diam. Jalan santai sudah ≥ 1 m/s. */
+const STILL_SPEED_MPS = 0.8;
 /**
  * Bila sensor tidak melaporkan kecepatan, kecepatan dihitung dari perpindahan BERSIH selama jendela ini.
  * Goyangan GPS saat diam saling meniadakan (perpindahan bersih kecil), sedangkan berjalan/berlari tidak.
@@ -33,12 +41,13 @@ const STILL_SPEED_MPS = 0.5;
 const SPEED_WINDOW_MS = 6000;
 /** Jendela minimal sebelum kecepatan hasil hitung dipercaya; sebelum itu dianggap bergerak. */
 const SPEED_WINDOW_MIN_MS = 3000;
-/** Kecepatan maksimum lonjakan GPS (m/s) — di atas 35 m/s (126 km/jam) dianggap glitch/multipath spike. */
-const MAX_SPIKE_SPEED_MPS = 35;
-/** Parameter Kalman process noise (m/detik). */
-const KALMAN_Q_MPS = 3.2;
-/** Naik/turun minimal (m) agar dihitung sebagai elevation gain — meredam noise altimeter. */
-const ELEVATION_STEP_M = 3;
+/**
+ * Kecepatan maksimum (m/s) antar dua titik. Di atasnya = lonjakan GPS/glitch, titik dibuang.
+ * Lari: 12 m/s (43 km/jam, di atas sprinter elit). Sepeda: 25 m/s (90 km/jam, termasuk turunan curam).
+ */
+const MAX_SPIKE_SPEED_MPS: Record<ActivityType, number> = { run: 12, bike: 25 };
+/** Parameter Kalman process noise (m/detik). Lebih kecil = lintasan lebih halus. */
+const KALMAN_Q_MPS = 2.2;
 /**
  * Setelah Pause→Resume, bila posisi pertama lebih jauh dari ini dari titik terakhir sebelum jeda,
  * rute DIPUTUS (segmen baru, tanpa garis penghubung dan tanpa jarak). Di bawah ini dianggap
@@ -69,8 +78,6 @@ export interface FinishedTrack {
 type FlushReason = 'interval' | 'count' | 'pause' | 'online';
 export type SyncState = 'idle' | 'syncing' | 'pending';
 
-type WakeLockSentinelLike = { release: () => Promise<void> };
-
 /**
  * Perekam rute berbasis Geolocation API.
  *
@@ -86,6 +93,7 @@ export function useGeoTracker() {
   const [distanceKm, setDistanceKm] = useState(0);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [elevationGain, setElevationGain] = useState(0);
+  const [paceSecPerKm, setPaceSecPerKm] = useState<number | null>(null);
   const [accuracyMeters, setAccuracyMeters] = useState<number | null>(null);
   /** Masalah lokasi saat merekam. 'timeout' = sinyal lemah (tracking tetap jalan). */
   const [issue, setIssue] = useState<LocationIssue | null>(null);
@@ -104,7 +112,9 @@ export function useGeoTracker() {
   // Sumber kebenaran data sesi (ref) agar callback async tidak membaca state basi.
   const pointsRef = useRef<GeoPoint[]>([]);
   const distanceRef = useRef(0);
-  const elevationRef = useRef({ gain: 0, ref: null as number | null });
+  const elevationRef = useRef<ElevationTracker>(createElevationTracker());
+  /** Pace halus dari waktu aktif (bukan waktu dinding), supaya tidak melompat antar sampel GPS. */
+  const paceRef = useRef(createPaceSmoother());
   const sessionRef = useRef<{ id: string; type: ActivityType; startedAt: number; simulated: boolean } | null>(null);
 
   const lastPoint = useRef<GeoPoint | null>(null);
@@ -118,7 +128,6 @@ export function useGeoTracker() {
   const kalman = useRef<KalmanState | null>(null);
   const accumulatedMs = useRef<number>(0);
   const runSegmentStartMs = useRef<number | null>(null);
-  const wakeLock = useRef<WakeLockSentinelLike | null>(null);
 
   const sync = useRef({ acked: 0, inFlight: false, failures: 0, retryAt: 0, disabled: false });
   const flushRef = useRef<(reason: FlushReason) => Promise<void>>(async () => {});
@@ -152,7 +161,7 @@ export function useGeoTracker() {
       simulated: session.simulated,
       distanceKm: distanceRef.current,
       elapsedSec: currentElapsedSec(),
-      elevationGain: elevationRef.current.gain,
+      elevationGain: elevationRef.current.gain(),
       ackedCount: sync.current.acked,
     };
     void saveMeta(meta);
@@ -166,7 +175,7 @@ export function useGeoTracker() {
       const { meta, points: saved } = stored;
       pointsRef.current = saved;
       distanceRef.current = meta.distanceKm;
-      elevationRef.current = { gain: meta.elevationGain, ref: null };
+      elevationRef.current = createElevationTracker(meta.elevationGain);
       accumulatedMs.current = meta.elapsedSec * 1000;
       sync.current = { acked: Math.min(meta.ackedCount, saved.length), inFlight: false, failures: 0, retryAt: 0, disabled: false };
       sessionRef.current = { id: meta.sessionId, type: meta.activityType, startedAt: meta.startedAt, simulated: meta.simulated };
@@ -217,7 +226,7 @@ export function useGeoTracker() {
         ackedCount: s.acked,
         distanceKm: distanceRef.current,
         elapsedSec: currentElapsedSec(),
-        elevationGain: elevationRef.current.gain,
+        elevationGain: elevationRef.current.gain(),
       });
       s.inFlight = false;
 
@@ -287,23 +296,11 @@ export function useGeoTracker() {
     };
   }, []);
 
-  /** Elevation gain dari altimeter GPS, dengan ambang agar noise ±beberapa meter tidak menambah tanjakan palsu. */
+  /** Elevation gain dari altimeter GPS lewat filter median + EMA + histeresis (lib/elevation.ts). */
   const trackElevation = useCallback((p: GeoPoint) => {
-    const alt = p.altitude;
-    if (alt === null || alt === undefined || !Number.isFinite(alt)) return;
-    if (p.altitudeAccuracy != null && p.altitudeAccuracy > 20) return;
-    const e = elevationRef.current;
-    if (e.ref === null) {
-      e.ref = alt;
-      return;
-    }
-    if (alt - e.ref >= ELEVATION_STEP_M) {
-      e.gain += alt - e.ref;
-      e.ref = alt;
-      setElevationGain(e.gain);
-    } else if (e.ref - alt >= ELEVATION_STEP_M) {
-      e.ref = alt; // turun: geser referensi tanpa mengurangi gain
-    }
+    const before = elevationRef.current.gain();
+    const after = elevationRef.current.add(p.altitude, p.altitudeAccuracy);
+    if (after !== before) setElevationGain(after);
   }, []);
 
   /** Masukkan titik ke buffer (memori + IndexedDB). `replaceLast` dipakai saat titik awal diperhalus. */
@@ -319,6 +316,8 @@ export function useGeoTracker() {
     }
     lastPoint.current = p;
     tail.current = null;
+    paceRef.current.add(currentElapsedSec(), distanceRef.current);
+    setPaceSecPerKm(paceRef.current.value());
     setPoints(arr.slice());
     void savePoint(index, p);
 
@@ -326,7 +325,7 @@ export function useGeoTracker() {
     setUnsynced(pending);
     // Rule 2: kirim batch saat 15 titik terkumpul (interval 30 detik ditangani timer).
     if (pending >= BATCH_MAX_POINTS) void flushRef.current('count');
-  }, []);
+  }, [currentElapsedSec]);
 
   const addPoint = useCallback(
     (rawPoint: GeoPoint, isSimulation = false) => {
@@ -362,10 +361,10 @@ export function useGeoTracker() {
         const impliedSpeedMps = (rawDistKm * 1000) / dtSec;
 
         // Tolak lonjakan koordinat tunggal yang mustahil secara fisik (GPS multipath spike)
-        if (impliedSpeedMps > MAX_SPIKE_SPEED_MPS) return;
+        if (impliedSpeedMps > MAX_SPIKE_SPEED_MPS[sessionRef.current?.type ?? 'run']) return;
 
         // Sensor melaporkan diam (0 m/s) dan perpindahan masih di dalam radius akurasi → drift, bukan gerak.
-        if (rawPoint.speed != null && rawPoint.speed < 0.35 && rawDistKm * 1000 < acc) return;
+        if (rawPoint.speed != null && rawPoint.speed < 0.5 && rawDistKm * 1000 < Math.max(acc, 8)) return;
       }
 
       const p = isSimulation ? rawPoint : smoothPoint(rawPoint);
@@ -383,7 +382,7 @@ export function useGeoTracker() {
 
         // Rule 1 — jitter filter: buang bila perpindahan kecil DAN hampir tidak bergerak.
         // Ambang diperlebar mengikuti akurasi GPS agar goyangan sinyal lemah tidak menambah jarak.
-        const jitterLimit = isSimulation ? JITTER_DISTANCE_M : Math.max(JITTER_DISTANCE_M, Math.min(12, acc * 0.35));
+        const jitterLimit = isSimulation ? JITTER_DISTANCE_M : Math.max(JITTER_DISTANCE_M, Math.min(JITTER_MAX_M, acc * 0.5));
         if (speed < STILL_SPEED_MPS && dMeters < jitterLimit) {
           tail.current = p; // calon titik akhir bila pengguna berhenti di sini
           return;
@@ -418,23 +417,6 @@ export function useGeoTracker() {
     setDistanceKm(distanceRef.current);
     commitPoint(t);
   }, [commitPoint]);
-
-  // ---------------- Layar tetap menyala selama merekam ----------------
-
-  const lockScreen = useCallback(async () => {
-    const wl = (navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<WakeLockSentinelLike> } })
-      .wakeLock;
-    if (!wl || wakeLock.current) return;
-    try {
-      wakeLock.current = await wl.request('screen');
-    } catch {
-      /* ditolak (mis. baterai hemat) — tidak fatal */
-    }
-  }, []);
-  const unlockScreen = useCallback(() => {
-    void wakeLock.current?.release().catch(() => {});
-    wakeLock.current = null;
-  }, []);
 
   const stopSources = useCallback(() => {
     if (watchId.current !== null) navigator.geolocation.clearWatch(watchId.current);
@@ -526,24 +508,8 @@ export function useGeoTracker() {
     };
   }, [status]);
 
-  // Layar TIDAK boleh mati selama aktivitas berjalan atau dijeda (layar rekam penuh tetap tampil).
-  // Wake lock dilepas browser saat tab disembunyikan — ambil lagi saat kembali.
-  const tracking = status === 'running' || status === 'paused';
-  useEffect(() => {
-    if (!tracking) return;
-    void lockScreen();
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        wakeLock.current = null;
-        void lockScreen();
-      }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      unlockScreen();
-    };
-  }, [tracking, lockScreen, unlockScreen]);
+  // Layar tetap menyala hanya selama sesi BERJALAN; dilepas saat Pause/Finish (lihat hooks/useScreenWakeLock.ts).
+  useScreenWakeLock(status === 'running');
 
   // Bersihkan watcher & timer saat pindah halaman.
   useEffect(() => stopSources, [stopSources]);
@@ -560,13 +526,15 @@ export function useGeoTracker() {
     runSegmentStartMs.current = null;
     pointsRef.current = [];
     distanceRef.current = 0;
-    elevationRef.current = { gain: 0, ref: null };
+    elevationRef.current = createElevationTracker();
+    paceRef.current = createPaceSmoother();
     sync.current = { acked: 0, inFlight: false, failures: 0, retryAt: 0, disabled: false };
     sessionRef.current = null;
     setPoints([]);
     setDistanceKm(0);
     setElapsedSec(0);
     setElevationGain(0);
+    setPaceSecPerKm(null);
     setAccuracyMeters(null);
     setSessionId(null);
     setStartedAt(null);
@@ -633,7 +601,7 @@ export function useGeoTracker() {
       points: pointsRef.current.slice(),
       distanceKm: distanceRef.current,
       elapsedSec: currentElapsedSec(),
-      elevationGain: elevationRef.current.gain,
+      elevationGain: elevationRef.current.gain(),
       sessionId: session?.id ?? null,
       startedAt: session?.startedAt ?? null,
       type: session?.type ?? 'run',
@@ -662,6 +630,7 @@ export function useGeoTracker() {
     distanceKm,
     elapsedSec,
     elevationGain,
+    paceSecPerKm,
     accuracyMeters,
     issue,
     simulated,

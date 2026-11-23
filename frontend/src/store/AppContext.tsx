@@ -30,6 +30,7 @@ import {
   type MemberSnap,
   type QuestSnap,
 } from '../lib/notifications';
+import { BOMB_CHALLENGE_TITLE, displayQuestTitle } from '../lib/labels';
 import { useAutoRefresh } from '../hooks/useAutoRefresh';
 import { useCircleEvents } from '../hooks/useCircleEvents';
 import { useToast } from './ToastContext';
@@ -56,7 +57,10 @@ const SHIELD_WEEKLY_COSTS = [25, 50] as const;
 const REST_WEEKLY_COSTS = [0, 15] as const;
 const SNOOZE_COST_COINS = 10;
 /** Selang polling data circle saat tab terlihat. */
+/** Tanpa Realtime tersambung, data circle diperbarui berkala sesering ini. */
 const REFRESH_INTERVAL_MS = 25_000;
+/** Dengan Realtime tersambung, pembaruan datang lewat sinyal; ini hanya jaring pengaman (mis. kuest kedaluwarsa oleh server). */
+const SAFETY_NET_INTERVAL_MS = 180_000;
 
 const newId = (prefix: string) => `${prefix}_${Date.now().toString(36)}`;
 const generateCircleCode = () =>
@@ -575,7 +579,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         durationSeconds: a.durationSeconds,
         durationSec: a.durationSeconds,
         date: new Date(a.startedAt).toLocaleDateString('en-US', { dateStyle: 'medium' }),
-        routeLabel: a.completedQuest?.rewardTitle ?? a.locationLabel ?? 'Recorded workout',
+        routeLabel: displayQuestTitle(a.completedQuest?.rewardTitle) ?? a.locationLabel ?? 'Recorded workout',
         missionStatus: 'completed',
         route: parsePolylineRoute(a.encodedPolyline),
         locationLabel: a.locationLabel ?? null,
@@ -739,16 +743,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const [board, quests] = await Promise.all([
       syncCircleLeaderboard(circleId, me.id, { keepOnError: true }),
       syncQuests(circleId),
+      // Circle Goals berubah ketika anggota lain menyelesaikan aktivitas; sinkronkan pada sinyal circle juga.
+      syncCircleMissions(circleId),
     ]);
     return board && quests;
-  }, [hydrateFromBackend, mapBackendUser, syncCircleLeaderboard, syncQuests]);
+  }, [hydrateFromBackend, mapBackendUser, syncCircleLeaderboard, syncCircleMissions, syncQuests]);
 
   const authedWithToken = isAuthenticated && Boolean(tokenStore.get());
-  const { refreshNow } = useAutoRefresh({ enabled: authedWithToken, intervalMs: REFRESH_INTERVAL_MS, task: refreshLive });
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
+  const { refreshNow } = useAutoRefresh({
+    enabled: authedWithToken,
+    intervalMs: realtimeConnected ? SAFETY_NET_INTERVAL_MS : REFRESH_INTERVAL_MS,
+    task: refreshLive,
+  });
   const { notify: notifyCircle } = useCircleEvents({
     circleId: activeCircle?.id,
     enabled: authedWithToken,
     onSignal: refreshNow,
+    onConnectionChange: setRealtimeConnected,
   });
 
   const leaderboard = useMemo<LeaderboardEntry[]>(() => {
@@ -1180,7 +1192,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         (b) => b.direction === 'incoming' && (b.status === 'pending' || b.status === 'in_progress'),
       );
       if (hasActiveIncoming) {
-        toast('Finish or resolve your active incoming Bomb Mission before entering Rest Mode.', 'error');
+        toast('Finish or resolve your active incoming Bomb Challenge before entering Rest Mode.', 'error');
         return;
       }
 
@@ -1236,7 +1248,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const sendBomb = useCallback(
     (input: SendBombInput) => {
       if (user.availabilityStatus === 'RESTING') {
-        toast('You are in Rest Mode. Switch to Ready before sending a Bomb Mission.', 'error');
+        toast('You are in Rest Mode. Switch to Ready before sending a Bomb Challenge.', 'error');
         return;
       }
 
@@ -1256,12 +1268,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (target.availabilityStatus === 'RESTING') {
-        toast(`@${target.username} is currently in Rest Mode and cannot receive Bomb Missions.`, 'error');
+        toast(`@${target.username} is currently in Rest Mode and cannot receive Bomb Challenges.`, 'error');
         return;
       }
 
       if (target.availabilityStatus === 'IN_MISSION') {
-        toast(`@${target.username} is already doing an active Bomb Mission (max 1 at a time).`, 'error');
+        toast(`@${target.username} is already doing an active Bomb Challenge (max 1 at a time).`, 'error');
         return;
       }
 
@@ -1293,12 +1305,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
           targetDistance: Math.round(input.targetKm * 1000),
           difficulty: input.difficulty,
           stakes: input.stakes ?? 'MEDIUM',
-          rewardTitle: 'P2P Bomb Mission',
+          rewardTitle: BOMB_CHALLENGE_TITLE,
           deadline: deadlineDate.toISOString(),
         })
           .then((res) => {
             setUser((u) => ({ ...u, coins: res.remainingCoinBalance }));
-            toast(`Bomb Mission sent to @${target.username}!`, 'success');
+            toast(`Bomb Challenge sent to @${target.username}!`, 'success');
             notifyCircle(activeCircle.id);
             return Promise.all([
               syncQuests(activeCircle.id),
@@ -1308,10 +1320,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           .catch((err) => {
             setUser((u) => ({ ...u, coins: prevCoins }));
             setBombMissions((bs) => bs.filter((b) => b.id !== tempId));
-            toast(err instanceof Error ? err.message : 'Failed to send Bomb Mission', 'error');
+            toast(err instanceof Error ? err.message : 'Failed to send Bomb Challenge', 'error');
           });
       } else {
-        toast(`Bomb Mission sent to @${target.username}!`, 'success');
+        toast(`Bomb Challenge sent to @${target.username}!`, 'success');
       }
     },
     [activeCircle, members, notifyCircle, syncCircleLeaderboard, syncQuests, toast, user.availabilityStatus, user.coins, user.id],

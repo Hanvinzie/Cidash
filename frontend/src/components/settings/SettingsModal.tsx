@@ -5,8 +5,10 @@ import Icon, { type IconName } from '../ui/Icon';
 import Modal from '../ui/Modal';
 import Toggle from '../ui/Toggle';
 import AboutPanel from './AboutPanel';
+import HomeThemePicker from '../themes/HomeThemePicker';
 import { useAppUpdate } from '../../lib/appUpdate';
-import { SETTING_KEYS, useBooleanSetting } from '../../lib/settings';
+import { DEFAULT_WEIGHT_KG, sanitizeWeightKg } from '../../lib/geo';
+import { SETTING_KEYS, saveWeightKg, useBooleanSetting } from '../../lib/settings';
 import { useApp } from '../../store/AppContext';
 import { useTheme, type ThemePreference } from '../../store/ThemeContext';
 
@@ -104,18 +106,23 @@ function Root({ onOpen }: { onOpen: (p: Page) => void }) {
 function Appearance() {
   const { preference, setPreference } = useTheme();
   return (
-    <div className="space-y-3">
-      <Segmented<ThemePreference>
-        ariaLabel="Theme"
-        value={preference}
-        onChange={setPreference}
-        options={[
-          { value: 'light', label: <><Icon name="sun" size={16} /> Light</> },
-          { value: 'dark', label: <><Icon name="moon" size={16} /> Dark</> },
-          { value: 'system', label: <><Icon name="monitor" size={16} /> Auto</> },
-        ]}
-      />
-      <p className="px-1 text-xs text-subtle">Auto follows your phone's appearance setting.</p>
+    <div className="space-y-5">
+      <div className="space-y-2">
+        <p className="px-1 text-xs font-bold uppercase tracking-wider text-subtle">Mode</p>
+        <Segmented<ThemePreference>
+          ariaLabel="Light or dark mode"
+          value={preference}
+          onChange={setPreference}
+          options={[
+            { value: 'light', label: <><Icon name="sun" size={16} /> Light</> },
+            { value: 'dark', label: <><Icon name="moon" size={16} /> Dark</> },
+            { value: 'system', label: <><Icon name="monitor" size={16} /> Auto</> },
+          ]}
+        />
+        <p className="px-1 text-xs text-subtle">Auto follows your phone's appearance setting.</p>
+      </div>
+
+      <HomeThemePicker />
     </div>
   );
 }
@@ -125,7 +132,7 @@ function Notifications() {
   const [group, setGroup] = useBooleanSetting(SETTING_KEYS.notifyGroup, true);
   return (
     <div className="space-y-1">
-      <Toggle checked={bomb} onChange={setBomb} label="Bomb Mission alerts" description="When a Bomb Mission is sent, finished, or blocked in your circle" />
+      <Toggle checked={bomb} onChange={setBomb} label="Bomb Challenge alerts" description="When a Bomb Challenge is sent, finished, or blocked in your circle" />
       <Toggle checked={group} onChange={setGroup} label="Circle activity" description="New members, milestones, and live group runs" />
     </div>
   );
@@ -171,15 +178,34 @@ function ActivitySettings() {
 function EditProfile({ onDone }: { onDone: () => void }) {
   const { user, updateProfileName } = useApp();
   const [name, setName] = useState(user.username);
+  // Berat badan hanya disimpan di perangkat ini dan dipakai menghitung kalori. Kosong = pakai bawaan.
+  const [weight, setWeight] = useState(() => (localStorage.getItem(SETTING_KEYS.weightKg) ?? ''));
+  const weightValue = weight.trim() === '' ? null : Number(weight.replace(',', '.'));
+  const weightInvalid = weightValue !== null && sanitizeWeightKg(weightValue) !== weightValue;
   function submit(e: FormEvent) {
     e.preventDefault();
     updateProfileName(name);
+    saveWeightKg(weight);
     onDone();
   }
   return (
     <form onSubmit={submit} className="space-y-4">
       <Input label="Display name" value={name} onChange={(e) => setName(e.target.value)} minLength={2} maxLength={60} required />
-      <Button type="submit" fullWidth disabled={name.trim().length < 2}>
+      <Input
+        label="Weight (kg)"
+        inputMode="decimal"
+        value={weight}
+        onChange={(e) => setWeight(e.target.value)}
+        placeholder={`${DEFAULT_WEIGHT_KG} (default)`}
+        hint={
+          weightInvalid ? (
+            <span className="text-danger">Enter a weight between 30 and 250 kg.</span>
+          ) : (
+            'Used to estimate calories. Stored on this device only.'
+          )
+        }
+      />
+      <Button type="submit" fullWidth disabled={name.trim().length < 2 || weightInvalid}>
         Save changes
       </Button>
     </form>
@@ -190,7 +216,7 @@ function Privacy({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-3 text-sm text-muted">
       <p>
-        <b>Invite-only Circles:</b> Only members with your 8-character circle code can view the circle leaderboard or send Bomb Missions.
+        <b>Invite-only Circles:</b> Only members with your 8-character circle code can view the circle leaderboard or send Bomb Challenges.
       </p>
       <p>
         <b>Live location:</b> Off by default. When on, your position is broadcast to your circle only while you are recording, and is never saved.
@@ -212,13 +238,16 @@ function Help({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-3 text-sm text-muted">
       <p>
-        <b>Rank Points (RP):</b> Earn 10 RP per kilometer on every verified run or ride, plus bonus stakes from completing Bomb Missions.
+        <b>Rank Points (RP):</b> Earn 10 RP per kilometer on every verified run or ride, plus bonus stakes from completing Bomb Challenges.
       </p>
       <p>
-        <b>Bomb Missions:</b> Spend coins to challenge a circle friend with a distance & time goal. If they succeed, they win the stakes RP; if they fail or expire, you win the RP!
+        <b>Circle Goals:</b> Daily and weekly distance targets that your whole circle works on together. Claim the reward once a goal is complete.
       </p>
       <p>
-        <b>Shield Tickets:</b> Use a Shield Ticket to neutralize an incoming Bomb Mission without losing any Rank Points.
+        <b>Bomb Challenges:</b> Spend coins to challenge a circle friend with a distance & time goal. If they succeed, they win the stakes RP; if they fail or expire, you win the RP!
+      </p>
+      <p>
+        <b>Shield Tickets:</b> Use a Shield Ticket to neutralize an incoming Bomb Challenge without losing any Rank Points.
       </p>
       <Button fullWidth onClick={onDone} className="mt-2">
         Close

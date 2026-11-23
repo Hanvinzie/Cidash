@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import { getSupabase, isRealtimeConfigured } from '../services/supabase';
+import { acquireCircleChannel, type CircleChannelHandle } from '../services/circleRealtime';
+import { isRealtimeConfigured } from '../services/supabase';
 import type { GeoPoint } from '../types';
 
 // ============================================================
-// Live circle tracking lewat Supabase Realtime BROADCAST (Rule 3).
-//
 // Posisi hanya lewat WebSocket dan hidup di memori: TIDAK ada INSERT ke tabel dan TIDAK ada
 // `postgres_changes`, jadi PostgreSQL tidak tersentuh sama sekali oleh pergerakan live.
 // Setiap pengguna aktif memancarkan paling sering sekali per BROADCAST_INTERVAL_MS.
@@ -77,7 +75,7 @@ function buildPayload(
 export function useLiveCircleChannel({ circleId, me, listen, sharing, position }: Options) {
   const [members, setMembers] = useState<LiveMember[]>([]);
   const [connected, setConnected] = useState(false);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const handleRef = useRef<CircleChannelHandle | null>(null);
   const latest = useRef({ position, sharing, me });
   latest.current = { position, sharing, me };
   /** Posisi terakhir yang saya siarkan sebagai aktif; null bila teman sudah diberi tahu saya berhenti. */
@@ -85,57 +83,48 @@ export function useLiveCircleChannel({ circleId, me, listen, sharing, position }
 
   const active = isRealtimeConfigured && Boolean(circleId) && (listen || sharing);
 
-  // ---- Channel + subscriber ----
+  // ---- Subscriber (channel dipakai bersama fitur lain; satu WebSocket per circle) ----
   useEffect(() => {
     if (!active || !circleId) return;
-    let cancelled = false;
-    let channel: RealtimeChannel | null = null;
-    let supabase: Awaited<ReturnType<typeof getSupabase>> = null;
+    const handle = acquireCircleChannel(circleId);
+    if (!handle) return;
+    handleRef.current = handle;
+    setConnected(handle.connected);
 
-    void getSupabase().then((sb) => {
-      if (cancelled || !sb) return;
-      supabase = sb;
-      channel = sb.channel(`circle-live:${circleId}`, { config: { broadcast: { self: false } } });
-      channel
-        .on('broadcast', { event: LOCATION_EVENT }, ({ payload }) => {
-          if (!isPayload(payload) || payload.userId === latest.current.me.id) return;
-          setMembers((prev) => {
-            const rest = prev.filter((m) => m.userId !== payload.userId);
-            if (!payload.active) return rest;
-            return [
-              ...rest,
-              {
-                userId: payload.userId,
-                username: payload.username,
-                lat: payload.lat,
-                lng: payload.lng,
-                heading: payload.heading,
-                speed: payload.speed,
-                updatedAt: Date.now(),
-              },
-            ];
-          });
-        })
-        .subscribe((status) => setConnected(status === 'SUBSCRIBED'));
-      channelRef.current = channel;
+    const off = handle.on(LOCATION_EVENT, (payload) => {
+      if (!isPayload(payload) || payload.userId === latest.current.me.id) return;
+      setMembers((prev) => {
+        const rest = prev.filter((m) => m.userId !== payload.userId);
+        if (!payload.active) return rest;
+        return [
+          ...rest,
+          {
+            userId: payload.userId,
+            username: payload.username,
+            lat: payload.lat,
+            lng: payload.lng,
+            heading: payload.heading,
+            speed: payload.speed,
+            updatedAt: Date.now(),
+          },
+        ];
+      });
     });
+    const offStatus = handle.onStatus(setConnected);
 
     return () => {
-      cancelled = true;
-      // Beri tahu teman bahwa saya berhenti sebelum channel dilepas (kalau tidak, penanda baru hilang ±15 dtk kemudian).
+      off();
+      offStatus();
+      // Beri tahu teman bahwa saya berhenti sebelum melepas channel (kalau tidak, penanda baru hilang ±15 dtk kemudian).
       // Memakai `announced` (bukan `sharing` terbaru): saat Finish, `sharing` sudah false ketika cleanup ini jalan.
-      if (channel && announced.current) {
-        void channel.send({
-          type: 'broadcast',
-          event: LOCATION_EVENT,
-          payload: buildPayload(latest.current.me, announced.current, false),
-        });
+      if (announced.current) {
+        handle.send(LOCATION_EVENT, buildPayload(latest.current.me, announced.current, false));
         announced.current = null;
       }
       setConnected(false);
       setMembers([]);
-      channelRef.current = null;
-      if (channel && supabase) void supabase.removeChannel(channel);
+      handleRef.current = null;
+      handle.release();
     };
   }, [active, circleId]);
 
@@ -154,9 +143,9 @@ export function useLiveCircleChannel({ circleId, me, listen, sharing, position }
     if (!sharing || !connected) return;
     const send = (activeFlag: boolean) => {
       const { position: p, me: user } = latest.current;
-      const channel = channelRef.current;
-      if (!channel || !p) return;
-      void channel.send({ type: 'broadcast', event: LOCATION_EVENT, payload: buildPayload(user, p, activeFlag) });
+      const handle = handleRef.current;
+      if (!handle || !p) return;
+      handle.send(LOCATION_EVENT, buildPayload(user, p, activeFlag));
       announced.current = activeFlag ? p : null;
     };
     send(true);
