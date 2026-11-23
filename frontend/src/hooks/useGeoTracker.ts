@@ -20,20 +20,20 @@ import type { ActivityType, GeoPoint } from '../types';
 export type TrackStatus = 'idle' | 'running' | 'paused' | 'finished';
 
 /**
- * Batas akurasi maksimum (m) setelah mendapat lock satelit. Sampel yang lebih buruk diabaikan: di kota, pantulan sinyal
- * (multipath) sering melaporkan ±30–50 m dan itulah yang menggambar zig-zag serta menambah jarak palsu.
+ * Batas akurasi maksimum (m) setelah mendapat lock satelit. Di area padat/dekat bangunan,
+ * GPS ponsel sering berada di ±25–45 m; nilai ini tetap diterima lalu dihaluskan oleh Kalman filter.
  */
-const MAX_TRACKING_ACCURACY_M = 25;
+const MAX_TRACKING_ACCURACY_M = 45;
 /** Batas akurasi awal untuk titik pertama sebelum lock penuh; fix yang jauh lebih tajam kemudian menggantikannya. */
-const MAX_INITIAL_ACCURACY_M = 50;
+const MAX_INITIAL_ACCURACY_M = 65;
 /** Rule 1 — sampel GPS diproses paling sering sekali per detik (1–3 detik). */
 const MIN_SAMPLE_INTERVAL_MS = 1000;
 /** Perpindahan di bawah ini DAN hampir diam dianggap jitter (berhenti di lampu merah, goyangan saat berdiri). */
-const JITTER_DISTANCE_M = 5;
-/** Batas atas ambang jitter yang melebar mengikuti akurasi sinyal (ambang = 50% akurasi, dibatasi ini). */
-const JITTER_MAX_M = 15;
-/** Di bawah kecepatan ini (m/s, ≈ 2,9 km/jam) pengguna dianggap diam. Jalan santai sudah ≥ 1 m/s. */
-const STILL_SPEED_MPS = 0.8;
+const JITTER_DISTANCE_M = 3;
+/** Batas atas ambang jitter yang melebar mengikuti akurasi sinyal (ambang = 35% akurasi, dibatasi ini). */
+const JITTER_MAX_M = 10;
+/** Di bawah kecepatan ini (m/s, ≈ 1,6 km/jam) pengguna dianggap diam. Jalan santai (0,7–1,4 m/s) tetap terekam. */
+const STILL_SPEED_MPS = 0.45;
 /**
  * Bila sensor tidak melaporkan kecepatan, kecepatan dihitung dari perpindahan BERSIH selama jendela ini.
  * Goyangan GPS saat diam saling meniadakan (perpindahan bersih kecil), sedangkan berjalan/berlari tidak.
@@ -46,8 +46,8 @@ const SPEED_WINDOW_MIN_MS = 3000;
  * Lari: 12 m/s (43 km/jam, di atas sprinter elit). Sepeda: 25 m/s (90 km/jam, termasuk turunan curam).
  */
 const MAX_SPIKE_SPEED_MPS: Record<ActivityType, number> = { run: 12, bike: 25 };
-/** Parameter Kalman process noise (m/detik). Lebih kecil = lintasan lebih halus. */
-const KALMAN_Q_MPS = 2.2;
+/** Parameter Kalman process noise (m/detik). Cukup responsif untuk jalan kaki & lari tanpa zig-zag. */
+const KALMAN_Q_MPS = 3.0;
 /**
  * Setelah Pause→Resume, bila posisi pertama lebih jauh dari ini dari titik terakhir sebelum jeda,
  * rute DIPUTUS (segmen baru, tanpa garis penghubung dan tanpa jarak). Di bawah ini dianggap
@@ -355,6 +355,10 @@ export function useGeoTracker() {
         return;
       }
 
+      // Di iOS CoreLocation, coords.speed bernilai -1 saat tidak tersedia — perlakukan nilai negatif sebagai null.
+      const sensorSpeed =
+        rawPoint.speed != null && Number.isFinite(rawPoint.speed) && rawPoint.speed >= 0 ? rawPoint.speed : null;
+
       if (prev && !isSimulation) {
         const rawDistKm = haversineKm(prev, rawPoint);
         const dtSec = Math.max(0.5, (rawPoint.timestamp - prev.timestamp) / 1000);
@@ -363,8 +367,8 @@ export function useGeoTracker() {
         // Tolak lonjakan koordinat tunggal yang mustahil secara fisik (GPS multipath spike)
         if (impliedSpeedMps > MAX_SPIKE_SPEED_MPS[sessionRef.current?.type ?? 'run']) return;
 
-        // Sensor melaporkan diam (0 m/s) dan perpindahan masih di dalam radius akurasi → drift, bukan gerak.
-        if (rawPoint.speed != null && rawPoint.speed < 0.5 && rawDistKm * 1000 < Math.max(acc, 8)) return;
+        // Sensor melaporkan benar-benar diam (< 0,25 m/s) dan perpindahan kecil → drift, bukan gerak.
+        if (sensorSpeed !== null && sensorSpeed < 0.25 && rawDistKm * 1000 < Math.min(Math.max(acc * 0.5, 6), 12)) return;
       }
 
       const p = isSimulation ? rawPoint : smoothPoint(rawPoint);
@@ -378,11 +382,11 @@ export function useGeoTracker() {
 
       if (prev) {
         const dMeters = haversineKm(prev, p) * 1000;
-        const speed = rawPoint.speed != null && Number.isFinite(rawPoint.speed) ? rawPoint.speed : windowSpeed;
+        const speed = sensorSpeed !== null ? sensorSpeed : windowSpeed;
 
         // Rule 1 — jitter filter: buang bila perpindahan kecil DAN hampir tidak bergerak.
         // Ambang diperlebar mengikuti akurasi GPS agar goyangan sinyal lemah tidak menambah jarak.
-        const jitterLimit = isSimulation ? JITTER_DISTANCE_M : Math.max(JITTER_DISTANCE_M, Math.min(JITTER_MAX_M, acc * 0.5));
+        const jitterLimit = isSimulation ? JITTER_DISTANCE_M : Math.max(JITTER_DISTANCE_M, Math.min(JITTER_MAX_M, acc * 0.35));
         if (speed < STILL_SPEED_MPS && dMeters < jitterLimit) {
           tail.current = p; // calon titik akhir bila pengguna berhenti di sini
           return;
@@ -453,8 +457,8 @@ export function useGeoTracker() {
               lng: pos.coords.longitude,
               timestamp: pos.timestamp || Date.now(),
               accuracy: acc,
-              speed: pos.coords.speed,
-              heading: pos.coords.heading,
+              speed: pos.coords.speed != null && pos.coords.speed >= 0 ? pos.coords.speed : null,
+              heading: pos.coords.heading != null && pos.coords.heading >= 0 ? pos.coords.heading : null,
               altitude: pos.coords.altitude,
               altitudeAccuracy: pos.coords.altitudeAccuracy,
             },
