@@ -3,8 +3,6 @@ import { useHomeTheme, type HomeThemeId } from '../../hooks/useHomeTheme';
 
 /* ────────────────────────────── Util ────────────────────────────── */
 
-const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-
 /** Hash deterministik → [0,1). Tidak ada Math.random, sehingga posisi bintang/bunga/pohon konsisten. */
 function hash(x: number, y: number, seed = 0): number {
   let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 1274126177);
