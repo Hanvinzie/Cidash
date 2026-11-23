@@ -138,10 +138,11 @@ export default function AppLayout() {
               <HomeThemeBackdrop className="h-full" />
             </div>
           )}
+          {/* Home tidak memakai .animate-page (opacity/transform membuat Backdrop Root yang menunda backdrop-blur glass card). */}
           <div
             key={pathname}
-            className="animate-page relative mx-auto w-full max-w-md px-4 pb-8 pt-5"
-            style={{ '--page-dir': dir } as CSSProperties}
+            className={`${current.to === ROUTES.dashboard ? '' : 'animate-page '}relative mx-auto w-full max-w-md px-4 pb-8 pt-5`}
+            style={current.to === ROUTES.dashboard ? undefined : ({ '--page-dir': dir } as CSSProperties)}
           >
             <Suspense
               fallback={

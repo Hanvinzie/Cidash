@@ -7,6 +7,8 @@ declare const __BUILD_TIME__: string;
 interface ImportMetaEnv {
   readonly VITE_API_URL?: string;
   readonly VITE_API_BASE_URL?: string;
+  /** Domain publik utama untuk share invite link (fallback: https://cidash.hanvinzie.com). */
+  readonly VITE_PUBLIC_APP_URL?: string;
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_KEY?: string;
   /** Style vector MapLibre (tema terang / gelap). Default: OpenFreeMap (tanpa API key). */

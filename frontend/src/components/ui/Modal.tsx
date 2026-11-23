@@ -17,6 +17,69 @@ interface ModalProps {
 /** Modal yang sedang terbuka, urutan buka. Hanya yang paling atas yang merespons tombol Esc. */
 const openModals: symbol[] = [];
 
+/** Pengunci scroll dokumen latar belakang (ref-counted agar nested modal aman di iOS PWA). */
+let bodyLockCount = 0;
+let lockedScrollY = 0;
+let prevBodyLock: {
+  htmlOverflow: string;
+  htmlOverscroll: string;
+  bodyOverflow: string;
+  bodyPosition: string;
+  bodyTop: string;
+  bodyLeft: string;
+  bodyRight: string;
+  bodyWidth: string;
+  bodyOverscroll: string;
+} | null = null;
+
+function lockBackgroundScroll() {
+  if (bodyLockCount === 0) {
+    const html = document.documentElement;
+    const body = document.body;
+    lockedScrollY = window.scrollY;
+    prevBodyLock = {
+      htmlOverflow: html.style.overflow,
+      htmlOverscroll: html.style.overscrollBehavior,
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyRight: body.style.right,
+      bodyWidth: body.style.width,
+      bodyOverscroll: body.style.overscrollBehavior,
+    };
+    html.style.overflow = 'hidden';
+    html.style.overscrollBehavior = 'none';
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
+    body.style.position = 'fixed';
+    body.style.top = `-${lockedScrollY}px`;
+    body.style.left = '0';
+    body.style.right = '0';
+    body.style.width = '100%';
+  }
+  bodyLockCount += 1;
+}
+
+function unlockBackgroundScroll() {
+  bodyLockCount = Math.max(0, bodyLockCount - 1);
+  if (bodyLockCount === 0 && prevBodyLock) {
+    const html = document.documentElement;
+    const body = document.body;
+    html.style.overflow = prevBodyLock.htmlOverflow;
+    html.style.overscrollBehavior = prevBodyLock.htmlOverscroll;
+    body.style.overflow = prevBodyLock.bodyOverflow;
+    body.style.position = prevBodyLock.bodyPosition;
+    body.style.top = prevBodyLock.bodyTop;
+    body.style.left = prevBodyLock.bodyLeft;
+    body.style.right = prevBodyLock.bodyRight;
+    body.style.width = prevBodyLock.bodyWidth;
+    body.style.overscrollBehavior = prevBodyLock.bodyOverscroll;
+    prevBodyLock = null;
+    window.scrollTo(0, lockedScrollY);
+  }
+}
+
 const EXIT_MS = 200;
 /** Tarik ke bawah lebih jauh dari ini (px) untuk menutup. */
 const DISMISS_PX = 110;
@@ -26,8 +89,8 @@ const DISMISS_VELOCITY = 0.55;
 const DRAG_START_PX = 8;
 
 /**
- * Apakah gestur yang dimulai di `target` boleh menarik sheet? Tidak boleh bila:
- * - ada elemen scroll (termasuk sheet itu sendiri) di antara target dan sheet yang belum berada di paling atas,
+ * Apakah gestur yang dimulai di `target` boleh menarik sheet ke bawah? Tidak boleh bila:
+ * - ada elemen scroll (termasuk area konten sheet) di antara target dan sheet yang belum berada di paling atas,
  * - target slider/area yang menandai diri `data-no-swipe`.
  * Dengan begitu menggulir daftar di dalam sheet tidak pernah bentrok dengan gestur tutup.
  */
@@ -43,6 +106,27 @@ function canStartSwipe(target: EventTarget | null, sheet: HTMLElement): boolean 
     el = el.parentElement;
   }
   return true;
+}
+
+/**
+ * Apakah ada elemen scroll di antara `target` dan `sheet` yang masih bisa digulir ke bawah
+ * (saat jari menggeser ke atas)? Jika tidak ada, sentuhan ke atas harus di-preventDefault agar
+ * iOS tidak mengangkat wadah modal ke atas (rubber-banding).
+ */
+function canScrollFurtherDown(target: EventTarget | null, sheet: HTMLElement): boolean {
+  let el = target instanceof Element ? target : null;
+  while (el) {
+    if (el instanceof HTMLElement && el !== sheet) {
+      const style = window.getComputedStyle(el);
+      const scrollable = style.overflowY === 'auto' || style.overflowY === 'scroll';
+      if (scrollable && el.scrollHeight > el.clientHeight + 1) {
+        if (el.scrollTop + el.clientHeight < el.scrollHeight - 1) return true;
+      }
+    }
+    if (el === sheet) break;
+    el = el.parentElement;
+  }
+  return false;
 }
 
 /** Bottom sheet: muncul dari bawah, bisa ditutup dengan tap backdrop, tombol ✕, Esc, atau swipe ke bawah di mana saja. */
@@ -72,14 +156,10 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
     setTimeout(onClose, EXIT_MS);
   }, [onClose]);
 
-  // Kunci scroll halaman di belakang sheet.
+  // Kunci scroll dokumen latar belakang (html + body) agar Homepage tidak ikut bergulir/rubber-band di iOS PWA.
   useEffect(() => {
-    const html = document.documentElement;
-    const prev = html.style.overflow;
-    html.style.overflow = 'hidden';
-    return () => {
-      html.style.overflow = prev;
-    };
+    lockBackgroundScroll();
+    return () => unlockBackgroundScroll();
   }, []);
 
   // Daftarkan ke tumpukan: Esc hanya menutup modal paling atas (mis. pilihan di dalam wizard), bukan semuanya.
@@ -101,21 +181,27 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
   }, [close]);
 
   // ---- Swipe ke bawah dari seluruh permukaan sheet (sentuh) ----
-  // Listener native non-pasif: perlu preventDefault supaya browser tidak ikut menggulir/refresh saat sheet ditarik.
+  // Listener native non-pasif:
+  // 1) preventDefault saat menarik ke bawah untuk menutup sheet,
+  // 2) preventDefault saat menarik ke atas mentok di batas bawah konten agar wadah modal tidak terangkat (translateY < 0 / rubber-band).
   useEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
     let tracking = false;
+    let canDismiss = false;
     let active = false;
     let startX = 0;
     let startY = 0;
     let lastY = 0;
     let lastT = 0;
     let velocity = 0;
+    let touchTarget: EventTarget | null = null;
 
     const reset = () => {
       tracking = false;
+      canDismiss = false;
       active = false;
+      touchTarget = null;
     };
 
     const onStart = (e: TouchEvent) => {
@@ -125,7 +211,9 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
       startY = lastY = t.clientY;
       lastT = e.timeStamp;
       velocity = 0;
-      tracking = canStartSwipe(e.target, sheet);
+      touchTarget = e.target;
+      tracking = true;
+      canDismiss = canStartSwipe(e.target, sheet);
       active = false;
     };
 
@@ -135,11 +223,22 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
       const dy = t.clientY - startY;
       const dx = t.clientX - startX;
       if (!active) {
-        if (dy > DRAG_START_PX && Math.abs(dy) > Math.abs(dx) * 1.2) {
+        // Gerakan horizontal dominan: biarkan konten (mis. slider/carousel) yang menangani.
+        if (Math.abs(dx) > DRAG_START_PX * 1.5 && Math.abs(dx) > Math.abs(dy)) {
+          return reset();
+        }
+        // Tarikan ke atas (dy < 0): jangan pernah geser sheet ke atas; blokir overscroll jika konten sudah mentok bawah.
+        if (dy < 0) {
+          if (dy < -DRAG_START_PX) canDismiss = false;
+          if (!canScrollFurtherDown(touchTarget, sheet) && e.cancelable) {
+            e.preventDefault();
+          }
+          return;
+        }
+        // Tarikan ke bawah (dy > 0): aktifkan dismiss jika di paling atas scroll.
+        if (canDismiss && dy > DRAG_START_PX && Math.abs(dy) > Math.abs(dx) * 1.2) {
           active = true;
           setDragging(true);
-        } else if (dy < -DRAG_START_PX || Math.abs(dx) > DRAG_START_PX * 1.5) {
-          return reset(); // menggulir ke atas atau menggeser samping: biarkan konten yang menangani
         } else {
           return;
         }
@@ -149,6 +248,7 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
       velocity = (t.clientY - lastY) / dt;
       lastY = t.clientY;
       lastT = e.timeStamp;
+      // Kunci >= 0 agar wadah modal tidak pernah bergeser ke atas (translateY < 0).
       dragYRef.current = Math.max(0, dy - DRAG_START_PX);
       setDragY(dragYRef.current);
     };
@@ -203,16 +303,17 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
     }
   };
 
+  const clampedDragY = Math.max(0, dragY);
   const sheetStyle = swiped
     ? { transform: 'translateY(100%)', transition: `transform ${EXIT_MS}ms ease-in` }
     : dragging
-      ? { transform: `translateY(${dragY}px)`, transition: 'none' }
+      ? { transform: `translateY(${clampedDragY}px)`, transition: 'none' }
       : { transition: 'transform 200ms ease-out' };
 
   return createPortal(
-    <div className="fixed inset-0 z-[1000] flex items-end justify-center sm:items-center sm:p-4">
+    <div className="fixed inset-0 z-[1000] flex items-end justify-center overscroll-none sm:items-center sm:p-4">
       <div
-        className={`absolute inset-0 bg-black/55 backdrop-blur-sm ${closing || swiped ? 'animate-fade-out' : 'animate-fade-in'}`}
+        className={`absolute inset-0 touch-none bg-black/55 backdrop-blur-sm ${closing || swiped ? 'animate-fade-out' : 'animate-fade-in'}`}
         onClick={() => close()}
         aria-hidden
       />
@@ -221,34 +322,44 @@ export default function Modal({ title, onClose, children, showTitle = true }: Mo
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={`scroll-area relative max-h-[92%] w-full max-w-md rounded-t-3xl bg-surface px-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] pt-2 shadow-2xl sm:max-w-sm sm:rounded-3xl sm:pb-5 ${
+        className={`relative flex max-h-[92dvh] w-full max-w-md flex-col rounded-t-3xl bg-surface pt-2 shadow-2xl sm:max-w-sm sm:rounded-3xl ${
           closing ? 'animate-sheet-down' : swiped ? '' : 'animate-sheet-up'
         }`}
         style={sheetStyle}
       >
-        {/* Drag handle */}
+        {/* Overscroll skirt: perpanjangan latar di bawah bottom-0 agar bounce iOS tidak memperlihatkan halaman di belakang. */}
         <div
-          className="mx-auto flex h-6 w-24 cursor-grab touch-none items-center justify-center"
-          onPointerDown={onHandleDown}
-          onPointerMove={onHandleMove}
-          onPointerUp={onHandleUp}
-          onPointerCancel={onHandleUp}
           aria-hidden
-        >
-          <span className="h-1.5 w-10 rounded-full bg-line" />
+          className="pointer-events-none absolute inset-x-0 top-full h-[50vh] bg-surface sm:hidden"
+        />
+        {/* Drag handle & close button (tetap diam di atas area scroll) */}
+        <div className="relative shrink-0 px-5">
+          <div
+            className="mx-auto flex h-6 w-24 cursor-grab touch-none items-center justify-center"
+            onPointerDown={onHandleDown}
+            onPointerMove={onHandleMove}
+            onPointerUp={onHandleUp}
+            onPointerCancel={onHandleUp}
+            aria-hidden
+          >
+            <span className="h-1.5 w-10 rounded-full bg-line" />
+          </div>
+          <button
+            type="button"
+            onClick={() => close()}
+            aria-label="Close"
+            className="absolute right-3 top-1 flex h-10 w-10 items-center justify-center rounded-full text-subtle transition active:scale-90 active:bg-inset"
+          >
+            <Icon name="close" size={18} />
+          </button>
         </div>
-        <button
-          type="button"
-          onClick={() => close()}
-          aria-label="Close"
-          className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-subtle transition active:scale-90 active:bg-inset"
-        >
-          <Icon name="close" size={18} />
-        </button>
-        <h3 id={titleId} className={showTitle ? 'mb-4 mt-1 px-10 text-center text-lg font-bold' : 'sr-only'}>
-          {title}
-        </h3>
-        {typeof children === 'function' ? children(close) : children}
+        {/* Area konten yang dapat digulir dengan overscroll-behavior-y: contain */}
+        <div className="scroll-area min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-5 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] sm:pb-5">
+          <h3 id={titleId} className={showTitle ? 'mb-4 mt-1 px-10 text-center text-lg font-bold' : 'sr-only'}>
+            {title}
+          </h3>
+          {typeof children === 'function' ? children(close) : children}
+        </div>
       </div>
     </div>,
     document.body,

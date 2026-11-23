@@ -22,8 +22,13 @@ export const circleOnboarding = `${ROUTES.login}?step=circle`;
 export const groupRunFor = (roomId?: string) =>
   `${ROUTES.activity}?mode=group${roomId ? `&room=${encodeURIComponent(roomId)}` : ''}`;
 
+const DEFAULT_PUBLIC_APP_URL = 'https://cidash.hanvinzie.com';
+
+/** Domain publik utama aplikasi untuk tautan undangan (env VITE_PUBLIC_APP_URL dengan fallback cidash.hanvinzie.com). */
+export const PUBLIC_APP_URL = (import.meta.env.VITE_PUBLIC_APP_URL?.trim() || DEFAULT_PUBLIC_APP_URL).replace(/\/+$/, '');
+
 /**
- * Tautan undangan circle: `https://<host>/join?code=ABCD1234`. Dibuka user yang sudah login = langsung bergabung;
+ * Tautan undangan circle: `https://cidash.hanvinzie.com/join?code=ABCD1234`. Dibuka user yang sudah login = langsung bergabung;
  * belum login = diarahkan masuk/daftar dulu dengan kode terisi otomatis (lihat screens/Join.tsx).
  */
-export const joinLink = (code: string) => `${window.location.origin}${ROUTES.join}?code=${encodeURIComponent(code)}`;
+export const joinLink = (code: string) => `${PUBLIC_APP_URL}${ROUTES.join}?code=${encodeURIComponent(code)}`;

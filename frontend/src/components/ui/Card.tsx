@@ -14,7 +14,7 @@ export function GlassScope({ enabled, children }: { enabled: boolean; children: 
 
 const SOLID = 'border-line/70 bg-surface shadow-card';
 const GLASS =
-  'home-glass border-white/40 bg-white/10 text-zinc-900 shadow-lg shadow-black/10 backdrop-blur-lg dark:border-white/10 dark:bg-zinc-950/10 dark:text-white';
+  'home-glass transform-gpu will-change-[backdrop-filter] border-white/40 bg-white/10 text-zinc-900 shadow-lg shadow-black/10 backdrop-blur-lg dark:border-white/10 dark:bg-zinc-950/10 dark:text-white';
 
 export default function Card({ children, className = '', ...rest }: CardProps) {
   const glass = useContext(GlassContext);
