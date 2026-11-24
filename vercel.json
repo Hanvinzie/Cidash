@@ -5,6 +5,14 @@
   "buildCommand": "npm run build:frontend",
   "outputDirectory": "frontend/dist",
   "regions": ["hnd1"],
+  "redirects": [
+    {
+      "source": "/(.*)",
+      "has": [{ "type": "host", "value": "^.*\\.vercel\\.app$" }],
+      "destination": "https://cidash.hanvinzie.com/$1",
+      "statusCode": 301
+    }
+  ],
   "functions": {
     "api/index.mjs": {
       "includeFiles": "{backend/dist/serverless.mjs,node_modules/.prisma/client/**}",

@@ -2,6 +2,7 @@ import Modal from '../ui/Modal';
 import Button from '../ui/Button';
 import Icon from '../ui/Icon';
 import { isStandalone, platform, type LocationIssue } from '../../lib/location';
+import { PUBLIC_APP_HOST } from '../../routes';
 
 interface LocationPromptProps {
   issue: Exclude<LocationIssue, 'timeout'>;
@@ -17,19 +18,23 @@ function deniedSteps(): string[] {
   const os = platform();
   if (os === 'ios') {
     return isStandalone()
-      ? ['Open Settings → Privacy & Security → Location Services.', 'Make sure Location Services is on.', 'Open Safari Websites and choose "While Using the App".']
-      : ['Tap "aA" in the Safari address bar → Website Settings.', 'Set Location to "Allow".', 'Come back and tap Try again.'];
+      ? ['Open Settings → Privacy & Security → Location Services.', 'Make sure Location Services is on.', `Open Safari Websites → ${PUBLIC_APP_HOST} and choose "While Using the App".`]
+      : ['Tap "aA" in the Safari address bar → Website Settings.', `Set Location to "Allow" for ${PUBLIC_APP_HOST}.`, 'Come back and tap Try again.'];
   }
   if (os === 'android') {
     return isStandalone()
       ? ['Long-press the Cidash icon → App info → Permissions.', 'Set Location to "Allow only while using the app".', 'Come back and tap Try again.']
-      : ['Tap the icon left of the address bar → Permissions.', 'Turn Location on.', 'Come back and tap Try again.'];
+      : ['Tap the icon left of the address bar → Permissions.', `Turn on Location for ${PUBLIC_APP_HOST}.`, 'Come back and tap Try again.'];
   }
-  return ['Click the icon left of the address bar.', 'Allow Location for this site.', 'Come back and click Try again.'];
+  return ['Click the icon left of the address bar.', `Allow Location for ${PUBLIC_APP_HOST}.`, 'Come back and click Try again.'];
 }
 
 const CONTENT: Record<LocationIssue, { title: string; text: string; steps?: () => string[] }> = {
-  denied: { title: 'Allow location access', text: 'Cidash needs your location to track distance and verify your run.', steps: deniedSteps },
+  denied: {
+    title: 'Allow location access',
+    text: `Cidash needs your location to track distance and verify your run. Allow location for ${PUBLIC_APP_HOST} in the browser prompt.`,
+    steps: deniedSteps,
+  },
   unavailable: {
     title: 'Turn on location',
     text: "We can't get a GPS signal. Your phone's location may be turned off.",
@@ -40,7 +45,7 @@ const CONTENT: Record<LocationIssue, { title: string; text: string; steps?: () =
   },
   insecure: {
     title: 'Location needs HTTPS',
-    text: 'Browsers only share GPS on secure (https://) pages. Open Cidash from its https link instead of a local IP address.',
+    text: `Browsers only share GPS on secure (https://) pages. Open https://${PUBLIC_APP_HOST} instead of a local IP address.`,
   },
   unsupported: { title: 'GPS not available', text: "This browser doesn't support location. You can still try Cidash with simulation mode." },
   timeout: { title: 'Weak GPS signal', text: "We couldn't find you in time." },
@@ -58,6 +63,14 @@ export default function LocationPrompt({ issue, busy, onRetry, onSimulate, onClo
             <Icon name="pin" size={26} />
           </span>
           <p className="mb-4 text-center text-sm text-muted">{c.text}</p>
+
+          {/* Origin yang diminta izinnya — memudahkan memastikan pengguna mengizinkan domain canonical. */}
+          {!isStandalone() && (
+            <p className="mb-4 flex items-center justify-center gap-1.5 text-xs font-semibold text-subtle">
+              <Icon name="lock" size={12} />
+              {PUBLIC_APP_HOST}
+            </p>
+          )}
 
           {c.steps && (
             <ol className="mb-5 space-y-2 rounded-2xl bg-inset p-4 text-sm">

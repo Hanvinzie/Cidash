@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
+import { Analytics } from '@vercel/analytics/react';
 import App from './App';
 import { AppProvider } from './store/AppContext';
 import { ThemeProvider } from './store/ThemeContext';
@@ -30,6 +31,8 @@ initAppUpdate();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
+    {/* Web Analytics Vercel: rekam page view & performa tanpa cookie pihak ketiga. */}
+    <Analytics />
     <BrowserRouter>
       <ThemeProvider>
         <ToastProvider>

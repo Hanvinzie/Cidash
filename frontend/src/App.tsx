@@ -5,7 +5,7 @@ import ProtectedRoute from './components/routing/ProtectedRoute';
 import HideBoot from './components/routing/HideBoot';
 import RunnerLoader from './components/ui/RunnerLoader';
 import { Activity, CustomQuest, Dashboard, Join, Login, Profile } from './lazyScreens';
-import { ROUTES } from './routes';
+import { ROUTES, DEFAULT_ROUTE } from './routes';
 
 function BootFallback() {
   return (
@@ -51,8 +51,9 @@ export default function App() {
           </Route>
         </Route>
 
-        <Route path="/" element={<Navigate to={ROUTES.dashboard} replace />} />
-        <Route path="*" element={<Navigate to={ROUTES.dashboard} replace />} />
+        {/* Root & path tak dikenal selalu mendarat di Homescreen (Dashboard), bukan Profile. */}
+        <Route path="/" element={<Navigate to={DEFAULT_ROUTE} replace />} />
+        <Route path="*" element={<Navigate to={DEFAULT_ROUTE} replace />} />
       </Routes>
     </Suspense>
   );

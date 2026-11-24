@@ -12,7 +12,7 @@ import { Input, Segmented } from '../components/ui/Field';
 import { CURRENT_VERSION } from '../lib/appUpdate';
 import { ApiError } from '../services/http';
 import { useApp } from '../store/AppContext';
-import { ROUTES } from '../routes';
+import { safeRedirect } from '../routes';
 import type { ActivityType } from '../types';
 
 type AuthMode = 'login' | 'register';
@@ -87,7 +87,7 @@ export default function Login() {
    */
   const [firstTime, setFirstTime] = useState(false);
 
-  const redirectTo = (location.state as { from?: string } | null)?.from ?? ROUTES.dashboard;
+  const redirectTo = safeRedirect((location.state as { from?: string } | null)?.from);
   /** Dibuka dari dalam aplikasi (mis. Profile → Create / join): kembali ke halaman sebelumnya. */
   const openedFromApp = isAuthenticated && params.get('step') === 'circle' && location.key !== 'default';
   const goBack = () => (openedFromApp ? navigate(-1) : navigate(redirectTo, { replace: true }));

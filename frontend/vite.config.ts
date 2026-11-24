@@ -16,7 +16,9 @@ const manifest: Partial<ManifestOptions> = {
   display: 'standalone',
   display_override: ['standalone', 'fullscreen'],
   orientation: 'portrait',
-  start_url: '/',
+  // Buka dari ikon Home Screen selalu ke Homescreen (Dashboard), bukan halaman terakhir
+  // atau Profile. `/` tetap diarahkan ke Dashboard oleh router.
+  start_url: '/dashboard',
   scope: '/',
   lang: 'en',
   categories: ['health', 'fitness', 'sports', 'social'],
@@ -37,21 +39,24 @@ const manifest: Partial<ManifestOptions> = {
 };
 
 /**
- * vite-plugin-pwa hanya menyuntikkan manifest saat build. Plugin kecil ini menyajikan manifest
- * yang sama di `npm run dev`, supaya "Add to Home Screen" saat tes lewat ngrok membuka app
- * dalam mode standalone (tanpa address bar) dengan scope & start_url yang benar.
+ * Menyajikan & menerbitkan manifest.webmanifest (dev maupun build) memakai API `emitFile`.
+ * Vite 8 (Rolldown) mengabaikan penulisan langsung ke objek `bundle` yang dipakai
+ * vite-plugin-pwa lama, sehingga manifest tidak ikut ter-build dan PWA tidak bisa dipasang.
  */
-function devManifest(): Plugin {
+function webManifest(): Plugin {
+  const body = JSON.stringify(manifest);
   return {
-    name: 'cidash-dev-manifest',
-    apply: 'serve',
+    name: 'cidash-web-manifest',
     configureServer(server) {
       server.middlewares.use('/manifest.webmanifest', (_req, res) => {
         res.setHeader('Content-Type', 'application/manifest+json');
-        res.end(JSON.stringify(manifest));
+        res.end(body);
       });
     },
     transformIndexHtml: () => [{ tag: 'link', attrs: { rel: 'manifest', href: '/manifest.webmanifest' }, injectTo: 'head' }],
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'manifest.webmanifest', source: body });
+    },
   };
 }
 
@@ -94,15 +99,16 @@ export default defineConfig({
   },
   plugins: [
     react(),
-    devManifest(),
+    webManifest(),
     versionFile(),
     VitePWA({
       // 'prompt': versi baru menunggu sampai pengguna menekan Update di Profile → Settings → About.
       registerType: 'prompt',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'brand/*.svg', 'robots.txt'],
-      manifest,
+      // Manifest diterbitkan oleh plugin webManifest() di atas (kompatibel dengan Vite 8/Rolldown).
+      manifest: false,
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest}'],
         navigateFallback: '/index.html',
         navigateFallbackDenylist: [/^\/api(?:\/|$)/],
       },
