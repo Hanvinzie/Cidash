@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -193,8 +194,14 @@ function QuestsScreen() {
           <div className="space-y-5">
             {active.length > 0 && (
               <ul className="space-y-3" aria-label="Active challenges">
-                {active.map((q) => (
-                  <li key={q.id}>{renderActive(q)}</li>
+                {active.map((q, index) => (
+                  <li
+                    key={q.id}
+                    className="animate-stagger"
+                    style={{ '--stagger': index } as CSSProperties}
+                  >
+                    {renderActive(q)}
+                  </li>
                 ))}
               </ul>
             )}
@@ -206,8 +213,12 @@ function QuestsScreen() {
                   <span className="text-[11px] text-subtle">Swipe left to delete</span>
                 </div>
                 <ul className="space-y-3" aria-label="Finished challenges">
-                  {finished.map((q) => (
-                    <li key={q.id}>
+                  {finished.map((q, index) => (
+                    <li
+                      key={q.id}
+                      className="animate-stagger"
+                      style={{ '--stagger': index } as CSSProperties}
+                    >
                       <SwipeToDelete onDelete={() => hide(q.id)} label="Delete">
                         {renderFinished(q)}
                       </SwipeToDelete>

@@ -115,7 +115,12 @@ export default function AppLayout() {
                 aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
                 className="relative flex h-10 w-10 items-center justify-center rounded-full text-ink transition active:scale-95 active:bg-inset"
               >
-                <Icon name="bell" size={22} />
+                <Icon
+                  key={unreadCount}
+                  name="bell"
+                  size={22}
+                  className={unreadCount > 0 ? 'animate-bell' : undefined}
+                />
                 {unreadCount > 0 && (
                   <span className="absolute right-2 top-2 flex h-2.5 w-2.5" aria-hidden>
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cidash-primary opacity-60" />
@@ -176,7 +181,7 @@ export default function AppLayout() {
                   >
                     {({ isActive }) => (
                       <>
-                        <span className="relative">
+                        <span className={`relative ${isActive ? 'animate-nav-pop' : ''}`}>
                           <Icon name={item.icon} size={24} strokeWidth={isActive ? 2.4 : 1.9} />
                           {locked && (
                             <span

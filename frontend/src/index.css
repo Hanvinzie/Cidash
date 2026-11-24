@@ -113,6 +113,44 @@
   .animate-hop {
     animation: hop 1.4s ease-in-out infinite;
   }
+
+  /* ---------- Motion tambahan: masuk berurutan, tekan, kilau, dan isyarat ---------- */
+  /* Dipakai untuk daftar/kartu: jeda bertingkat lewat --stagger (0, 1, 2, ...). */
+  .animate-stagger {
+    animation: rise 420ms cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+    /* Dibatasi 440 ms agar daftar panjang tidak terasa lambat. */
+    animation-delay: min(calc(var(--stagger, 0) * 55ms), 440ms);
+  }
+  .animate-pop-in {
+    animation: pop-in 380ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+    animation-delay: min(calc(var(--stagger, 0) * 55ms), 440ms);
+  }
+  /* Kilau bergerak untuk bilah progres (mis. Circle goals). */
+  .progress-sheen {
+    position: relative;
+    overflow: hidden;
+  }
+  .progress-sheen::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(100deg, transparent 15%, rgb(255 255 255 / 0.45) 45%, transparent 75%);
+    transform: translateX(-120%);
+    animation: sheen 2.6s ease-in-out infinite;
+  }
+  .animate-glow {
+    animation: primary-glow 3.2s ease-in-out infinite;
+  }
+  .animate-bell {
+    animation: bell-swing 700ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    transform-origin: 50% 12%;
+  }
+  .animate-nav-pop {
+    animation: nav-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  }
+  .animate-float {
+    animation: soft-float 6s ease-in-out infinite;
+  }
 }
 
 /* --page-dir: 1 = tab di kanan, -1 = tab di kiri (diset AppLayout). */
@@ -188,14 +226,82 @@
     transform: translateY(-4px);
   }
 }
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes sheen {
+  0%,
+  55% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(120%);
+  }
+}
+@keyframes primary-glow {
+  0%,
+  100% {
+    box-shadow: 0 10px 24px -10px rgb(var(--c-primary) / 0.5);
+  }
+  50% {
+    box-shadow: 0 14px 30px -10px rgb(var(--c-primary) / 0.72);
+  }
+}
+@keyframes bell-swing {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(12deg);
+  }
+  40% {
+    transform: rotate(-10deg);
+  }
+  60% {
+    transform: rotate(7deg);
+  }
+  80% {
+    transform: rotate(-4deg);
+  }
+}
+@keyframes nav-pop {
+  from {
+    transform: scale(0.82);
+  }
+  60% {
+    transform: scale(1.14);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+@keyframes soft-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
   }
 }
 

@@ -77,11 +77,12 @@
       }
       html.dark #boot { background: #0b0f17; }
       #boot.hide { opacity: 0; pointer-events: none; }
-      #boot-msg { margin: 0; min-height: 18px; font-size: 13px; font-weight: 600; color: #6b7280; }
+      #boot-msg { margin: 0; min-height: 18px; max-width: 270px; text-align: center; line-height: 1.45; font-size: 13px; font-weight: 600; color: #6b7280; }
       html.dark #boot-msg { color: #7a879c; }
+      #boot-msg.boot-msg-in { animation: boot-msg-in 0.38s ease-out both; }
 
-      /* Logo: tile "C" pop-in + kilau, wordmark naik perlahan */
-      .boot-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 18px; }
+      /* Logo: tile "C" pop-in + kilau, wordmark naik perlahan. Jarak ke stickman dibuat lega. */
+      .boot-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 34px; }
       .boot-logo {
         width: 56px; height: 56px; border-radius: 8px;
         animation: boot-pop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both, boot-breathe 2s ease-in-out 0.8s infinite;
@@ -98,8 +99,40 @@
       html.dark .boot-word { color: #f8fafc; }
       @keyframes boot-pop { from { transform: scale(0.4) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
       @keyframes boot-breathe { 50% { transform: scale(1.06); } }
-            @keyframes boot-rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
-      @media (prefers-reduced-motion: reduce) { .boot-logo, .boot-word { animation: none !important; } }
+      @keyframes boot-rise { from { transform: translateY(10px); opacity: 0; } to { transform: none; opacity: 1; } }
+      @keyframes boot-msg-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+      @media (prefers-reduced-motion: reduce) { .boot-logo, .boot-word, #boot-msg { animation: none !important; } }
+
+      /* Panggung stickman: halo lembut + bayangan yang ikut berdenyut saat berlari. */
+      .boot-stage { position: relative; display: grid; place-items: center; }
+      .boot-stage::after {
+        content: ''; position: absolute; bottom: -4px; width: 50px; height: 5px; border-radius: 9999px;
+        background: rgba(17, 24, 39, 0.16); filter: blur(2px);
+        animation: boot-shadow 0.6s ease-in-out infinite alternate;
+      }
+      html.dark .boot-stage::after { background: rgba(0, 0, 0, 0.55); }
+      @keyframes boot-shadow { from { transform: scaleX(0.86); opacity: 0.5; } to { transform: scaleX(1); opacity: 0.9; } }
+      /* Halo dipakai juga oleh RunnerLoader di dalam aplikasi. */
+      .runner-halo { position: relative; display: grid; place-items: center; }
+      .runner-halo::before {
+        content: ''; position: absolute; inset: 6px; border-radius: 9999px;
+        background: radial-gradient(circle, currentColor 0%, transparent 70%);
+        opacity: 0.12; animation: runner-halo 2.4s ease-in-out infinite;
+      }
+      @keyframes runner-halo { 0%, 100% { transform: scale(0.92); opacity: 0.1; } 50% { transform: scale(1.08); opacity: 0.2; } }
+
+      /* Bilah progres indeterminate: memberi sinyal "sedang memuat" tanpa angka palsu. */
+      .boot-progress {
+        position: relative; width: 140px; height: 4px; border-radius: 9999px; overflow: hidden;
+        background: rgba(234, 40, 69, 0.13);
+      }
+      .boot-progress::after {
+        content: ''; position: absolute; top: 0; bottom: 0; width: 45%; border-radius: inherit;
+        background: linear-gradient(90deg, transparent, #ea2845 45%, #ff7a8a 60%, transparent);
+        animation: boot-progress 1.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      @keyframes boot-progress { from { transform: translateX(-120%); } to { transform: translateX(340%); } }
+      @media (prefers-reduced-motion: reduce) { .boot-stage::after, .runner-halo::before, .boot-progress::after { animation: none !important; } }
 
       .runner { width: 88px; height: 88px; overflow: visible; }
       .runner .body { animation: runner-bob 0.3s ease-in-out infinite alternate; }
@@ -121,17 +154,20 @@
         <img class="boot-logo on-dark" src="/brand/logo-cidash-primary.svg" width="56" height="56" alt="" />
         <span class="boot-word">CIDASH</span>
       </div>
-      <svg class="runner" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <line class="ground" x1="4" y1="61" x2="60" y2="61" stroke-width="2" opacity="0.35" />
-        <g class="body">
-          <path class="limb arm" d="M34 22 L31 31 L37 34" opacity="0.45" />
-          <path class="limb leg late" d="M30 38 L33 48 L29 57" opacity="0.45" />
-          <line x1="35" y1="18" x2="30" y2="38" />
-          <path class="limb leg" d="M30 38 L33 48 L29 57" />
-          <path class="limb arm late" d="M34 22 L31 31 L37 34" />
-          <circle cx="37" cy="10" r="5" fill="currentColor" stroke="none" />
-        </g>
-      </svg>
+      <div class="boot-stage runner-halo">
+        <svg class="runner" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line class="ground" x1="4" y1="61" x2="60" y2="61" stroke-width="2" opacity="0.35" />
+          <g class="body">
+            <path class="limb arm" d="M34 22 L31 31 L37 34" opacity="0.45" />
+            <path class="limb leg late" d="M30 38 L33 48 L29 57" opacity="0.45" />
+            <line x1="35" y1="18" x2="30" y2="38" />
+            <path class="limb leg" d="M30 38 L33 48 L29 57" />
+            <path class="limb arm late" d="M34 22 L31 31 L37 34" />
+            <circle cx="37" cy="10" r="5" fill="currentColor" stroke="none" />
+          </g>
+        </svg>
+      </div>
+      <div class="boot-progress" aria-hidden="true"></div>
       <p id="boot-msg"></p>
     </div>
     <script>
@@ -139,8 +175,14 @@
         var msgs = ['Lacing up your shoes…', 'Checking GPS signal…', 'Connecting to your circle…', 'Warming up…'];
         var el = document.getElementById('boot-msg');
         var i = Math.floor(Math.random() * msgs.length);
-        el.textContent = msgs[i];
-        var timer = setInterval(function () { i = (i + 1) % msgs.length; el.textContent = msgs[i]; }, 2000);
+        var showMsg = function (text) {
+          el.textContent = text;
+          el.classList.remove('boot-msg-in');
+          void el.offsetWidth; // paksa reflow agar animasi fade-in diputar ulang tiap ganti pesan
+          el.classList.add('boot-msg-in');
+        };
+        showMsg(msgs[i]);
+        var timer = setInterval(function () { i = (i + 1) % msgs.length; showMsg(msgs[i]); }, 2000);
         window.__hideBoot = function () {
           var boot = document.getElementById('boot');
           window.__hideBoot = null;

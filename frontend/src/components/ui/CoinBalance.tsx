@@ -9,7 +9,7 @@ interface CoinBalanceProps {
 export default function CoinBalance({ coins, onTopUp, topUpLabel = 'Top up' }: CoinBalanceProps) {
   return (
     <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-cidash-primary to-[#B3122E] p-4 text-white shadow-lg shadow-cidash-primary/20">
-      <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10" aria-hidden />
+      <div className="animate-float pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-white/10" aria-hidden />
       <div className="relative flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15">

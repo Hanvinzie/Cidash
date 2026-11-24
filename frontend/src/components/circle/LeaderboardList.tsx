@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { LeaderboardEntry } from '../../types';
 
 const MEDAL = ['bg-amber-400 text-amber-950', 'bg-slate-300 text-slate-800', 'bg-orange-300 text-orange-950'];
@@ -11,14 +12,18 @@ interface LeaderboardListProps {
 export default function LeaderboardList({ entries, myId }: LeaderboardListProps) {
   return (
     <ol className="divide-y divide-line/70">
-      {entries.map((e) => {
+      {entries.map((e, index) => {
         const isMe = e.user.id === myId;
         return (
-          <li key={e.user.id} className={`flex items-center gap-3 px-4 py-3 ${isMe ? 'bg-cidash-primary/5' : ''}`}>
+          <li
+            key={e.user.id}
+            className={`animate-stagger flex items-center gap-3 px-4 py-3 ${isMe ? 'bg-cidash-primary/5' : ''}`}
+            style={{ '--stagger': index } as CSSProperties}
+          >
             <span
               className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
                 MEDAL[e.rank - 1] ?? 'bg-inset text-subtle'
-              }`}
+              } ${e.rank <= 3 ? 'animate-pop-in' : ''}`}
             >
               {e.rank}
             </span>

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { CSSProperties } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import Button from '../components/ui/Button';
 import Card, { GlassScope } from '../components/ui/Card';
@@ -80,7 +81,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-7">
       {/* Greeting */}
-      <div>
+      <div className="animate-stagger" style={{ '--stagger': 0 } as CSSProperties}>
         <p className={`text-sm ${themed ? 'text-white/85 [text-shadow:0_1px_8px_rgba(0,0,0,0.5)]' : 'text-muted'}`}>
           {greeting()},
         </p>
@@ -188,7 +189,8 @@ export default function Dashboard() {
         <button
           type="button"
           onClick={() => navigate(ROUTES.activity)}
-          className="flex flex-col items-start gap-3 rounded-2xl bg-cidash-primary p-4 text-left text-cidash-on-primary shadow-lg shadow-cidash-primary/25 transition hover:bg-cidash-primary-hover active:scale-[0.98]"
+          className="animate-stagger flex flex-col items-start gap-3 rounded-2xl bg-cidash-primary p-4 text-left text-cidash-on-primary shadow-lg shadow-cidash-primary/25 transition hover:bg-cidash-primary-hover active:scale-[0.98]"
+          style={{ '--stagger': 1 } as CSSProperties}
         >
           <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
             <Icon name="play" size={20} />
@@ -203,7 +205,8 @@ export default function Dashboard() {
         <button
           type="button"
           onClick={() => navigate(groupRunFor(liveRoom?.id))}
-          className="relative flex flex-col items-start gap-3 rounded-2xl border border-line/70 bg-surface p-4 text-left shadow-card transition hover:border-cidash-primary/60 active:scale-[0.98]"
+          className="animate-stagger relative flex flex-col items-start gap-3 rounded-2xl border border-line/70 bg-surface p-4 text-left shadow-card transition hover:border-cidash-primary/60 active:scale-[0.98]"
+          style={{ '--stagger': 2 } as CSSProperties}
         >
           {liveRoom?.status === 'live' && (
             <span className="absolute right-4 top-4">
@@ -241,11 +244,15 @@ export default function Dashboard() {
           <Card className="py-8 text-center text-sm text-subtle">No circle goals yet.</Card>
         ) : (
           <ul className="space-y-3">
-            {groupMissions.map((m) => {
+            {groupMissions.map((m, index) => {
               const pct = Math.min(100, Math.round((m.progressKm / m.targetKm) * 100));
               const done = m.status === 'completed';
               return (
-                <li key={m.id}>
+                <li
+                  key={m.id}
+                  className="animate-stagger"
+                  style={{ '--stagger': index } as CSSProperties}
+                >
                   <Card>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -274,7 +281,7 @@ export default function Dashboard() {
                       aria-label={`${m.title} progress`}
                     >
                       <div
-                        className="h-full rounded-full bg-cidash-primary transition-all"
+                        className="progress-sheen h-full rounded-full bg-cidash-primary transition-all duration-500"
                         style={{ width: `${pct}%` }}
                       />
                     </div>
@@ -296,7 +303,7 @@ export default function Dashboard() {
                         <button
                           type="button"
                           onClick={() => void claimGroupMission(m.circleId, m.cadence)}
-                          className="rounded-full bg-cidash-primary px-3 py-1 text-xs font-semibold text-white transition active:scale-95"
+                          className="animate-glow rounded-full bg-cidash-primary px-3 py-1 text-xs font-semibold text-white transition active:scale-95"
                         >
                           Claim Reward
                         </button>

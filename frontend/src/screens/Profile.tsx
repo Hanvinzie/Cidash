@@ -1,4 +1,5 @@
 import { Suspense, useState } from 'react';
+import type { CSSProperties } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
@@ -131,8 +132,12 @@ export default function Profile() {
         ) : (
           <Card className="p-0">
             <ul className="divide-y divide-line/70">
-              {circles.map((c) => (
-                <li key={c.id}>
+              {circles.map((c, index) => (
+                <li
+                  key={c.id}
+                  className="animate-stagger"
+                  style={{ '--stagger': index } as CSSProperties}
+                >
                   <button
                     type="button"
                     onClick={() => setMembersCircle(c)}
